@@ -6,18 +6,23 @@
 // You ROLL TWO DICE to get the two factors, then watch them multiply out into
 // an array you can count. The dice say what the sum IS; the array proves it.
 //
-//   * The GROUPS die is an ordinary pip die: "3" means three groups.
-//   * The TABLE die is a numeral die whose six faces are the tables the child
-//     has unlocked (2, 5, 10 at first). A pip die cannot show 7, 8, 9 or 10, so
-//     the tables beyond six would otherwise be unreachable in this game.
+//   * The GROUPS die reads how many groups. Its faces are numerals.
+//   * The TABLE die reads how many in each group, drawn from the tables the
+//     child has unlocked. That is also why it cannot be a pip die: pips stop at
+//     six, and the 10x table would be unreachable in this game.
 //   * Both are quietly LOADED to the fact the mastery ledger wants practised.
 //     It is a dice game; nobody can tell, and the adaptive engine still drives.
 //
-// The array is built from UNIT dice — every face is a single pip — so each one
-// unambiguously reads as "one thing" to count. The earlier version spilled
-// ordinary pip dice as anonymous counters, which put numbers in front of a
-// child and then asked them to ignore those numbers: a die showing five counted
-// as one. Playtesting caught it.
+// Both dice carry NUMERALS. An earlier version made the groups die a pip die
+// and the table die a numeral one, and reading two notations side by side to
+// get one sum is work a child should not be spending attention on here.
+//
+// The array is built from plain STONE BLOCKS that land square in a grid. They
+// were dice before: first ordinary pip dice used as anonymous counters, which
+// put numbers in front of a child and then asked them to ignore those numbers,
+// and then single-pip dice, which still tumbled to random angles and read as a
+// scatter rather than as something countable. A block has no value to misread
+// and no orientation to land wrong.
 //
 // No physics lib — the tumble is a short faked arc+spin animation (like
 // blockBuilder fakes block drops). The game owns one root group and tears it
@@ -46,16 +51,6 @@ const FACTOR_SCALE = 1.9;        // the two factor dice are the headline
 const FACTOR_GAP = 1.5;          // between them, room for the x sign to read
 const FACTOR_BACK = 1.9;         // how far behind the tray they sit
 
-// standard die pip layout (fractional positions on the face)
-const PIP = {
-  1: [[0.5, 0.5]],
-  2: [[0.3, 0.3], [0.7, 0.7]],
-  3: [[0.3, 0.3], [0.5, 0.5], [0.7, 0.7]],
-  4: [[0.3, 0.3], [0.7, 0.3], [0.3, 0.7], [0.7, 0.7]],
-  5: [[0.3, 0.3], [0.7, 0.3], [0.5, 0.5], [0.3, 0.7], [0.7, 0.7]],
-  6: [[0.3, 0.3], [0.7, 0.3], [0.3, 0.5], [0.7, 0.5], [0.3, 0.7], [0.7, 0.7]],
-};
-
 
 export function createShakeBatch(ctx) {
   const { scene, engine, audio, speech, ui, bolt, mastery, wallet } = ctx;
@@ -70,33 +65,10 @@ export function createShakeBatch(ctx) {
   const SB_VIEW = new THREE.Vector3(0.1, 1.15, 1).normalize();
 
   // ---- owned dice assets (NOT ctx.textures — these we create AND dispose) ----
-  // HARD-PIXEL die faces: a crisp cream face with a chunky pixel border and
-  // SQUARE pips (no smooth anti-aliased circles) so the dice read as blocky
-  // Minecraft cubes, not glossy plastic. NearestFilter, 48px grid.
-  function pipTexture(n) {
-    const S = 48, U = S / 8; // 8×8 texel grid; each texel = U px
-    return makeCanvasTex(S, (c) => {
-      c.fillStyle = '#f4ead2'; c.fillRect(0, 0, S, S);        // cream face
-      c.fillStyle = '#d9c9a3'; c.fillRect(0, 0, S, U);        // pixel bevel frame
-      c.fillRect(0, 0, U, S); c.fillRect(S - U, 0, U, S); c.fillRect(0, S - U, S, U);
-      c.fillStyle = '#2b2320';                                 // dark square pips
-      const R = U;                                             // one texel wide
-      for (const [px, py] of PIP[n]) {
-        const cx = Math.round((px * S - R) / U) * U;
-        const cy = Math.round((py * S - R) / U) * U;
-        c.fillRect(cx, cy, R * 2, R * 2);
-      }
-    }, { nearest: true });
-  }
-  const pipTex = [null, 1, 2, 3, 4, 5, 6].map((n) => (n ? pipTexture(n) : null));
-  // BoxGeometry face order: +x,-x,+y,-y,+z,-z — pair opposite faces to sum 7
-  const faceValues = [1, 6, 2, 5, 3, 4];
-  const faceMats = faceValues.map((v) => new THREE.MeshStandardMaterial({ map: pipTex[v], roughness: 1, metalness: 0 }));
   const dieGeo = new THREE.BoxGeometry(DIE, DIE, DIE);
 
-  // Every face a single pip: an array counter that reads as "one" from any
-  // angle, so it never needs orienting and never implies a value it has not got.
-  const unitMats = faceValues.map(() => new THREE.MeshStandardMaterial({ map: pipTex[1], roughness: 1, metalness: 0 }));
+  // A counter. Plain on every face, because its only job is to be counted.
+  const stoneMat = new THREE.MeshStandardMaterial({ map: ctx.textures.stoneTex, roughness: 1, metalness: 0 });
 
   // A numeral face for the TABLE die. Deliberately smooth rather than the hard
   // pixel treatment used elsewhere: this is a number a child has to read, and
@@ -123,31 +95,8 @@ export function createShakeBatch(ctx) {
   ];
   const UP = new THREE.Vector3(0, 1, 0);
 
-  // Which way is "up" within each face's own texture, in local space. Needed
-  // because a numeral has an orientation and a pip does not: a 6 lying on its
-  // side is a 9, and a sideways 5 is just hard to read.
-  const FACE_TEX_UP = [
-    new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 1, 0),   // +x, -x
-    new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1),  // +y, -y
-    new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 1, 0),   // +z, -z
-  ];
+  const UP_FACE = 2; // +y, in BoxGeometry material order
 
-  // Orientation that lands face `index` upward AND leaves its text the right way
-  // up from the camera. Derived from the face normal rather than hand-written
-  // Euler angles, so it cannot be silently wrong.
-  //
-  // setFromUnitVectors gives *some* rotation taking the face to vertical, but
-  // with an arbitrary roll about the vertical. So: apply it, see where the
-  // face's own up-direction ended up, and add the yaw that swings it to point
-  // away from the camera (-z), which is upright on screen. `jitter` then adds a
-  // few degrees back so a loaded die still looks like it fell where it fell.
-  function quatForFace(index, jitter = 0) {
-    const q = new THREE.Quaternion().setFromUnitVectors(FACE_N[index], UP);
-    const texUp = FACE_TEX_UP[index].clone().applyQuaternion(q);
-    // where the text currently points, flattened onto the ground plane
-    const angle = Math.atan2(texUp.x, -texUp.z);
-    return new THREE.Quaternion().setFromAxisAngle(UP, angle + jitter).multiply(q);
-  }
 
   // shared tray materials — WOOD PIXEL texture (plank grain), matte, hard pixel.
   const trayWoodTex = ctx.textures.woodTex.clone();
@@ -158,7 +107,7 @@ export function createShakeBatch(ctx) {
   const lipMat = new THREE.MeshStandardMaterial({ color: 0x8a5f34, roughness: 1, metalness: 0 });
 
   const sharedGeos = new Set([dieGeo]);
-  const sharedMats = new Set([...faceMats, ...unitMats, trayMat, lipMat]);
+  const sharedMats = new Set([stoneMat, trayMat, lipMat]);
 
   // ---- scene subtree the game owns ----
   const root = new THREE.Group();
@@ -224,24 +173,42 @@ export function createShakeBatch(ctx) {
     return { x: (k - (cols - 1) / 2) * STEP, y: REST_Y, z: (g - (rows - 1) / 2) * ZPITCH };
   }
 
-  // an array counter: single pip on every face
-  function makeUnitDie() {
-    const m = new THREE.Mesh(dieGeo, unitMats);
+  // An array counter. Tumbles in, but settles perfectly square: a grid of
+  // aligned blocks can be counted at a glance, a scatter of tilted ones cannot.
+  function makeStoneBlock() {
+    const m = new THREE.Mesh(dieGeo, stoneMat);
     m.castShadow = true; m.receiveShadow = true;
     m.rotation.set(Math.random() * 6.28, Math.random() * 6.28, Math.random() * 6.28);
     m.userData.baseScale = 1;
+    m.userData.landQuat = new THREE.Quaternion(); // identity: flat and aligned
     return m;
   }
 
-  // A factor die, oversized so it reads as the headline. `mats` is either the
-  // pip set or this round's numeral set; `faceIndex` is the face to land up.
-  function makeFactorDie(mats, values, faceIndex) {
+  // A factor die, oversized so it reads as the headline.
+  //
+  // The value it must show is painted onto its TOP face and the die simply
+  // lands flat. The previous version kept a fixed set of faces and computed the
+  // rotation that would bring the right one upward, plus a correction so the
+  // numeral was not upside down. That arithmetic was right for some faces and
+  // wrong for others, which is a miserable thing to debug through screenshots.
+  // Painting the face removes the problem instead of fixing it: one
+  // orientation, verified once.
+  function makeFactorDie(value, others, pool) {
+    const values = [];
+    for (let i = 0; i < 6; i++) values.push(i === UP_FACE ? value : others[i % others.length]);
+    const mats = values.map((v) => {
+      const t = numeralTexture(v);
+      pool.tex.push(t);
+      const mat = new THREE.MeshStandardMaterial({ map: t, roughness: 1, metalness: 0 });
+      pool.mats.push(mat);
+      return mat;
+    });
     const m = new THREE.Mesh(dieGeo, mats);
     m.castShadow = true; m.receiveShadow = true;
     m.scale.setScalar(FACTOR_SCALE);
     m.userData.baseScale = FACTOR_SCALE;
-    m.userData.faceValues = values;   // what each face carries, for read-back
-    m.userData.landQuat = quatForFace(faceIndex, (Math.random() - 0.5) * 0.22);
+    m.userData.faceValues = values;
+    m.userData.landQuat = new THREE.Quaternion(); // flat, square, right way up
     m.rotation.set(Math.random() * 6.28, Math.random() * 6.28, Math.random() * 6.28);
     return m;
   }
@@ -274,19 +241,11 @@ export function createShakeBatch(ctx) {
     pops.length = 0;
   }
 
-  // Build this round's TABLE die: six faces drawn from the tables the child has
-  // unlocked, cycled to fill the cube. Returns the face list so the caller can
-  // find which index carries the value it needs landed upward.
-  function buildTableDie() {
-    const tables = mastery.activeTables();
-    const faces = [];
-    for (let i = 0; i < 6; i++) faces.push(tables[i % tables.length]);
-    for (const v of faces) {
-      const t = numeralTexture(v);
-      tableTex.push(t);
-      tableMats.push(new THREE.MeshStandardMaterial({ map: t, roughness: 1, metalness: 0 }));
-    }
-    return faces;
+  // Decoy faces: the other tables the child has unlocked, so a die that is not
+  // showing its value still shows something plausible.
+  function decoyTables() {
+    const t = mastery.activeTables();
+    return t.length ? t : [2, 5, 10];
   }
 
   // ---------- camera ----------
@@ -371,18 +330,19 @@ export function createShakeBatch(ctx) {
     phase = 'reading';
     ui.hideConfirm();
 
-    const faces = buildTableDie();
     const d = round.target * STEP + Math.max(0, round.target - 1) * GROUP_GAP + 0.9;
     const z = -d / 2 - FACTOR_BACK;
     const y = REST_Y + (FACTOR_SCALE - 1) * DIE / 2;
 
     // groups die (pips) on the left, table die (numerals) on the right
+    // left: how many groups. right: how many in each.
+    const pool = { tex: tableTex, mats: tableMats };
     const specs = [
-      { mats: faceMats, vals: faceValues, face: faceValues.indexOf(round.target), x: -FACTOR_GAP / 2 },
-      { mats: tableMats, vals: faces, face: faces.indexOf(round.groupSize), x: FACTOR_GAP / 2 },
+      { value: round.target, others: [2, 3, 4, 5, 6], x: -FACTOR_GAP / 2 },
+      { value: round.groupSize, others: decoyTables(), x: FACTOR_GAP / 2 },
     ];
     for (const [i, sp] of specs.entries()) {
-      const die = makeFactorDie(sp.mats, sp.vals, Math.max(0, sp.face));
+      const die = makeFactorDie(sp.value, sp.others, pool);
       const to = { x: sp.x, y, z };
       const from = { x: sp.x + (Math.random() - 0.5) * 1.6, y: y + 3.4, z: z - 2.4 };
       die.position.set(from.x, from.y, from.z);
@@ -440,7 +400,7 @@ export function createShakeBatch(ctx) {
     const cols = round.groupSize;
     for (let k = 0; k < cols; k++) {
       const slot = diePos(g, k);
-      const die = makeUnitDie();
+      const die = makeStoneBlock();
       const from = {
         x: slot.x + (Math.random() - 0.5) * 1.4,
         y: REST_Y + 3 + Math.random() * 1.2,
@@ -450,7 +410,7 @@ export function createShakeBatch(ctx) {
       diceGroup.add(die);
       round.dice.push(die);
       const axis = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
-      tumbling.push({ mesh: die, delay: k * 0.06, t: 0, dur: 0.5, from, to: slot, axis, spin: 8 + Math.random() * 6, arc: 1.4 + Math.random() });
+      tumbling.push({ mesh: die, delay: k * 0.06, t: 0, dur: 0.5, from, to: slot, axis, spin: 8 + Math.random() * 6, arc: 1.4 + Math.random(), land: die.userData.landQuat });
     }
     round.groupsRolled++;
     rollSound();
@@ -704,11 +664,9 @@ export function createShakeBatch(ctx) {
       else if (mm && !sharedMats.has(mm)) mm.dispose?.();
     });
     dieGeo.dispose();
-    faceMats.forEach((m) => m.dispose());
-    unitMats.forEach((m) => m.dispose());
+    stoneMat.dispose();
     tableMats.forEach((m) => m.dispose());
     tableTex.forEach((t) => t.dispose());
-    pipTex.forEach((t) => t && t.dispose());
     trayMat.dispose(); lipMat.dispose(); trayWoodTex.dispose();
     ui.els.btnRecenter.style.display = '';
     engine.resetCamera();

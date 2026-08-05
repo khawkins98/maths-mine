@@ -145,6 +145,21 @@ test.describe('Shake-a-Batch', () => {
     const { shown } = await state(page, '__sbb');
     expect(shown).toHaveLength(2);
     expect([...shown].sort()).toEqual([target, groupSize].sort());
+
+    // and the counters land square, because a grid of aligned blocks can be
+    // counted at a glance where a scatter of tilted ones cannot
+    await waitForState(page, '__sbb', "s.phase === 'asking'", 40_000);
+    const tilt = await page.evaluate(() => {
+      const scene = window.__bolt.group.parent;
+      let worst = 0;
+      scene.traverse((o) => {
+        if (o.isMesh && o.userData && o.userData.baseScale === 1 && o.userData.landQuat) {
+          worst = Math.max(worst, Math.abs(o.rotation.x), Math.abs(o.rotation.y), Math.abs(o.rotation.z));
+        }
+      });
+      return worst;
+    });
+    expect(tilt).toBeLessThan(1e-6);
   });
 });
 
