@@ -153,6 +153,14 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
   // him a wildly different apparent size from game to game: in the imposter
   // tier he filled nearly half the screen height and covered a villager the
   // child has to be able to see. `scale` is relative to his default.
+  // Back to the menu pose. Games move Bolt to suit their own framing and none
+  // of them put him back, so the mascot greeted the child at 62% scale in the
+  // wrong place depending on which game they had just left.
+  function resetPlacement() {
+    bolt.userData.scale = BOLT_SCALE;
+    home.copy(BOLT_HOME);
+  }
+
   function placeAt(x, z, scale = 1) {
     const sc = BOLT_SCALE * scale;
     bolt.userData.scale = sc;
@@ -406,7 +414,7 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
     camera.remove(bolt);
   }
 
-  return { group: bolt, headAnchor, react, say, update, updateBubble, setOxidation, show, placeAt,
+  return { group: bolt, headAnchor, react, say, update, updateBubble, setOxidation, show, placeAt, resetPlacement,
     playWave, playWalk, dispose,
     get oxidation() { return oxidation; } };
 }

@@ -337,7 +337,15 @@ test.describe('narration', () => {
       s.speak('First line. Second part of first.');
       for (let i = 1; i <= 8; i++) s.speak(`${i * 10}.`);
       s.speak('The question. Is that right?');
-      await new Promise((r) => setTimeout(r, 9000));
+      // Wait for the queue to DRAIN rather than for a fixed stretch of wall
+      // clock: real synthesis is slower on a loaded machine, and a fixed wait
+      // made this flaky in a full run while passing on its own.
+      const deadline = Date.now() + 30000;
+      while (Date.now() < deadline) {
+        const st = s.debugState();
+        if (!st.groups && !st.speaking) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
       speechSynthesis.speak = orig;
       return log;
     });

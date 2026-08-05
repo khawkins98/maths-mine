@@ -47,7 +47,6 @@ let usingSensors = false;
 // and fully tears them down; it never reaches into the DOM or the engine
 // internals except through these handles.
 const ctx = {
-  THREE,
   renderer: engine.renderer,
   scene: engine.scene,
   camera: engine.camera,
@@ -61,8 +60,6 @@ const ctx = {
   wallet,        // bolts (🔩): shared across games AND sessions
   sensors,       // tilt input
   worldFeel,     // parallax + ground spring: worldFeel.impulse(strength, x, z)
-  nowT: engine.nowT,
-  worldToScreen: engine.worldToScreen,
   get usingSensors() { return usingSensors; },
   onExit: null,  // set by the host (hub/main) so a game can request to leave
 };
@@ -79,7 +76,11 @@ const GAMES = {
 };
 let current = null;
 function startGame(id, opts) {
-  if (current) { current.teardown(); audio.hush(); }
+  // A throwing teardown must not leave `current` pointing at a half-dead game
+  // that the render loop keeps calling update() on.
+  if (current) {
+    try { current.teardown(); } finally { current = null; audio.hush(); }
+  }
   const factory = GAMES[id];
   if (!factory) { console.warn('unknown game', id); return; }
   current = factory(ctx);
@@ -87,7 +88,10 @@ function startGame(id, opts) {
   return current;
 }
 // tear down the active game without starting another (used when opening the hub)
-function stopGame() { if (current) { current.teardown(); audio.hush(); current = null; } }
+function stopGame() {
+  if (!current) return;
+  try { current.teardown(); } finally { current = null; audio.hush(); }
+}
 // expose for the hub + tests
 ctx.startGame = startGame;
 ctx.stopGame = stopGame;

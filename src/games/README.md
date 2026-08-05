@@ -43,6 +43,15 @@ const GAMES = { 'block-builder': createBlockBuilder, 'my-game': createMyGame };
 creates and adds to `ctx.scene`, so teardown is `scene.remove(root)` + dispose.
 Bolt is parented to the camera and is shared — never add it to your group.
 
+**Restore what you hid.** The HUD is shared chrome. If your `start()` hides or
+restyles a shared element (`btnRecenter`, the hint overlay), put it back in
+`teardown()` — the next game inherits whatever you leave.
+
+**Release any `engine.onFrame` subscription.** It returns an unsubscribe
+function; a game that registers one per visit and never calls it will
+double-update and keep a torn-down closure alive. Games are normally driven by
+`update(dt)` and should not need `onFrame` at all.
+
 **Timer rule:** never call `setTimeout` directly. Schedule through a
 `createTimers()` pool (`src/core/timers.js`) and call `clearAll()` in teardown.
 A child can leave mid-reveal at any moment, and a stray callback firing against
@@ -69,7 +78,6 @@ had already grown their own copy.
 
 | Field | What it is |
 |---|---|
-| `ctx.THREE` | the three.js namespace (you may also `import * as THREE`) |
 | `ctx.renderer` / `ctx.scene` / `ctx.camera` | the shared renderer, scene, camera |
 | `ctx.engine` | `placeCamera(centerY, dist, viewDir?)`, `resetCamera()`, `worldToScreen(x,y)`, `projectToScreen(obj)`, `nowT()`, `VIEW_DIR`, `onFrame(cb)` |
 | `ctx.textures` | shared `CanvasTexture`s: `dirtTex, grassTex, groundTex, puffTex, slotTex, skyTex` (do NOT dispose) |
@@ -81,7 +89,6 @@ had already grown their own copy.
 | `ctx.wallet` | the child's bolts, shared across games and sessions — `bolts`, `add(n)`, `reset()`. No on-screen readout by design |
 | `ctx.worldFeel` | the living island — `impulse(strength, x, z)` to punch the ground on a landing block or a thrown die |
 | `ctx.sensors` | `TiltInput`: `enabled, available, x, y, update(), recenter()` |
-| `ctx.nowT` / `ctx.worldToScreen` | convenience re-exports of the engine helpers |
 | `ctx.usingSensors` | whether real motion data arrived (tilt mode vs tap mode) |
 | `ctx.startGame(id, opts)` | switch to another registered game |
 | `ctx.onExit` | host-provided callback a game calls to request leaving (back to the hub) |

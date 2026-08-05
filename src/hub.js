@@ -1,4 +1,5 @@
 import { blockIconDataURL, ICON_PALETTES } from './core/blockIcon.js';
+import { createTimers } from './core/timers.js';
 
 // hub.js — the kid-friendly game picker. After the wake gate, main.js shows the
 // hub (instead of going straight into Block Builder). It renders one big card
@@ -20,6 +21,11 @@ const META = {
 
 export function createHub(ctx) {
   const { ui, bolt, speech } = ctx;
+
+  // Bolt's walk-in and wave were raw setTimeouts, so picking a card inside the
+  // first 1150ms left him walking on the spot into the round and waving in the
+  // middle of the first question.
+  const timers = createTimers();
 
   // Drawn once and reused: the cards are rebuilt every time the hub opens.
   const iconCache = {};
@@ -53,6 +59,7 @@ export function createHub(ctx) {
 
   // Launch a game by id; wire its exit (a back button / ctx.onExit) to the hub.
   function play(id, opts) {
+    timers.clearAll(); // the greeting must not follow the child into the game
     ui.hideHub();
     ui.showGameHud();
     ctx.onExit = () => open();
@@ -79,11 +86,12 @@ export function createHub(ctx) {
     ui.hideClaim();
     renderCards();
     ui.showHub();
+    bolt.resetPlacement();
     bolt.show(true);
     // Bolt walks in, then greets the child with a wave.
-    if (bolt.playWalk) { bolt.playWalk(true); setTimeout(() => bolt.playWalk(false), 1100); }
+    if (bolt.playWalk) { bolt.playWalk(true); timers.later(() => bolt.playWalk(false), 1100); }
     bolt.say('Pick a game!', '');
-    if (bolt.playWave) setTimeout(() => bolt.playWave(), 1150);
+    if (bolt.playWave) timers.later(() => bolt.playWave(), 1150);
     speech.speak('Pick a game to play!');
   }
 

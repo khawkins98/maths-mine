@@ -360,7 +360,8 @@ export function createStage(ctx) {
   function dispose() {
     clearRound();
     scene.remove(root);
-    ring.material.dispose();
+    // ring.material is freed by the traverse below - it is still a child of
+    // root - so disposing it here as well was a double free
     root.traverse((o) => {
       if (o.geometry && !sharedGeos.has(o.geometry)) o.geometry.dispose?.();
       const mm = o.material;

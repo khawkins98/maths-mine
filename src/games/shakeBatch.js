@@ -308,10 +308,12 @@ export function createShakeBatch(ctx) {
     clearDice();
     const q = mastery.nextQuestion({ op: 'mul' }); // this game is pure ×
 
-    // q.a is the TABLE, q.b the multiplier (always 2..6). Read as "b groups of
-    // a", which puts the small factor on the pip die and caps the round at six
-    // groups however big the table gets.
-    const groups = q.b, each = q.a;
+    // Block Builder's convention is "a x b == a groups of b", and this game must
+    // agree with it or the child is taught two readings of one notation. So the
+    // GROUPS die shows a and the table die shows b, and the question sign says
+    // `a x b`, matching the tray. q.b is the multiplier (always 2..6) and q.a the
+    // table, so the groups die can exceed six - it is a numeral die, not pips.
+    const groups = q.a, each = q.b;
     round = {
       a: q.a, b: q.b,
       target: groups, groupSize: each,   // the array: `groups` rows of `each`
@@ -664,6 +666,8 @@ export function createShakeBatch(ctx) {
   }
 
   function teardown() {
+    clearDice(); // drop the factor dice first, so their per-round materials are
+                 // not disposed by the traverse below AND again explicitly
     speech.reset(); // a child leaving must not hear the old round finish
     ui.els.btnConfirm.removeEventListener('click', onConfirm);
     ui.els.btnRecenter.removeEventListener('click', onRecenter);

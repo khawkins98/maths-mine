@@ -8,6 +8,10 @@ export default defineConfig({
   testDir: './tests',
   fullyParallel: false, // one WebGL context at a time is plenty
   workers: 1,
+  // These drive real animations and real speech synthesis, not mocks, so a
+  // round can genuinely take twenty-odd seconds. The default 30s left no room
+  // on a loaded machine and produced failures that passed when re-run alone.
+  timeout: 90_000,
   retries: 0,
   reporter: process.env.CI ? 'github' : 'list',
   use: {
