@@ -31,6 +31,7 @@ const DAMPING = 11;     // how fast the wobble dies (higher = fewer bounces)
 const DIP = 1.9;        // downward impulse on a tap
 const TILT = 0.055;     // how much the island leans toward the touch
 const MAX_DIP = 0.34;   // clamp, so a drum-roll of taps can't launch the island
+const REST_EPS = 1e-4;  // below this the spring is visually at rest: stop writing
 
 export function createWorldFeel({ engine, audio, textures }) {
   const { camRig, camera, platform, ground, renderer, scene } = engine;
@@ -47,6 +48,7 @@ export function createWorldFeel({ engine, audio, textures }) {
   let y = 0, vy = 0;
   let rx = 0, vrx = 0;
   let rz = 0, vrz = 0;
+  let asleep = true;   // no impulse yet, so nothing to integrate
 
   const restY = platform.position.y;
 
@@ -101,6 +103,7 @@ export function createWorldFeel({ engine, audio, textures }) {
     vy -= DIP;
     vrx += (p.z / 12) * TILT * STIFFNESS * 0.02;
     vrz -= (p.x / 15) * TILT * STIFFNESS * 0.02;
+    asleep = false;
 
     puff(p.x, p.z);
     audio.thunk(0);
@@ -126,16 +129,30 @@ export function createWorldFeel({ engine, audio, textures }) {
     camRig.rotation.x += (targetPitch - camRig.rotation.x) * k;
 
     // --- ground spring (damped harmonic, integrated semi-implicitly) ---
-    vy += (-STIFFNESS * y - DAMPING * vy) * dt;
-    y = Math.max(-MAX_DIP, Math.min(MAX_DIP, y + vy * dt));
-    vrx += (-STIFFNESS * rx - DAMPING * vrx) * dt;
-    rx += vrx * dt;
-    vrz += (-STIFFNESS * rz - DAMPING * vrz) * dt;
-    rz += vrz * dt;
+    // Only touched while it is actually moving. Writing the platform transform
+    // every frame would dirty the matrices of three big slabs and a 100-cube
+    // instanced rim on every tick, for nothing, which measurably slowed the
+    // whole render loop once this shipped.
+    if (!asleep) {
+      vy += (-STIFFNESS * y - DAMPING * vy) * dt;
+      y = Math.max(-MAX_DIP, Math.min(MAX_DIP, y + vy * dt));
+      vrx += (-STIFFNESS * rx - DAMPING * vrx) * dt;
+      rx += vrx * dt;
+      vrz += (-STIFFNESS * rz - DAMPING * vrz) * dt;
+      rz += vrz * dt;
 
-    platform.position.y = restY + y;
-    platform.rotation.x = rx;
-    platform.rotation.z = rz;
+      // Close enough to rest that nobody can see the difference: snap and stop.
+      if (Math.abs(y) < REST_EPS && Math.abs(vy) < REST_EPS
+        && Math.abs(rx) < REST_EPS && Math.abs(vrx) < REST_EPS
+        && Math.abs(rz) < REST_EPS && Math.abs(vrz) < REST_EPS) {
+        y = vy = rx = vrx = rz = vrz = 0;
+        asleep = true;
+      }
+
+      platform.position.y = restY + y;
+      platform.rotation.x = rx;
+      platform.rotation.z = rz;
+    }
 
     // --- dust ---
     for (let i = dust.length - 1; i >= 0; i--) {
@@ -159,6 +176,7 @@ export function createWorldFeel({ engine, audio, textures }) {
     vy -= DIP * strength;
     vrx += (z / 12) * TILT * STIFFNESS * 0.02 * strength;
     vrz -= (x / 15) * TILT * STIFFNESS * 0.02 * strength;
+    asleep = false;
   }
 
   return { update, impulse, puff };
