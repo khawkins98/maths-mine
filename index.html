@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <title>The Maths Mine</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%236ad2ff'/><rect x='9' y='9' width='6' height='6' fill='%230c1020'/><rect x='17' y='9' width='6' height='6' fill='%230c1020'/><rect x='9' y='17' width='6' height='6' fill='%230c1020'/></svg>" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Pixelify Sans: a legible pixel display font for headers/equation/numbers/
+         buttons. Body copy stays in a clean system fallback for readability. -->
+    <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --bg: #8cc5ef;                 /* flat Minecraft sky */
+        --ink: #241a10;                /* dark wood-burn ink */
+        --ink-light: #f6ecd6;          /* parchment highlight */
+        --muted: #6b5638;
+        /* wood palette */
+        --wood1: #b98a4e; --wood2: #a5743c; --wood-edge: #7a4f26;
+        --wood-dark: #5c3a1c; --wood-drop: #3f2a13;
+        /* stone palette (passive readouts) */
+        --stone1: #9d9d9c; --stone2: #838382; --stone-edge: #6a6a69;
+        --stone-dark: #4c4c4b; --stone-drop: #333332;
+        /* accents */
+        --gold: #ffc93c; --gold-dark: #c98a1f;
+        --good: #54c26a; --good-dark: #2f8a45;
+        --bad: #e0563f; --bad-dark: #a83a28;
+        --brand: #ffce54;              /* loot-fill amber */
+        /* fonts */
+        --pix: "Pixelify Sans", system-ui, sans-serif;
+        --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        /* reusable plank fill (planks + faint grain bands) */
+        --wood-fill:
+          repeating-linear-gradient(0deg, rgba(60,38,18,0.18) 0 3px, transparent 3px 26px),
+          repeating-linear-gradient(90deg, rgba(255,225,170,0.05) 0 44px, rgba(60,38,18,0.06) 44px 88px),
+          linear-gradient(180deg, var(--wood1), var(--wood2));
+        --stone-fill:
+          repeating-linear-gradient(0deg, rgba(0,0,0,0.10) 0 3px, transparent 3px 30px),
+          linear-gradient(180deg, var(--stone1), var(--stone2));
+        /* chunky pixel frame (inner bevel highlight + shade) */
+        --frame:
+          inset 0 0 0 3px var(--wood-edge),
+          inset 4px 4px 0 3px rgba(255,228,175,0.22),
+          inset -4px -4px 0 3px rgba(0,0,0,0.30);
+        --frame-stone:
+          inset 0 0 0 3px var(--stone-edge),
+          inset 4px 4px 0 3px rgba(255,255,255,0.20),
+          inset -4px -4px 0 3px rgba(0,0,0,0.32);
+        font-family: var(--body);
+      }
+      /* pixel display font on the loud, short bits only */
+      h1, .prompt, .counter, .tally, button.big, button.choice,
+      #bigtotal, .toast, .askeq, .claim, .hc-title, #btn-back, .hinttext {
+        font-family: var(--pix);
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--ink);
+        -webkit-user-select: none;
+        user-select: none;
+        touch-action: none;
+        overscroll-behavior: none;
+      }
+      #app { position: fixed; inset: 0; }
+      canvas { display: block; touch-action: none; }
+
+      /* ---- HUD ---- */
+      .hud {
+        position: fixed;
+        left: 0; right: 0;
+        pointer-events: none;
+        z-index: 5;
+      }
+      .hud.top { top: 0; padding: max(12px, env(safe-area-inset-top)) 16px 12px; }
+      .hud.bottom { bottom: 0; padding: 12px 16px max(16px, env(safe-area-inset-bottom)); }
+
+      /* ---- the prompt: a small wooden signboard (label + equation) ---- */
+      .prompt {
+        display: inline-block;
+        margin-left: 58px; /* clear the square ← button in the top-left corner */
+        background: var(--wood-fill);
+        border: 3px solid var(--wood-dark);
+        border-radius: 0;
+        padding: 7px 15px;
+        /* Title card = mode name only, kept SMALL (~35% of the question). */
+        font-size: clamp(15px, 3.4vw, 24px);
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        color: var(--ink-light);
+        text-shadow: 0 2px 0 rgba(0,0,0,0.35);
+        box-shadow: var(--frame), 0 6px 0 var(--wood-drop);
+        image-rendering: pixelated;
+      }
+      .prompt small {
+        font-family: var(--body); font-weight: 700; font-size: 0.42em;
+        color: #f0dcae; opacity: 0.9; display: block; letter-spacing: 0;
+      }
+      /* Don't repeat the equation in the top-left sign while it's shown big
+         above the answer choices — collapse the sign to just its label. */
+      body:has(#askeq:not(.hidden)) #prompt-eq { display: none; }
+      /* During the question hide Bolt's bubble so it can't overlap centre text. */
+      body:has(#askeq:not(.hidden)) #bubble { display: none; }
+      /* ASK / FEEDBACK: the big equation + answer cards are the only primary
+         elements — collapse the per-group tally + status footer here. */
+      body:has(#askeq:not(.hidden)) #tally,
+      body:has(#askeq:not(.hidden)) #status { display: none; }
+
+      /* ---- bolts counter → an INVENTORY ITEM SLOT (pixel-framed dark socket) ---
+         a passive readout, NOT a control: a recessed slot holding 🔩 + a count. */
+      .counter {
+        float: right;
+        display: inline-flex; align-items: center; gap: 7px;
+        background:
+          repeating-linear-gradient(0deg, rgba(0,0,0,0.18) 0 2px, transparent 2px 8px),
+          linear-gradient(180deg, #3a2a17, #2b1e11);
+        border: 3px solid var(--wood-dark);
+        border-radius: 0;
+        padding: 7px 13px;
+        font-weight: 700;
+        font-size: clamp(17px, 4.2vw, 23px);
+        color: #ffe9b0;
+        text-shadow: 0 2px 0 rgba(0,0,0,0.5);
+        box-shadow:
+          inset 3px 3px 0 rgba(0,0,0,0.45),
+          inset -3px -3px 0 rgba(255,220,160,0.14),
+          0 4px 0 var(--wood-drop);
+        image-rendering: pixelated;
+      }
+      .counter .b { color: var(--gold); }
+
+      .status {
+        text-align: center;
+        color: var(--ink);
+        /* Helper/status ~35% of the question. */
+        font-size: clamp(15px, 3.4vw, 24px);
+        font-weight: 700;
+        min-height: 24px;
+        text-shadow: 0 1px 0 rgba(255,240,205,0.7);
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        pointer-events: auto;
+      }
+      /* ---- primary action: a chunky wooden button with pressed depth ---- */
+      button.big {
+        pointer-events: auto;
+        border: 3px solid var(--wood-dark);
+        border-radius: 0;
+        padding: 16px 30px;
+        min-height: 72px;
+        /* CTA (Next / Rotate / Shake) ~55–60% of the question; on confirmation
+           screens the answer slabs fade away so this is the largest control. */
+        font-size: clamp(20px, 4.8vw, 40px);
+        font-weight: 700;
+        color: #3a2200;
+        text-shadow: 0 1px 0 rgba(255,235,180,0.5);
+        background:
+          repeating-linear-gradient(0deg, rgba(120,80,20,0.14) 0 3px, transparent 3px 22px),
+          linear-gradient(180deg, #ffd35a, #f0ad2a);
+        box-shadow:
+          inset 3px 3px 0 rgba(255,245,205,0.5),
+          inset -3px -3px 0 rgba(120,80,15,0.4),
+          0 6px 0 var(--gold-dark), 0 12px 16px rgba(30,20,5,0.22);
+        image-rendering: pixelated;
+        transition: transform 0.07s steps(2), box-shadow 0.07s steps(2), opacity 0.15s ease;
+      }
+      button.big:active {
+        transform: translateY(4px);
+        box-shadow:
+          inset 3px 3px 0 rgba(255,245,205,0.5),
+          inset -3px -3px 0 rgba(120,80,15,0.4),
+          0 2px 0 var(--gold-dark);
+      }
+      button.big.ghost {
+        color: var(--ink-light);
+        text-shadow: 0 2px 0 rgba(0,0,0,0.35);
+        background: var(--wood-fill);
+        box-shadow: var(--frame), 0 6px 0 var(--wood-drop);
+      }
+      button.big.ghost:active { transform: translateY(4px); box-shadow: var(--frame), 0 2px 0 var(--wood-drop); }
+      button.big[disabled] { opacity: 0.4; }
+
+      /* ---- mastery meters → little wooden CHESTS/JARS that fill with loot ----
+         Passive containers on a right-edge shelf: no button chrome, no pointer
+         events. Each fills with amber "loot" as that table is mastered. */
+      .jars {
+        position: fixed; z-index: 5; pointer-events: none;
+        right: max(8px, env(safe-area-inset-right)); top: 50%;
+        transform: translateY(-50%);
+        display: flex; flex-direction: column; gap: 10px; align-items: center;
+        padding: 10px 9px 9px;
+        border-radius: 0;
+        background: var(--wood-fill);
+        border: 3px solid var(--wood-dark);
+        box-shadow: var(--frame), 0 5px 0 var(--wood-drop);
+      }
+      /* hide the empty shelf on the gate/hub; it appears once a game fills it */
+      .jars:empty { display: none; }
+      .jars::before {
+        content: 'FACTS';
+        font-family: var(--pix);
+        font-size: 11px; font-weight: 700; letter-spacing: 1px;
+        color: var(--ink-light); text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+      }
+      .jar {
+        /* a small wooden chest: dark inner well that fills with amber loot */
+        width: 38px; height: 42px;
+        border: 3px solid var(--wood-dark);
+        border-radius: 0;
+        position: relative; overflow: hidden;
+        background: linear-gradient(180deg, #3a2a17, #2b1e11);
+        box-shadow:
+          inset 3px 3px 0 rgba(0,0,0,0.4),
+          inset -3px -3px 0 rgba(255,220,160,0.12);
+        image-rendering: pixelated;
+      }
+      /* chest lid line */
+      .jar::before {
+        content: ''; position: absolute; left: 0; right: 0; top: 9px; height: 3px;
+        background: rgba(0,0,0,0.45); z-index: 2;
+      }
+      .jar .fill {
+        position: absolute; left: 0; right: 0; bottom: 0;
+        background:
+          repeating-linear-gradient(0deg, rgba(255,255,255,0.14) 0 2px, transparent 2px 6px),
+          linear-gradient(180deg, #ffe08a, var(--brand));
+        transition: height 0.5s cubic-bezier(.2,.8,.2,1);
+      }
+      .jar .lbl {
+        position: absolute; inset: 0; z-index: 3;
+        display: flex; align-items: center; justify-content: center;
+        font-family: var(--pix); font-size: 13px; font-weight: 700; color: #fff;
+        text-shadow: 0 2px 0 rgba(0,0,0,0.55);
+      }
+
+      /* ---- pixel-framed square icon buttons (shared skin for 🔊 and ←) ---- */
+      #btn-voice, #btn-back {
+        position: fixed; z-index: 9; pointer-events: auto;
+        width: 48px; height: 48px; padding: 0;
+        border: 3px solid var(--wood-dark); border-radius: 0;
+        background: var(--wood-fill);
+        color: var(--ink-light);
+        font-size: 22px; line-height: 1; cursor: pointer;
+        text-shadow: 0 2px 0 rgba(0,0,0,0.4);
+        box-shadow: var(--frame), 0 5px 0 var(--wood-drop);
+        image-rendering: pixelated;
+        transition: transform 0.07s steps(2), box-shadow 0.07s steps(2);
+      }
+      #btn-voice:active, #btn-back:active { transform: translateY(3px); box-shadow: var(--frame), 0 2px 0 var(--wood-drop); }
+
+      #btn-voice { top: max(70px, calc(env(safe-area-inset-top) + 62px)); right: 16px; }
+      /* Muted: dim the speaker AND draw an unambiguous red slash across it. */
+      #btn-voice.off { opacity: 0.8; color: #cbb98f; }
+      #btn-voice.off::after {
+        content: ''; position: absolute; left: 50%; top: 50%;
+        width: 34px; height: 4px;
+        background: var(--bad);
+        box-shadow: 0 0 0 1.5px rgba(255,255,255,0.9);
+        transform: translate(-50%, -50%) rotate(-45deg);
+      }
+
+      /* back-to-menu: top-left corner, same pixel skin; the prompt sign is
+         shifted right (see .prompt margin) so they never overlap. */
+      #btn-back {
+        top: max(14px, calc(env(safe-area-inset-top) + 8px)); left: 14px;
+        font-weight: 700; font-size: 26px;
+      }
+
+      /* ---- hub (game picker): the voxel world shows through a dim overlay ---- */
+      #hub {
+        position: fixed; inset: 0; z-index: 20;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        gap: 18px; text-align: center; color: var(--ink-light);
+        background:
+          radial-gradient(1200px 800px at 50% 40%, rgba(10,8,4,0.28) 0%, rgba(10,8,4,0.55) 100%);
+        padding: 24px;
+      }
+      /* Title on a big wooden sign */
+      #hub h1 {
+        font-size: clamp(26px, 7vw, 46px); margin: 0;
+        padding: 14px 28px; color: var(--ink-light);
+        background: var(--wood-fill);
+        border: 4px solid var(--wood-dark); border-radius: 0;
+        text-shadow: 0 3px 0 rgba(0,0,0,0.4);
+        box-shadow: var(--frame), 0 8px 0 var(--wood-drop);
+        image-rendering: pixelated;
+      }
+      #hub .hub-sub { color: #f0e2c4; margin: 0 0 4px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.6); }
+      #hub-cards { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+      /* wooden signpost cards */
+      button.hub-card {
+        pointer-events: auto; cursor: pointer;
+        width: min(44vw, 260px); min-height: 200px;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+        border: 4px solid var(--wood-dark); border-radius: 0;
+        padding: 22px 18px;
+        background: var(--wood-fill);
+        color: var(--ink-light);
+        box-shadow: var(--frame), 0 9px 0 var(--wood-drop), 0 16px 22px rgba(10,8,4,0.4);
+        image-rendering: pixelated;
+        transition: transform 0.08s steps(2), box-shadow 0.08s steps(2);
+      }
+      button.hub-card:active { transform: translateY(5px); box-shadow: var(--frame), 0 4px 0 var(--wood-drop); }
+      .hub-card .hc-emoji { font-size: clamp(48px, 12vw, 72px); line-height: 1; filter: drop-shadow(0 3px 0 rgba(0,0,0,0.3)); }
+      .hub-card .hc-title { font-weight: 700; font-size: clamp(20px, 5vw, 28px); color: var(--ink-light); text-shadow: 0 2px 0 rgba(0,0,0,0.4); }
+      .hub-card .hc-desc { font-family: var(--body); font-weight: 600; font-size: clamp(13px, 3.4vw, 16px); color: #f2e6cc; max-width: 22ch; line-height: 1.35; }
+
+      /* ---- cheap vignette (no post-processing) ---- */
+      #vignette {
+        position: fixed; inset: 0; z-index: 4; pointer-events: none;
+        background: radial-gradient(ellipse at 50% 45%, transparent 58%, rgba(20,14,6,0.22) 100%);
+      }
+
+      /* ---- Gate overlay (world shows through a dim overlay) ---- */
+      #gate {
+        position: fixed; inset: 0; z-index: 20;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        gap: 20px; text-align: center;
+        color: var(--ink-light);
+        background: radial-gradient(1200px 800px at 50% 40%, rgba(10,8,4,0.30) 0%, rgba(10,8,4,0.6) 100%);
+        padding: 24px;
+      }
+      #gate h1 {
+        font-size: clamp(26px, 8vw, 46px); margin: 0;
+        padding: 12px 26px; color: var(--ink-light);
+        background: var(--wood-fill);
+        border: 4px solid var(--wood-dark); border-radius: 0;
+        text-shadow: 0 3px 0 rgba(0,0,0,0.4);
+        box-shadow: var(--frame), 0 8px 0 var(--wood-drop);
+      }
+      #gate p { color: #f0e2c4; max-width: 30ch; margin: 0; line-height: 1.5; text-shadow: 0 2px 4px rgba(0,0,0,0.6); }
+      .bolt {
+        width: 120px; height: 120px;
+        image-rendering: pixelated;
+        animation: bob 2.2s ease-in-out infinite;
+      }
+      @keyframes bob { 0%,100%{ transform: translateY(0) rotate(-3deg);} 50%{ transform: translateY(-10px) rotate(3deg);} }
+      .fine { font-size: 12px; color: #d9c9a3; }
+      .hidden { display: none !important; }
+
+      /* ---- toast: a stone plaque ---- */
+      .toast {
+        position: fixed; left: 50%; top: 22%;
+        transform: translate(-50%, -6px);
+        background: var(--stone-fill);
+        border: 3px solid var(--stone-dark);
+        border-radius: 0;
+        padding: 11px 20px;
+        font-weight: 700; font-size: clamp(18px, 5vw, 26px);
+        color: var(--ink-light);
+        text-shadow: 0 2px 0 rgba(0,0,0,0.4);
+        box-shadow: var(--frame-stone), 0 6px 0 var(--stone-drop);
+        image-rendering: pixelated;
+        opacity: 0; transition: opacity .2s ease, transform .2s ease;
+        z-index: 8; pointer-events: none;
+      }
+      .toast.show { opacity: 1; transform: translate(-50%, 0); }
+      .toast.good { color: #b6f0c2; }
+      .toast.bad { color: #ffc2b6; }
+
+      /* ---- skip-count tally (truthful, per group) — a small wooden chip ---- */
+      .tally {
+        text-align: center;
+        color: var(--ink-light);
+        font-weight: 700;
+        font-size: clamp(18px, 4.6vw, 26px);
+        min-height: 30px;
+      }
+      .tally.show {
+        display: table; margin: 2px auto; padding: 4px 14px;
+        border-radius: 0;
+        background: var(--wood-fill);
+        border: 3px solid var(--wood-dark);
+        text-shadow: 0 2px 0 rgba(0,0,0,0.35);
+        box-shadow: var(--frame), 0 4px 0 var(--wood-drop);
+      }
+
+      /* ---- the equation, shown big on a WOODEN SIGN above the answer cards ---- */
+      .askeq, .claim {
+        display: table; margin: 4px auto 8px;
+        text-align: center; color: var(--ink-light);
+        font-weight: 700;
+        /* The QUESTION / CLAIM = 100%: the single largest text on the screen. */
+        font-size: clamp(40px, 9vw, 68px); line-height: 1.05;
+        padding: 10px 28px; border-radius: 0;
+        background: var(--wood-fill);
+        border: 4px solid var(--wood-dark);
+        text-shadow: 0 3px 0 rgba(0,0,0,0.4);
+        box-shadow: var(--frame), 0 7px 0 var(--wood-drop);
+        image-rendering: pixelated;
+      }
+      /* '?' → answer pop on the equation sign when it resolves. */
+      .askeq.pop, .claim.pop { animation: askPop 0.32s ease; }
+      @keyframes askPop {
+        0% { transform: scale(1); }
+        45% { transform: scale(1.16); }
+        100% { transform: scale(1); }
+      }
+      /* the Truth Check claim headline fades out during the reveal beat so the
+         corrected 3D sign becomes the single hero — never both loud at once. */
+      .claim { transition: opacity 0.4s ease, transform 0.4s ease; }
+      .claim.faded { opacity: 0; transform: translateY(-8px) scale(0.9); }
+
+      /* ---- answer choices → wooden plank buttons with pressed depth ---- */
+      .choices { display: flex; gap: 14px; justify-content: center; margin: 2px 0 8px; transition: opacity 0.35s ease; }
+      /* after the green flash the slabs fade away so no dead distractor button
+         lingers into the reveal / rotate state. */
+      .choices.fading { opacity: 0; pointer-events: none; }
+      button.choice {
+        pointer-events: auto;
+        min-width: 92px;
+        /* Keep a BIG tap target (≥88px tall) but a smaller LABEL (~65% of the
+           question) — target size ≠ type size. */
+        min-height: 88px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: 3px solid var(--wood-dark);
+        border-radius: 0;
+        padding: 12px 22px;
+        font-size: clamp(24px, 5.2vw, 44px);
+        font-weight: 700;
+        color: var(--ink-light);
+        text-shadow: 0 2px 0 rgba(0,0,0,0.35);
+        background: var(--wood-fill);
+        box-shadow: var(--frame), 0 7px 0 var(--wood-drop), 0 12px 16px rgba(20,14,6,0.2);
+        image-rendering: pixelated;
+        transition: transform 0.07s steps(2), box-shadow 0.07s steps(2), background 0.15s ease;
+      }
+      button.choice:active { transform: translateY(4px); box-shadow: var(--frame), 0 3px 0 var(--wood-drop); }
+      button.choice.right {
+        color: #fff;
+        background: repeating-linear-gradient(0deg, rgba(0,0,0,0.10) 0 3px, transparent 3px 22px), linear-gradient(180deg, #6bd47f, var(--good));
+        border-color: var(--good-dark);
+        box-shadow: inset 3px 3px 0 rgba(255,255,255,0.3), inset -3px -3px 0 rgba(0,0,0,0.25), 0 7px 0 var(--good-dark);
+      }
+      button.choice.right::after { content: ' ✓'; }
+      /* the True/False survivor already carries its own ✓/✗ prefix — no double */
+      button.choice.solo::after { content: none; }
+      button.choice.wrong {
+        color: #fff;
+        background: repeating-linear-gradient(0deg, rgba(0,0,0,0.10) 0 3px, transparent 3px 22px), linear-gradient(180deg, #ec7863, var(--bad));
+        border-color: var(--bad-dark);
+        box-shadow: inset 3px 3px 0 rgba(255,255,255,0.25), inset -3px -3px 0 rgba(0,0,0,0.25), 0 7px 0 var(--bad-dark);
+      }
+
+      /* ---- Bolt's speech bubble → a small wooden sign (JS-positioned) ---- */
+      #bubble {
+        position: fixed; z-index: 7; pointer-events: none;
+        transform: translate(-50%, -115%); /* centred above Bolt's head */
+        transform-origin: 50% 100%;
+        background: var(--wood-fill);
+        border: 3px solid var(--wood-dark); border-radius: 0;
+        color: var(--ink-light); font-weight: 700;
+        /* Mascot bubble ~40% of the question. */
+        font-size: clamp(16px, 4vw, 27px);
+        padding: 9px 14px; max-width: 34vw;
+        text-align: center;
+        text-shadow: 0 2px 0 rgba(0,0,0,0.35);
+        box-shadow: var(--frame), 0 5px 0 var(--wood-drop);
+        image-rendering: pixelated;
+        animation: bubblePop 0.28s ease;
+      }
+      #bubble::after {
+        content: ''; position: absolute; left: 50%; margin-left: -8px; bottom: -11px;
+        border: 8px solid transparent; border-top-color: var(--wood-dark);
+      }
+      @keyframes bubblePop {
+        0% { transform: translate(-50%, -115%) scale(0.8); }
+        60% { transform: translate(-50%, -115%) scale(1.05); }
+        100% { transform: translate(-50%, -115%) scale(1); }
+      }
+
+      /* ---- big surviving-total badge for commutativity ---- */
+      #bigtotal {
+        position: fixed; left: 50%; top: 32%;
+        transform: translate(-50%,-50%) scale(0.4);
+        z-index: 9; pointer-events: none; opacity: 0;
+        font-size: clamp(90px, 30vh, 260px); font-weight: 700;
+        color: var(--gold);
+        -webkit-text-stroke: 4px rgba(90, 55, 15, 0.55);
+        text-shadow: 0 8px 0 rgba(120, 80, 15, 0.5), 0 14px 30px rgba(20,14,6,0.4);
+        transition: opacity 0.2s ease, transform 0.3s cubic-bezier(.2,1.6,.4,1);
+      }
+      #bigtotal.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+      #bigtotal.pulse { animation: pulseBig 0.6s ease 2; }
+      @keyframes pulseBig {
+        0%,100% { transform: translate(-50%,-50%) scale(1); }
+        50% { transform: translate(-50%,-50%) scale(1.18); }
+      }
+
+      /* ---- counter pop when rewarded ---- */
+      .counter.reward { animation: rewardPop 0.5s ease; }
+      @keyframes rewardPop {
+        0%,100% { transform: scale(1); }
+        40% { transform: scale(1.35); color: var(--gold); }
+      }
+
+      /* ---- first-touch demo: ghost finger ---- */
+      #hint { position: fixed; inset: 0; z-index: 6; pointer-events: none; }
+      #hint .hinttext {
+        position: absolute; left: 50%; bottom: 30%; transform: translateX(-50%);
+        color: var(--ink-light); font-weight: 700; font-size: clamp(16px, 4.2vw, 22px);
+        text-shadow: 0 2px 0 rgba(0,0,0,0.5), 0 3px 8px rgba(0,0,0,0.4);
+        animation: hintPulse 1.1s ease-in-out infinite;
+      }
+      @keyframes hintPulse { 0%,100%{ opacity: 0.6; } 50%{ opacity: 1; } }
+      #finger {
+        position: fixed; width: 40px; height: 40px; border-radius: 50%;
+        transform: translate(-50%, -50%);
+        background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.95), rgba(255,255,255,0.35));
+        border: 2px solid rgba(30,20,10,0.55);
+        box-shadow: 0 3px 10px rgba(20,14,6,0.35);
+        transition: left 0.35s cubic-bezier(.4,.1,.3,1), top 0.35s cubic-bezier(.4,.1,.3,1);
+      }
+      #finger.tap { animation: fingerTap 0.4s ease; }
+      @keyframes fingerTap { 0%,100%{ transform: translate(-50%,-50%) scale(1);} 45%{ transform: translate(-50%,-50%) scale(0.6);} }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="vignette"></div>
+
+    <!-- Gameplay HUD -->
+    <div class="hud top hidden" id="hud-top">
+      <span class="counter" id="counter">🔩 <span class="b" id="bolts">0</span></span>
+      <div class="prompt" id="prompt"><small id="prompt-sub">Build the wall</small><span id="prompt-eq">—</span></div>
+    </div>
+
+    <div class="hud bottom hidden" id="hud-bottom">
+      <div class="tally" id="tally"></div>
+      <!-- Truth Check: the CLAIM's big DOM home, directly above the True/False
+           buttons; fades out on the reveal so the corrected 3D sign is the hero. -->
+      <div class="claim hidden" id="claimeq"></div>
+      <div class="status" id="status">Drag or tilt to pour blocks into the grid.</div>
+      <div class="askeq hidden" id="askeq"></div>
+      <div class="choices hidden" id="choices"></div>
+      <div class="actions">
+        <button class="big ghost" id="btn-recenter">Hold flat · Re-center</button>
+        <button class="big hidden" id="btn-confirm">Next</button>
+      </div>
+    </div>
+
+    <!-- Mastery meters: passive wooden chests on a right-side shelf, out of the
+         bottom-center thumb zone so they're glanceable, never mistaken for
+         tappable controls. -->
+    <div class="jars" id="jars" aria-hidden="true"></div>
+
+    <!-- Bolt's speech bubble (Bolt himself is a 3D mesh; this follows his head) -->
+    <div id="bubble" class="hidden">Let's build!</div>
+
+    <button id="btn-voice" title="Voice on/off" aria-label="Voice on/off">🔊</button>
+    <button id="btn-back" class="hidden" title="Back to menu" aria-label="Back to menu">←</button>
+
+    <!-- Hub: the game picker (shown after the wake gate) -->
+    <div id="hub" class="hidden">
+      <h1>The Maths Mine</h1>
+      <p class="hub-sub">Pick a game to play with Bolt!</p>
+      <div id="hub-cards"></div>
+    </div>
+
+    <div id="bigtotal"></div>
+
+    <!-- first-touch demo: a ghost finger tapping the first squares -->
+    <div id="hint" class="hidden">
+      <div id="finger"></div>
+      <div class="hinttext">tap the squares!</div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <!-- Wake-up-Bolt gate: satisfies iOS sensor permission + audio unlock in one tap -->
+    <div id="gate">
+      <svg class="bolt" viewBox="0 0 100 100" aria-hidden="true">
+        <!-- fresh (un-oxidised) COPPER Bolt — matches the in-game mascot at 0
+             progress; he only weathers to teal as the child masters facts -->
+        <rect x="26" y="30" width="48" height="42" fill="#e07b3c"/>
+        <rect x="34" y="16" width="32" height="18" fill="#f0975a"/>
+        <rect x="46" y="8" width="8" height="8" fill="#ffd24a"/>
+        <rect x="33" y="43" width="14" height="14" fill="#0c1020"/>
+        <rect x="53" y="43" width="14" height="14" fill="#0c1020"/>
+        <rect x="37" y="45" width="5" height="5" fill="#fff"/>
+        <rect x="57" y="45" width="5" height="5" fill="#fff"/>
+        <rect x="40" y="62" width="20" height="5" fill="#0c1020"/>
+      </svg>
+      <h1>The Maths Mine</h1>
+      <p>Three games to master your times tables — with Bolt. Tap below to wake him up and pick a game!</p>
+      <button class="big" id="btn-wake">Wake up Bolt!</button>
+      <p class="fine" id="gate-fine">On a tablet this asks permission to use motion (for the shake game). No sensors? Everything works by tapping.</p>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,165 @@
+// core/ui.js — HUD helpers over the DOM defined in index.html. Games drive the
+// shared chrome (prompt, status, tally, equation, answer choices, toast, the
+// big surviving-total badge, mastery jars, the Next/Re-center buttons) through
+// this thin layer so no game reaches into document.getElementById itself.
+//
+// The raw elements are also exposed as `els` for game-specific extras (e.g. the
+// first-touch demo finger). Element IDs are kept in sync with index.html.
+
+const el = (id) => document.getElementById(id);
+
+export function createUI() {
+  const els = {
+    gate: el('gate'),
+    hudTop: el('hud-top'),
+    hudBottom: el('hud-bottom'),
+    promptEq: el('prompt-eq'),
+    promptSub: el('prompt-sub'),
+    bolts: el('bolts'),
+    counter: el('counter'),
+    status: el('status'),
+    tally: el('tally'),
+    askEq: el('askeq'),
+    claimEq: el('claimeq'),
+    choices: el('choices'),
+    btnConfirm: el('btn-confirm'),
+    btnRecenter: el('btn-recenter'),
+    btnVoice: el('btn-voice'),
+    btnWake: el('btn-wake'),
+    btnBack: el('btn-back'),
+    hub: el('hub'),
+    hubCards: el('hub-cards'),
+    jars: el('jars'),
+    toast: el('toast'),
+    bigTotal: el('bigtotal'),
+    hint: el('hint'),
+    finger: el('finger'),
+    bubble: el('bubble'),
+  };
+
+  function hideGate() { els.gate.classList.add('hidden'); }
+
+  function showGameHud() {
+    els.gate.classList.add('hidden');
+    els.hudTop.classList.remove('hidden');
+    els.hudBottom.classList.remove('hidden');
+  }
+  // hide the in-game HUD chrome entirely (top pill/score + bottom status/actions)
+  // so none of it bleeds onto the hub menu, which draws its own chrome.
+  function hideGameHud() {
+    els.hudTop.classList.add('hidden');
+    els.hudBottom.classList.add('hidden');
+  }
+
+  // ---- hub (game picker) overlay ----
+  function showHub() { if (els.hub) els.hub.classList.remove('hidden'); }
+  function hideHub() { if (els.hub) els.hub.classList.add('hidden'); }
+
+  // ---- back-to-menu affordance (top-left, shown while a game is active) ----
+  function showBack(onClick) { if (!els.btnBack) return; els.btnBack.classList.remove('hidden'); els.btnBack.onclick = onClick; }
+  function hideBack() { if (!els.btnBack) return; els.btnBack.classList.add('hidden'); els.btnBack.onclick = null; }
+
+  function setPrompt(eq, sub) {
+    if (eq != null) els.promptEq.textContent = eq;
+    if (sub != null) els.promptSub.textContent = sub;
+  }
+  function setStatus(t) { els.status.textContent = t; }
+  // skip-count caption: wrap it in a readable chip (high contrast on the grass)
+  function setTally(t) { els.tally.textContent = t || ''; els.tally.classList.toggle('show', !!t); }
+
+  function setBolts(n) { els.bolts.textContent = n; }
+  function rewardPop() { els.counter.classList.remove('reward'); void els.counter.offsetWidth; els.counter.classList.add('reward'); }
+
+  function setAskEq(text) {
+    if (text == null) { els.askEq.classList.add('hidden'); return; }
+    els.askEq.textContent = text;
+    els.askEq.classList.remove('hidden');
+  }
+  // brief '?' → answer scale pop when the equation sign resolves.
+  function popAskEq() { els.askEq.classList.remove('pop'); void els.askEq.offsetWidth; els.askEq.classList.add('pop'); }
+
+  // ---- Truth Check claim headline (the question's big DOM home) ----
+  function setClaim(text) {
+    if (text == null) { els.claimEq.classList.add('hidden'); return; }
+    els.claimEq.textContent = text;
+    els.claimEq.classList.remove('hidden', 'faded');
+  }
+  function hideClaim() { els.claimEq.classList.add('hidden'); els.claimEq.classList.remove('faded'); }
+  // brief scale-pop when the claim headline updates (e.g. each group landing).
+  function popClaim() { els.claimEq.classList.remove('pop'); void els.claimEq.offsetWidth; els.claimEq.classList.add('pop'); }
+  // fade the claim out during the reveal beat, then remove it from layout.
+  function fadeClaim() { els.claimEq.classList.add('faded'); setTimeout(() => els.claimEq.classList.add('hidden'), 420); }
+
+  // Build the three big answer cards. `onPick(value, buttonEl)` fires on tap.
+  function showChoices(values, onPick) {
+    els.choices.innerHTML = '';
+    for (const v of values) {
+      const b = document.createElement('button');
+      b.className = 'choice';
+      b.textContent = v;
+      b.addEventListener('click', () => onPick(v, b));
+      els.choices.appendChild(b);
+    }
+    els.choices.classList.remove('hidden');
+  }
+  function hideChoices() { els.choices.classList.add('hidden'); els.choices.innerHTML = ''; }
+  // fade the whole answer slab row out (~380ms) then remove it — used after the
+  // green flash so no dead distractor button survives onto the reveal.
+  function fadeChoices() {
+    els.choices.classList.add('fading');
+    setTimeout(() => { hideChoices(); els.choices.classList.remove('fading'); }, 380);
+  }
+  function choiceButtons() { return [...els.choices.querySelectorAll('.choice')]; }
+  function lockChoices() { choiceButtons().forEach((c) => (c.style.pointerEvents = 'none')); }
+  function currentChoiceValues() { return choiceButtons().map((c) => Number(c.textContent)); }
+
+  function showBigTotal(text) { els.bigTotal.textContent = text; els.bigTotal.className = 'show'; }
+  function pulseBigTotal() { els.bigTotal.className = 'show pulse'; }
+  function hideBigTotal() { els.bigTotal.className = ''; }
+
+  function showConfirm(label) { els.btnConfirm.textContent = label; els.btnConfirm.classList.remove('hidden'); els.btnConfirm.disabled = false; }
+  function hideConfirm() { els.btnConfirm.classList.add('hidden'); }
+  function setConfirmEnabled(on) { els.btnConfirm.disabled = !on; }
+
+  let _toastT = null;
+  function showToast(text, kind) {
+    els.toast.textContent = text;
+    els.toast.className = `toast show ${kind || ''}`;
+    clearTimeout(_toastT);
+    _toastT = setTimeout(() => { els.toast.className = 'toast'; }, 1400);
+  }
+
+  // empty the jar shelf so the `.jars:empty { display:none }` rule hides it
+  // (used when leaving a game for the hub, so it doesn't bleed onto the menu).
+  function clearJars() { els.jars.innerHTML = ''; }
+
+  // mastery jars per active table (0..1 fill). `mastery` is the MasteryStore.
+  function renderJars(mastery) {
+    const tables = mastery.activeTables();
+    els.jars.innerHTML = '';
+    for (const t of tables) {
+      const jar = document.createElement('div');
+      jar.className = 'jar';
+      const fill = document.createElement('div');
+      fill.className = 'fill';
+      fill.style.height = `${Math.round(mastery.tableMastery(t) * 100)}%`;
+      const lbl = document.createElement('div');
+      lbl.className = 'lbl';
+      lbl.textContent = `${t}×`;
+      jar.appendChild(fill); jar.appendChild(lbl);
+      els.jars.appendChild(jar);
+    }
+  }
+
+  return {
+    els,
+    hideGate, showGameHud, hideGameHud,
+    showHub, hideHub, showBack, hideBack,
+    setPrompt, setStatus, setTally, setBolts, rewardPop, setAskEq, popAskEq,
+    setClaim, hideClaim, fadeClaim, popClaim,
+    showChoices, hideChoices, fadeChoices, choiceButtons, lockChoices, currentChoiceValues,
+    showBigTotal, pulseBigTotal, hideBigTotal,
+    showConfirm, hideConfirm, setConfirmEnabled,
+    showToast, renderJars, clearJars,
+  };
+}

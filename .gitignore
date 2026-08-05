@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+
+# test artefacts
+test-results/
+playwright-report/
+
+# editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# logs
+npm-debug.log*
+yarn-error.log*
+*.log
+
+# env
+.env
+.env.*
+!.env.example

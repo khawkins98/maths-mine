@@ -1,0 +1,19 @@
+{
+  "name": "maths-mine",
+  "version": "0.1.0",
+  "description": "The Maths Mine — a tilt-and-tap times-tables toy for a 7-9 year old, built with three.js. Three voxel mini-games sharing one adaptive mastery engine.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "vite": "^8.2.0"
+  }
+}
