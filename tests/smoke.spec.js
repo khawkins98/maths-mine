@@ -74,30 +74,48 @@ test.describe('Block Builder', () => {
 });
 
 test.describe('Shake-a-Batch', () => {
-  test('shakes out every group, then asks for the total', async ({ page }) => {
+  test('one shake rolls the factors, which multiply out into a countable array', async ({ page }) => {
     const errors = await boot(page);
     await pick(page, 'shake-a-batch', '__sbb');
 
     const round = await state(page, '__sbb');
     expect(round.phase).toBe('rolling');
-    expect(round.target).toBeGreaterThan(0);
 
-    // One programmatic shake per group (a headless browser cannot be shaken).
-    for (let g = 0; g < round.target; g++) {
-      await waitForState(page, '__sbb', "s.phase === 'rolling' || s.phase === 'settling'");
-      if ((await state(page, '__sbb')).phase !== 'rolling') break;
-      await page.evaluate(() => window.__shake());
-    }
+    // The groups die is an ordinary pip die, so its factor must be rollable.
+    expect(round.target).toBeGreaterThanOrEqual(2);
+    expect(round.target).toBeLessThanOrEqual(6);
+    expect(round.target * round.groupSize).toBe(round.answer);
 
-    // The dice must physically settle before the question appears.
-    await waitForState(page, '__sbb', "s.phase === 'asking'");
+    // One shake rolls both factors; the array then builds itself.
+    await page.evaluate(() => window.__shake());
+    await waitForState(page, '__sbb', 's.factorDice === 2');
+    await waitForState(page, '__sbb', "s.phase === 'asking'", 40_000);
+
     const asking = await state(page, '__sbb');
     expect(asking.groups).toBe(round.target);
+    // exactly one counter per unit of the product, so counting them is the answer
+    expect(asking.dice).toBe(round.answer);
     expect(asking.choices).toContain(asking.answer);
 
     await answer(page, asking.answer);
-    await waitForState(page, '__sbb', "s.phase === 'next'");
+    await waitForState(page, '__sbb', "s.phase === 'next'", 30_000);
     expect(errors).toEqual([]);
+  });
+
+  // The whole trick of the game: the dice are loaded to the fact the ledger
+  // wants practised. If loading silently failed the dice would contradict the
+  // question, so read back what each settled die is really showing.
+  test('the loaded dice land showing the factors they were loaded with', async ({ page }) => {
+    await boot(page);
+    await pick(page, 'shake-a-batch', '__sbb');
+    const { target, groupSize } = await state(page, '__sbb');
+
+    await page.evaluate(() => window.__shake());
+    await waitForState(page, '__sbb', "s.phase === 'spawning' || s.phase === 'settling' || s.phase === 'asking'", 30_000);
+
+    const { shown } = await state(page, '__sbb');
+    expect(shown).toHaveLength(2);
+    expect([...shown].sort()).toEqual([target, groupSize].sort());
   });
 });
 
