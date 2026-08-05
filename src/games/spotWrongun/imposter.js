@@ -166,6 +166,8 @@ export function createImposterTier(ctx, stage, facts) {
     n.espin = 8 + Math.random() * 4;
     n.hit.userData.index = -1;
     stage.dustPuff(n.group.position.x, BASE_Y - 0.4, n.group.position.z);
+    // launching a crewmate off the island should be felt through your feet
+    ctx.worldFeel.impulse(0.75, n.group.position.x, n.group.position.z);
   }
 
   function shatterSign(n) {

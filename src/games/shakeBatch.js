@@ -623,6 +623,9 @@ export function createShakeBatch(ctx) {
         tumbling.splice(i, 1);
         audio.thunk(0);
         puff(it.to.x, it.to.y, it.to.z);
+        // a factor die is big and lands alone, so it hits harder than one of
+        // the many little counters
+        ctx.worldFeel.impulse(it.land ? 0.3 : 0.07, it.to.x, it.to.z);
         it.mesh.userData.pt = 0; pops.push(it.mesh); // landing squash-bounce
       }
     }

@@ -619,6 +619,9 @@ export function createBlockBuilder(ctx) {
         landing.push({ mesh: f.mesh, t: 0 });
         dustPuff(f.mesh.position.x + wall.position.x, f.targetY + wall.position.y, 0.3);
         audio.thunk(f.targetY);
+        // the island takes the weight: small, because a full wall is a lot of
+        // blocks and they must not stack into an earthquake
+        ctx.worldFeel.impulse(0.09, f.mesh.position.x + wall.position.x, 0);
       }
     }
     for (let i = landing.length - 1; i >= 0; i--) {
