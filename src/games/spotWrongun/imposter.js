@@ -55,7 +55,9 @@ export function createImposterTier(ctx, stage, facts) {
     const impFact = drawn[0];
     const trueFacts = [drawn[1], drawn[2]];
 
-    imposterIndex = roundNo % 3;
+    // Was `roundNo % 3` - left, middle, right in fixed rotation, which a child
+    // can follow without checking a single sum.
+    imposterIndex = (Math.random() * 3) | 0;
     const wrong = facts.plausibleWrong(impFact.a, impFact.b, roundNo);
 
     let tIdx = 0;

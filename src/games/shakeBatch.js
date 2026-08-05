@@ -34,6 +34,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { makeCanvasTex } from '../core/textures.js';
 import { createTimers } from '../core/timers.js';
+import { buildChoiceSet } from '../core/choices.js';
 import { easeOutCubic } from '../core/ease.js';
 
 const DIE = 0.6;                 // die edge length
@@ -371,6 +372,13 @@ export function createShakeBatch(ctx) {
 
   // Both factor dice have settled: read them out, then multiply them out.
   function onFactorsLanded() {
+    // Leave 'reading' IMMEDIATELY. update() tests `phase === 'reading' &&
+    // !tumbling.length`, which is a level, not an edge — and this function only
+    // scheduled the phase change 1150ms later, so it re-fired every frame in
+    // between. That is ~65 duplicate chimes, 65 Bolt reactions and 65 racing
+    // spawn chains on a 60fps tablet: a machine-gun noise, and all the groups
+    // spilling at once instead of one per beat, which is the teaching point.
+    phase = 'reading-done';
     const g = round.target, e = round.groupSize;
     ui.setClaim(`${g} × ${e}`);
     ui.popClaim();
@@ -458,14 +466,7 @@ export function createShakeBatch(ctx) {
   }
 
   function buildChoices() {
-    const p = round.answer, R = round.groupSize;
-    const set = new Set([p]);
-    if (p - R > 0) set.add(p - R);
-    set.add(p + R);
-    while (set.size < 3) set.add(p + R * set.size);
-    const opts = [...set].slice(0, 3);
-    const rot = round.product % opts.length; // deterministic order (no Math.random)
-    ui.showChoices(opts.slice(rot).concat(opts.slice(0, rot)), answerChosen);
+    ui.showChoices(buildChoiceSet(round.answer, round.groupSize), answerChosen);
   }
 
   function answerChosen(val, btn) {

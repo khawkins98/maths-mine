@@ -19,6 +19,7 @@
 import * as THREE from 'three';
 import { createTimers } from '../core/timers.js';
 import { createPointerInput } from '../core/pointer.js';
+import { buildChoiceSet } from '../core/choices.js';
 import { easeOutBack, easeOutBounce } from '../core/ease.js';
 import { createBlockKit, CELL, BLOCK, CAP_H, BODY_H } from '../core/blocks.js';
 
@@ -83,6 +84,7 @@ export function createBlockBuilder(ctx) {
   let moldGroup = null, pulsedTile = null;
   let forcedOp = null;   // test hook: force the next round's operation
   let flashT = 0, flashCol = null;
+  let spinRAF = 0;    // the commutativity rotate's own animation frame
 
 
   function sensorsLive() { return sensors.enabled && sensors.available; }
@@ -372,27 +374,10 @@ export function createBlockBuilder(ctx) {
   }
 
   function buildChoices() {
-    const p = round.answer;
-    let opts;
-    if (round.op === 'div') {
-      // distractors: one-per-group off (the natural sharing slip)
-      const set = new Set([p]);
-      if (p - 1 > 0) set.add(p - 1);
-      set.add(p + 1);
-      while (set.size < 3) set.add(p + set.size);
-      opts = [...set].slice(0, 3);
-    } else {
-      const R = round.groupSize;
-      const set = new Set([p]);
-      if (p - R > 0) set.add(p - R);
-      set.add(p + R);
-      while (set.size < 3) set.add(p + R * set.size);
-      opts = [...set].slice(0, 3);
-    }
-    // deterministic shuffle (no Math.random): rotate by round.placed
-    const rot = round.placed % opts.length;
-    const ordered = opts.slice(rot).concat(opts.slice(0, rot));
-    ui.showChoices(ordered, answerChosen);
+    // step = the natural near-miss: a whole group for x, one-per-group for a
+    // share-out. core/choices.js owns the ordering so no position leaks.
+    const step = round.op === 'div' ? 1 : round.groupSize;
+    ui.showChoices(buildChoiceSet(round.answer, step), answerChosen);
   }
 
   function answerChosen(val, btn) {
@@ -497,6 +482,7 @@ export function createBlockBuilder(ctx) {
 
   function doRotate() {
     phase = 'rotating';
+    cancelAnimationFrame(spinRAF);
     ui.setConfirmEnabled(false);
     const from = wall.rotation.z;
     const to = from - Math.PI / 2;
@@ -527,6 +513,10 @@ export function createBlockBuilder(ctx) {
     const lift = Math.max(0, (diag - half) / 2) + 0.15;
     const dur = 0.75;
     (function spin() {
+      // This animates on its own rAF chain rather than through update(dt), so
+      // nothing stops it when the game goes away: it kept driving the camera
+      // over the hub and then threw destructuring a null round.
+      if (!round || phase !== 'rotating') { spinRAF = 0; return; }
       const k = Math.min(1, (nowT() - t0) / dur);
       const e = 1 - Math.pow(1 - k, 3);
       wall.rotation.z = from + (to - from) * e;
@@ -543,7 +533,7 @@ export function createBlockBuilder(ctx) {
         fromF.dist + (toF.dist - fromF.dist) * e,
         VIEW_DIR,
       );
-      if (k < 1) requestAnimationFrame(spin);
+      if (k < 1) spinRAF = requestAnimationFrame(spin);
       else {
         settleRotation();
         ui.pulseBigTotal();
@@ -753,6 +743,8 @@ export function createBlockBuilder(ctx) {
   }
 
   function teardown() {
+    cancelAnimationFrame(spinRAF); spinRAF = 0;
+    dismissDemo();  // the first-touch hint is outside the HUD, so hideGameHud misses it
     speech.reset(); // a child leaving must not hear the old round finish
     input.detach();
     ui.els.btnConfirm.removeEventListener('click', onConfirm);

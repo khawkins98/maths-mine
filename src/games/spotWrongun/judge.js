@@ -30,6 +30,7 @@ export function createJudgeTier(ctx, stage, facts) {
 
   let jr = null;   // the round: { a,b,claim,isTrue,answer,cols,rows,nugget,blocks,… }
   let judgeNo = 0;
+  let trueRun = 0, falseRun = 0;
 
   const wallHalf = (cols) => (cols * CELL) / 2;
   const nugXFor = (cols) => WALL_CX - wallHalf(cols) - 2.0;
@@ -60,7 +61,12 @@ export function createJudgeTier(ctx, stage, facts) {
     // plausible-neighbour fib — alternate so both appear predictably.
     const q = mastery.nextQuestion({ op: 'mul' });
     const a = q.a, b = q.b, answer = a * b;
-    const isTrue = (judgeNo % 2) === 1; // odd rounds true, even rounds a fib
+    // Not an alternation. It used to be `judgeNo % 2`, so round one of every
+    // session was always True and the rest strictly alternated - a child who
+    // noticed could score full marks without reading the sign. Random, but
+    // nudged away from long runs of the same verdict.
+    const isTrue = trueRun >= 2 ? false : (falseRun >= 2 ? true : Math.random() < 0.5);
+    if (isTrue) { trueRun++; falseRun = 0; } else { falseRun++; trueRun = 0; }
     const claim = isTrue ? answer : facts.plausibleWrong(a, b, judgeNo);
 
     // Normalise the wall to WIDE-and-SHORT (bigger factor across) so it stays

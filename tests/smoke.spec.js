@@ -251,6 +251,43 @@ test.describe('progress', () => {
   });
 });
 
+test.describe('answer choices', () => {
+  // An audit found the answer was ALWAYS the numerically middle option, and
+  // landed in the first slot for 60% of facts (100% on the 3, 6 and 9 tables).
+  // "Tap the middle number" scored full marks without any arithmetic, and the
+  // ledger recorded mastery the child did not have. Guessing must not work.
+  test('the answer is not guessable by value or by position', async ({ page }) => {
+    await boot(page);
+    const stats = await page.evaluate(async () => {
+      const { buildChoiceSet } = await import('/src/core/choices.js');
+      let median = 0, n = 0, malformed = 0;
+      const slots = [0, 0, 0];
+      for (let a = 2; a <= 10; a++) {
+        for (let b = 2; b <= 6; b++) {
+          for (let r = 0; r < 40; r++) {
+            const answer = a * b;
+            const set = buildChoiceSet(answer, b);
+            if (set.length !== 3 || new Set(set).size !== 3
+              || !set.includes(answer) || set.some((v) => v <= 0)) malformed++;
+            if ([...set].sort((x, y) => x - y)[1] === answer) median++;
+            slots[set.indexOf(answer)]++;
+            n++;
+          }
+        }
+      }
+      return { median: median / n, slots: slots.map((s) => s / n), malformed, n };
+    });
+
+    expect(stats.malformed).toBe(0);
+    // no strategy should beat chance by much
+    expect(stats.median).toBeLessThan(0.45);
+    for (const share of stats.slots) {
+      expect(share).toBeGreaterThan(0.25);
+      expect(share).toBeLessThan(0.42);
+    }
+  });
+});
+
 test.describe('narration', () => {
   // The Web Speech API's cancel() is not synchronous: utterances submitted in
   // the SAME task fall inside the cancelled window and die too. Games naturally
@@ -336,6 +373,40 @@ test.describe('teardown', () => {
     const round = await state(page, '__bb');
     await page.evaluate(({ C, R }) => window.__place(0, 0) && C && R, round);
     await page.waitForTimeout(1500);
+    expect(errors).toEqual([]);
+  });
+
+  // The commutativity rotate animates on its own requestAnimationFrame chain,
+  // outside the engine loop and outside the cancellable timer pool, so leaving
+  // mid-spin left it running against a torn-down round.
+  test('leaving during the commutativity rotate does not throw', async ({ page }) => {
+    const errors = await boot(page);
+    await pick(page, 'block-builder', '__bb');
+
+    // play a multiplication round through to the rotate offer
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const r = await state(page, '__bb');
+      await page.evaluate(({ C, R }) => {
+        for (let c = 0; c < C; c++) for (let x = 0; x < R; x++) window.__place(c, x);
+      }, r);
+      await waitForState(page, '__bb', "s.phase === 'asking'");
+      await answer(page, (await state(page, '__bb')).answer);
+      await waitForState(page, '__bb', "s.phase === 'rotate' || s.phase === 'next'");
+      if ((await state(page, '__bb')).phase === 'rotate') break;
+      await page.locator('#btn-confirm').click();          // Next -> another round
+      await waitForState(page, '__bb', "s.phase === 'building'");
+    }
+    expect((await state(page, '__bb')).phase).toBe('rotate');
+
+    // Both clicks in ONE evaluate: going through Playwright adds enough
+    // round-trip latency for the 750ms spin to finish first, which is how this
+    // bug hid from an earlier version of this test.
+    await page.evaluate(() => {
+      document.getElementById('btn-confirm').click();      // start the spin
+      document.getElementById('btn-back').click();         // ...and bail mid-spin
+    });
+    await expect(page.locator('#hub')).toBeVisible();
+    await page.waitForTimeout(1500);                       // outlive the 750ms spin
     expect(errors).toEqual([]);
   });
 
