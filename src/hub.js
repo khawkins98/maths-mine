@@ -63,6 +63,7 @@ export function createHub(ctx) {
   // Show the picker: stop the current game (clean slate behind the overlay),
   // reset the shared HUD bits, render cards, and let Bolt invite the child.
   function open() {
+    speech.reset(); // the menu greeting should not queue behind a dead round
     if (ctx.stopGame) ctx.stopGame();
     ui.hideBack();
     ui.hideChoices();

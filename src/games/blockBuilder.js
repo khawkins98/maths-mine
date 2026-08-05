@@ -753,6 +753,7 @@ export function createBlockBuilder(ctx) {
   }
 
   function teardown() {
+    speech.reset(); // a child leaving must not hear the old round finish
     input.detach();
     ui.els.btnConfirm.removeEventListener('click', onConfirm);
     ui.els.btnRecenter.removeEventListener('click', onRecenter);

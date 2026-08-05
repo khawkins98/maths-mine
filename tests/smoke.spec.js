@@ -251,6 +251,67 @@ test.describe('progress', () => {
   });
 });
 
+test.describe('narration', () => {
+  // The Web Speech API's cancel() is not synchronous: utterances submitted in
+  // the SAME task fall inside the cancelled window and die too. Games naturally
+  // write reset() then speak() at a round boundary, which silently killed the
+  // line they had just queued — a child heard "five times ten is—" then silence
+  // then "true, or false?".
+  test('a line spoken right after a reset is not eaten by the cancel', async ({ page }) => {
+    await boot(page);
+
+    const result = await page.evaluate(async () => {
+      const log = [];
+      const orig = speechSynthesis.speak.bind(speechSynthesis);
+      speechSynthesis.speak = (u) => {
+        log.push({ ev: 'submit', text: u.text });
+        u.addEventListener('error', (e) => log.push({ ev: 'error', text: u.text, why: e.error }));
+        u.addEventListener('end', () => log.push({ ev: 'end', text: u.text }));
+        orig(u);
+      };
+      const s = window.__speech;
+      s.reset(); s.speak('Five times ten is fifteen. Let us count!');
+      await new Promise((r) => setTimeout(r, 400));
+      s.reset(); s.speak('Is that right? True, or false?');
+      await new Promise((r) => setTimeout(r, 6000));
+      speechSynthesis.speak = orig;
+      return log;
+    });
+
+    // every phrase of the line spoken after the reset must survive
+    for (const want of ['Is that right?', 'True, or false?']) {
+      const submitted = result.some((e) => e.ev === 'submit' && e.text === want);
+      const killed = result.some((e) => e.ev === 'error' && e.text === want);
+      expect(submitted, `"${want}" was never submitted`).toBe(true);
+      expect(killed, `"${want}" was cancelled mid-flight`).toBe(false);
+    }
+  });
+
+  // A sentence is either fully spoken or not spoken at all: shedding backlog
+  // must never remove the middle of one.
+  test('backlog sheds whole lines, never half a sentence', async ({ page }) => {
+    await boot(page);
+    const spoken = await page.evaluate(async () => {
+      const log = [];
+      const orig = speechSynthesis.speak.bind(speechSynthesis);
+      speechSynthesis.speak = (u) => { log.push(u.text); orig(u); };
+      const s = window.__speech;
+      s.reset();
+      s.speak('First line. Second part of first.');
+      for (let i = 1; i <= 8; i++) s.speak(`${i * 10}.`);
+      s.speak('The question. Is that right?');
+      await new Promise((r) => setTimeout(r, 9000));
+      speechSynthesis.speak = orig;
+      return log;
+    });
+    // the newest line always survives, whole
+    expect(spoken).toContain('The question.');
+    expect(spoken).toContain('Is that right?');
+    // and no line is represented by only its tail
+    if (spoken.includes('Second part of first.')) expect(spoken).toContain('First line.');
+  });
+});
+
 test.describe('teardown', () => {
   // The regression guard for the timer leak: leaving mid-round must not let a
   // pending setTimeout fire against a torn-down game.

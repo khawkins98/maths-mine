@@ -663,6 +663,7 @@ export function createShakeBatch(ctx) {
   }
 
   function teardown() {
+    speech.reset(); // a child leaving must not hear the old round finish
     ui.els.btnConfirm.removeEventListener('click', onConfirm);
     ui.els.btnRecenter.removeEventListener('click', onRecenter);
     window.removeEventListener('devicemotion', onMotion);

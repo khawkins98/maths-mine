@@ -125,6 +125,7 @@ export function createSpotWrongun(ctx) {
   }
 
   function teardown() {
+    ctx.speech.reset(); // a child leaving must not hear the old round finish
     input.detach();
     ui.els.btnConfirm.removeEventListener('click', onConfirm);
     ui.els.btnRecenter.removeEventListener('click', onRecenter);
