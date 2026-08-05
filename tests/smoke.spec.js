@@ -45,6 +45,35 @@ test.describe('Block Builder', () => {
     expect(errors).toEqual([]);
   });
 
+  // A child does not fill column by column, and the caption must never claim a
+  // multiplication that is not on the board yet.
+  test('the running caption stays truthful during a scattered fill', async ({ page }) => {
+    await boot(page);
+    await pick(page, 'block-builder', '__bb');
+    const { C, R, groupSize } = await state(page, '__bb');
+    const tally = () => page.locator('#tally').textContent();
+
+    // fill row-wise, so no group closes until the very last row
+    let placed = 0;
+    for (let r = 0; r < R; r++) {
+      for (let c = 0; c < C; c++) {
+        await page.evaluate(([cc, rr]) => window.__place(cc, rr), [c, r]);
+        placed++;
+        const text = await tally();
+        const complete = Math.floor(placed / groupSize) === 0 ? 0
+          : (r === R - 1 ? Math.floor(placed / groupSize) : 0);
+        if (complete === 0 && placed < C * R) {
+          // no group closed yet: a count, never an equation
+          expect(text).toMatch(/^\d+ blocks?$/);
+          expect(text).not.toContain('group');
+        }
+      }
+    }
+    // and the total it eventually states is the real one
+    await waitForState(page, '__bb', "s.phase === 'asking'");
+    expect((await state(page, '__bb')).placed).toBe(C * R);
+  });
+
   test('division rounds ask how many in each group', async ({ page }) => {
     await boot(page);
     await pick(page, 'block-builder', '__bb');
