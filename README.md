@@ -6,8 +6,6 @@ floating island, sharing one adaptive mastery engine and one robot mascot.
 Built with **three.js + Vite**. Tablet-first, no accounts, no ads, no shop, runs
 entirely in the browser.
 
-![three games: Block Builder, Shake-a-Batch, Spot the Wrong'un](#)
-
 ## Why
 
 A specific child was struggling with times tables. Drill apps push *recall* and
@@ -132,6 +130,17 @@ that it hasn't mattered.
 
 See [PRD.md](PRD.md) for the full product thinking, including what's proven,
 what's faked, and what's unresolved.
+
+## Working on it
+
+Commit messages are checked by a hook in `.githooks/`: lines wrap at 72
+characters, ASCII only (no em dashes, curly quotes or emoji), and no
+`Co-authored-by` trailers. `core.hooksPath` isn't cloned, so enable it once per
+clone:
+
+```bash
+git config core.hooksPath .githooks
+```
 
 ## Licence
 

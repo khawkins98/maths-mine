@@ -1,0 +1,66 @@
+#!/bin/sh
+#
+# commit-msg: keep commit messages plain, portable and readable.
+#
+#   1. No line longer than 72 characters. Git does not wrap message
+#      bodies, so anything longer forces horizontal scrolling in `git
+#      log`, `git blame -L` and most review tools.
+#   2. ASCII only. Em dashes, curly quotes, arrows and emoji render as
+#      mojibake in terminals, mail-formatted patches and older tools.
+#      Use "--" for a dash, "'" for an apostrophe, "*" for a bullet.
+#   3. No Co-authored-by trailers.
+#
+# Enable in a fresh clone with:
+#
+#   git config core.hooksPath .githooks
+#
+# Bypass for a single commit with `git commit --no-verify` if you must.
+
+MSG_FILE="$1"
+STATUS=0
+LIMIT=72
+
+# Git's own comment lines (and the diff that `commit --verbose` appends)
+# are stripped before the message is stored, so don't police them.
+COMMENT_CHAR=$(git config --get core.commentChar 2>/dev/null)
+[ -n "$COMMENT_CHAR" ] || COMMENT_CHAR='#'
+
+BODY=$(mktemp)
+trap 'rm -f "$BODY"' EXIT
+sed "/^${COMMENT_CHAR}/d" "$MSG_FILE" | sed '/^diff --git /,$d' > "$BODY"
+
+fail() {
+  [ "$STATUS" -eq 0 ] && printf 'Commit message rejected:\n\n' >&2
+  STATUS=1
+  printf '  %s\n' "$1" >&2
+}
+
+# --- 1. line length ---
+while IFS= read -r line; do
+  LEN=${#line}
+  if [ "$LEN" -gt "$LIMIT" ]; then
+    fail "line too long (${LEN} > ${LIMIT}): ${line}"
+  fi
+done < "$BODY"
+
+# --- 2. non-ASCII ---
+# Printable ASCII is 0x20..0x7E; tab is allowed. Anything else is a
+# multibyte character or a control code.
+TAB=$(printf '\t')
+if BAD=$(LC_ALL=C grep -n "[^ -~${TAB}]" "$BODY"); then
+  fail "non-ASCII characters (use -- for a dash, ' for an apostrophe):"
+  printf '%s\n' "$BAD" | while IFS= read -r l; do
+    printf '    %s\n' "$l" >&2
+  done
+fi
+
+# --- 3. Co-authored-by trailers ---
+if grep -qiE '^[[:space:]]*Co-authored-by:' "$BODY"; then
+  fail "Co-authored-by trailers are not used in this repo"
+fi
+
+if [ "$STATUS" -ne 0 ]; then
+  printf '\nFix the message above, or bypass with --no-verify.\n' >&2
+fi
+
+exit "$STATUS"
