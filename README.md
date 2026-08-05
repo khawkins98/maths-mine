@@ -23,7 +23,7 @@ lesson; answering "how many altogether?" afterwards is the drill.
 |---|---|---|
 | 🧱 | **Block Builder** | Tap (or tilt-pour) blocks into a mould to build an `a × b` wall, answer the total, then **rotate** the wall 90° to feel that `6 × 4 = 4 × 6`. Also does division as equal sharing. |
 | 🎲 | **Shake-a-Batch** | Shake the tablet to spill groups of dice, then count them up. Same maths, completely different hands. |
-| 🕵️ | **Spot the Wrong'un** | Check facts instead of producing them. A crewmate holds a sign claiming `7 × 8 = 54`; the array builds in front of you and you judge it true or false. Later, three crewmates and one is fibbing. |
+| 🕵️ | **Spot the Wrong'un** | Check facts instead of producing them. A villager holds a sign claiming `7 × 8 = 54`; the array builds in front of you and you judge it true or false. Later, three villagers and one is fibbing. |
 
 All three share one ledger, so practising `6 × 7` anywhere moves mastery
 everywhere.

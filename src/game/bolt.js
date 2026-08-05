@@ -142,13 +142,22 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
 
   bolt.scale.setScalar(BOLT_SCALE);
   const home = BOLT_HOME.clone();
+  bolt.userData.scale = BOLT_SCALE;
   bolt.position.copy(home);
   bolt.visible = false;
   scene.add(bolt);
 
-  // Stand Bolt on the island at (x, z). Games call this to suit their framing;
-  // y is derived so his feet meet the grass rather than hover or sink.
-  function placeAt(x, z) { home.set(x, FOOT_DROP, z); }
+  // Stand Bolt on the island at (x, z), optionally resized for the framing.
+  //
+  // Each game puts its camera at a different distance, so one world scale gives
+  // him a wildly different apparent size from game to game: in the imposter
+  // tier he filled nearly half the screen height and covered a villager the
+  // child has to be able to see. `scale` is relative to his default.
+  function placeAt(x, z, scale = 1) {
+    const sc = BOLT_SCALE * scale;
+    bolt.userData.scale = sc;
+    home.set(x, 0.92 * sc, z);
+  }
   // speech-bubble anchor — parented to the head pivot so it tracks the now
   // articulated head. (0.1,1.21,0) in neck-local == (0.1,1.55,0) in bolt-local.
   const headAnchor = new THREE.Object3D(); headAnchor.position.set(0.1, 1.21, 0); neckPivot.add(headAnchor);
@@ -324,7 +333,7 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
       Math.atan2(_camPos.x - bolt.position.x, _camPos.z - bolt.position.z),
       rootRZ,
     );
-    bolt.scale.setScalar(BOLT_SCALE);
+    bolt.scale.setScalar(bolt.userData.scale);
     // Turn to face the camera. In the world he no longer inherits its
     // orientation, and a mascot addressing the child must not be seen in
     // profile when a game frames the island from a different angle.

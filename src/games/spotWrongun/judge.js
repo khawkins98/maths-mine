@@ -70,7 +70,8 @@ export function createJudgeTier(ctx, stage, facts) {
     const nugX = nugXFor(cols);
 
     // the Nugget (teal) stands beside the wall, presenting its sign aloft
-    const g = stage.makeNugget(0);
+    // a different villager each round, so the crew is not one repeated face
+    const g = stage.makeNugget(judgeNo);
     g.position.set(nugX, BASE_Y, 0);
     stage.crewGroup.add(g);
 
@@ -104,9 +105,9 @@ export function createJudgeTier(ctx, stage, facts) {
     ui.setTally('');
     ui.els.btnRecenter.style.display = 'none';
     ui.setStatus('Watch the blocks — is the sign telling the truth?');
-    bolt.say('Is this crewmate telling the truth?', 'wow');
+    bolt.say('Is this villager telling the truth?', 'wow');
     speak(pickPhrase([
-      `This crewmate says ${a} times ${b} is ${claim}. Let's count and check!`,
+      `This villager says ${a} times ${b} is ${claim}. Let's count and check!`,
       `Is ${a} times ${b} really ${claim}? Let's build it and see!`,
     ]));
 
@@ -149,7 +150,7 @@ export function createJudgeTier(ctx, stage, facts) {
   function onBuilt() {
     state.phase = 'judging';
     jr.askT = nowT();
-    // The crewmate's 3D sign already shows the claim — don't repeat it in the
+    // The villager's 3D sign already shows the claim — don't repeat it in the
     // DOM. The child judges from the sign + the built array (the evidence); the
     // reveal re-counts and shows the real total.
     ui.setTally('');
@@ -244,7 +245,7 @@ export function createJudgeTier(ctx, stage, facts) {
       bolt.say(correct ? 'Nice eye — honest!' : `Tricky one — look, it’s ${answer}.`, 'happy');
       speak(pickPhrase([
         `Let's count… ${answer}! The sign was telling the truth!`,
-        `${eqWords(a, b, answer)}. That crewmate was honest!`,
+        `${eqWords(a, b, answer)}. That villager was honest!`,
       ]));
     } else {
       ui.setStatus('Fixed it!');

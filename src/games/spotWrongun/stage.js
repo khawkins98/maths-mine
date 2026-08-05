@@ -17,7 +17,7 @@ import { createTimers } from '../../core/timers.js';
 import { createBlockKit } from '../../core/blocks.js';
 import { easeOutBack } from '../../core/ease.js';
 import {
-  NUG_Z, HEAD_COLORS, BODY_COPPER, GOOD_GREEN, CONFETTI_COLS,
+  NUG_Z, VILLAGERS, SKIN, SKIN_DARK, HAIR, BROW, GOOD_GREEN, CONFETTI_COLS,
 } from './constants.js';
 
 export function createStage(ctx) {
@@ -25,14 +25,19 @@ export function createStage(ctx) {
 
   // ---------- owned geometry (one set, reused by every Nugget) ----------
   const geo = {
-    body: new THREE.BoxGeometry(0.95, 0.95, 0.62),
-    head: new THREE.BoxGeometry(0.82, 0.6, 0.6),
-    eye: new THREE.BoxGeometry(0.15, 0.19, 0.06),
-    glint: new THREE.BoxGeometry(0.05, 0.05, 0.02),
-    arm: new THREE.BoxGeometry(0.18, 0.5, 0.2),
-    foot: new THREE.BoxGeometry(0.3, 0.2, 0.36),
-    stalk: new THREE.CylinderGeometry(0.03, 0.03, 0.3, 8),
-    bulb: new THREE.SphereGeometry(0.09, 12, 12),
+    // Villager proportions: a tall boxy head with a protruding nose, a long
+    // robe, arms folded across the front, stubby legs.
+    robe: new THREE.BoxGeometry(0.82, 1.0, 0.5),
+    trim: new THREE.BoxGeometry(0.5, 0.72, 0.06),   // apron down the front
+    belt: new THREE.BoxGeometry(0.86, 0.1, 0.54),
+    head: new THREE.BoxGeometry(0.62, 0.7, 0.58),
+    nose: new THREE.BoxGeometry(0.16, 0.3, 0.2),
+    brow: new THREE.BoxGeometry(0.52, 0.08, 0.04),
+    hair: new THREE.BoxGeometry(0.66, 0.22, 0.62),
+    eye: new THREE.BoxGeometry(0.13, 0.16, 0.04),
+    pupil: new THREE.BoxGeometry(0.07, 0.1, 0.03),
+    arm: new THREE.BoxGeometry(0.2, 0.52, 0.22),
+    leg: new THREE.BoxGeometry(0.24, 0.42, 0.26),
     hit: new THREE.BoxGeometry(1.7, 3.2, 1.5),   // FAT hitbox so small fingers can't miss
     ring: new THREE.RingGeometry(0.85, 1.2, 28), // hover ground ring (imposter)
     sign: new THREE.PlaneGeometry(2.15, 1.26),   // ~512×300 aspect
@@ -41,14 +46,18 @@ export function createStage(ctx) {
   };
 
   // ---------- owned materials ----------
-  const bodyMat = new THREE.MeshStandardMaterial({ color: BODY_COPPER, roughness: 0.6, metalness: 0.2 });
-  const armMat = new THREE.MeshStandardMaterial({ color: 0xb96c3d, roughness: 0.6, metalness: 0.2 });
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x241a12, roughness: 0.5 });
-  const glintMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  const bulbMat = new THREE.MeshStandardMaterial({ color: 0xffc93c, emissive: 0xffc93c, emissiveIntensity: 0.6, roughness: 0.35 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.85 });
+  const noseMat = new THREE.MeshStandardMaterial({ color: SKIN_DARK, roughness: 0.85 });
+  const hairMat = new THREE.MeshStandardMaterial({ color: HAIR, roughness: 0.9 });
+  const browMat = new THREE.MeshStandardMaterial({ color: BROW, roughness: 0.9 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.5 });
+  const pupilMat = new THREE.MeshStandardMaterial({ color: 0x2b1d12, roughness: 0.5 });
+  const legMat = new THREE.MeshStandardMaterial({ color: 0x4a3a2c, roughness: 0.9 });
+  // one pair per villager variety
+  const robeMats = VILLAGERS.map((v) => new THREE.MeshStandardMaterial({ color: v.robe, roughness: 0.85 }));
+  const trimMats = VILLAGERS.map((v) => new THREE.MeshStandardMaterial({ color: v.trim, roughness: 0.85 }));
   const shardMat = new THREE.MeshBasicMaterial({ color: 0xfff3dd, side: THREE.DoubleSide });
   const dotMat = new THREE.MeshStandardMaterial({ color: GOOD_GREEN, emissive: 0x1f7a44, emissiveIntensity: 0.5, roughness: 0.5 });
-  const headMats = HEAD_COLORS.map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, metalness: 0.08 }));
 
   // The array blocks are Block Builder's kit, so both games draw the exact same
   // wall — that visual rhyme is the teaching point, not a coincidence.
@@ -56,7 +65,8 @@ export function createStage(ctx) {
   const { makeBlock, setCapGrass } = blocks;
 
   const sharedGeos = new Set([...Object.values(geo), ...blocks.sharedGeos]);
-  const sharedMats = new Set([bodyMat, armMat, eyeMat, glintMat, bulbMat, shardMat, dotMat, ...headMats]);
+  const sharedMats = new Set([skinMat, noseMat, hairMat, browMat, eyeMat, pupilMat, legMat,
+    shardMat, dotMat, ...robeMats, ...trimMats]);
 
   // ---------- scene subtree ----------
   const root = new THREE.Group();
@@ -158,38 +168,66 @@ export function createStage(ctx) {
     return tex;
   }
 
-  // ---------- build a Nugget (articulated: neck / shoulders / hips) ----------
-  function makeNugget(headIdx) {
+  // ---------- build a villager (articulated: neck / shoulders / hips) ----------
+  //
+  // Keeps the exact joint set the tiers animate — neck, shoulders, hips, body,
+  // eyes — so the idle bob, blink, cheer and eject animations are untouched.
+  function makeNugget(variantIdx) {
+    const i = ((variantIdx % VILLAGERS.length) + VILLAGERS.length) % VILLAGERS.length;
     const g = new THREE.Group();
-    const body = new THREE.Mesh(geo.body, bodyMat);
+
+    const body = new THREE.Mesh(geo.robe, robeMats[i]);
     body.castShadow = true; body.receiveShadow = true;
     g.add(body);
 
+    // apron down the front and a belt: what actually distinguishes one
+    // villager's trade from another at a glance
+    const apron = new THREE.Mesh(geo.trim, trimMats[i]);
+    apron.position.set(0, -0.08, 0.26);
+    g.add(apron);
+    const belt = new THREE.Mesh(geo.belt, trimMats[i]);
+    belt.position.set(0, -0.26, 0);
+    g.add(belt);
+
     const neck = new THREE.Object3D(); neck.position.set(0, 0.5, 0); g.add(neck);
-    const head = new THREE.Mesh(geo.head, headMats[headIdx]);
-    head.position.y = 0.28; head.castShadow = true;
+
+    const head = new THREE.Mesh(geo.head, skinMat);
+    head.position.y = 0.36; head.castShadow = true;
     neck.add(head);
+
+    // The nose is the villager. Big, blunt, straight off the front of the face.
+    const nose = new THREE.Mesh(geo.nose, noseMat);
+    nose.position.set(0, 0.3, 0.36);
+    nose.castShadow = true;
+    neck.add(nose);
+
+    const brow = new THREE.Mesh(geo.brow, browMat);
+    brow.position.set(0, 0.52, 0.29);
+    neck.add(brow);
+
+    const hair = new THREE.Mesh(geo.hair, hairMat);
+    hair.position.set(0, 0.62, -0.02);
+    neck.add(hair);
+
     const eyes = [];
     for (const s of [-1, 1]) {
       const eye = new THREE.Mesh(geo.eye, eyeMat);
-      eye.position.set(s * 0.19, 0.32, 0.31);
-      const glint = new THREE.Mesh(geo.glint, glintMat);
-      glint.position.set(s * 0.16, 0.37, 0.33);
-      neck.add(eye, glint);
+      eye.position.set(s * 0.17, 0.4, 0.3);
+      const pupil = new THREE.Mesh(geo.pupil, pupilMat);
+      pupil.position.set(s * 0.02, 0, 0.03);
+      eye.add(pupil); // parented, so a blink closes the pupil with the eye
+      neck.add(eye);
       eyes.push(eye);
     }
-    const stalk = new THREE.Mesh(geo.stalk, armMat);
-    stalk.position.y = 0.72;
-    const bulb = new THREE.Mesh(geo.bulb, bulbMat);
-    bulb.position.y = 0.9;
-    neck.add(stalk, bulb);
 
+    // Arms folded across the belly, the way villagers stand.
     const shoulders = {};
     for (const s of [-1, 1]) {
-      const sh = new THREE.Object3D(); sh.position.set(s * 0.45, 0.3, 0.12); g.add(sh);
-      const arm = new THREE.Mesh(geo.arm, bodyMat);
-      arm.position.set(s * 0.13, 0.04, 0);
-      arm.rotation.z = s * 0.7;
+      const sh = new THREE.Object3D(); sh.position.set(s * 0.33, 0.2, 0); g.add(sh);
+      const arm = new THREE.Mesh(geo.arm, robeMats[i]);
+      arm.position.set(s * -0.04, -0.2, 0.22);
+      arm.rotation.x = -1.25;
+      arm.rotation.z = s * 0.18;
       arm.castShadow = true;
       sh.add(arm);
       shoulders[s] = sh;
@@ -197,10 +235,10 @@ export function createStage(ctx) {
 
     const hips = {};
     for (const s of [-1, 1]) {
-      const hp = new THREE.Object3D(); hp.position.set(s * 0.24, -0.45, 0); g.add(hp);
-      const foot = new THREE.Mesh(geo.foot, armMat);
-      foot.position.set(0, -0.17, 0.03); foot.castShadow = true;
-      hp.add(foot);
+      const hp = new THREE.Object3D(); hp.position.set(s * 0.17, -0.5, 0); g.add(hp);
+      const leg = new THREE.Mesh(geo.leg, legMat);
+      leg.position.y = -0.2; leg.castShadow = true;
+      hp.add(leg);
       hips[s] = hp;
     }
 
@@ -337,7 +375,7 @@ export function createStage(ctx) {
     // scene graph
     root, crewGroup, signGroup, arrayGroup, fxGroup, ring, hitboxes,
     // assets
-    geo, shardMat, dotMat,
+    geo, shardMat, dotMat, villagerCount: VILLAGERS.length,
     makeSignTex, makeNugget, makeBlock, setCapGrass,
     // pools a tier pushes into
     shards, proofDots, blockPops,

@@ -6,9 +6,9 @@
 // Where the other games make a child PRODUCE an answer, this one makes them
 // CHECK one. It ships as two tiers on one shared stage, chosen by mastery:
 //
-//   • TIER 1 "JUDGE" (default) — one crewmate, one claim, ✓ True / ✗ False.
+//   • TIER 1 "JUDGE" (default) — one villager, one claim, ✓ True / ✗ False.
 //     See ./judge.js.
-//   • TIER 2 "IMPOSTER" (advanced) — three crewmates, one fibbing sign, tap to
+//   • TIER 2 "IMPOSTER" (advanced) — three villagers, one fibbing sign, tap to
 //     eject it. Unlocks past IMPOSTER_THRESHOLD. See ./imposter.js.
 //
 // This file is the shell only: it builds the stage, picks a tier, routes input
