@@ -445,9 +445,10 @@ export function createBlockBuilder(ctx) {
     const from = wall.rotation.z;
     const to = from - Math.PI / 2;
     const y0 = wall.position.y;
-    const target = frameValues(round.R, round.C);
-    const y1 = target.centerY;
-    const z0 = camera.position.z, cy0 = camera.position.y;
+    // The wall swaps its columns and rows, so the framing it needs swaps too.
+    const fromF = frameValues(round.C, round.R);
+    const toF = frameValues(round.R, round.C);
+    const y1 = toF.centerY;
     const t0 = nowT();
     const square = round.a === round.b;
     // the commuted fact on the sign; title card stays the mode name (no feedback)
@@ -474,9 +475,18 @@ export function createBlockBuilder(ctx) {
       const e = 1 - Math.pow(1 - k, 3);
       wall.rotation.z = from + (to - from) * e;
       wall.position.y = y0 + (y1 - y0) * e + Math.sin(Math.PI * e) * lift;
-      camera.position.z = z0 + (target.dist - z0) * e;
-      camera.position.y = cy0 + (y1 - cy0) * e;
-      camera.lookAt(0, camera.position.y, 0);
+      // Move along the SAME (centerY, dist) parameterisation placeCamera uses,
+      // rather than poking .y and .z directly. `dist` is a distance ALONG the
+      // isometric view direction, not a z coordinate: assigning it to .z walked
+      // the camera off that direction and eased its height down to the wall's
+      // centre, which put it at knee height. The result was the camera skimming
+      // and then clipping through the island, showing its underside and
+      // z-fighting against the grass, and dragging Bolt underground with it.
+      engine.placeCamera(
+        fromF.centerY + (toF.centerY - fromF.centerY) * e,
+        fromF.dist + (toF.dist - fromF.dist) * e,
+        VIEW_DIR,
+      );
       if (k < 1) requestAnimationFrame(spin);
       else {
         settleRotation();
