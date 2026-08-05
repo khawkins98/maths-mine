@@ -60,5 +60,14 @@ export function createAudio() {
   function chordSound() { [523, 659, 784, 1046, 1319].forEach((f, i) => setTimeout(() => beepEnv(f, f, 0.3, 'triangle', 0.05), i * 80)); }
   function buzzSound() { beepEnv(300, 170, 0.22, 'sine', 0.05); } // gentle "not quite" — never harsh
 
-  return { init, resume, beep, beepEnv, noiseBurst, thunk, groupChime, chordSound, buzzSound };
+  // Wooden knock for pressing a control. Everything in this world is planks and
+  // dirt, so a UI click should sound like knuckles on a board, not a beep.
+  // `bright` shifts the pitch so a small back button and a big answer slab feel
+  // like different objects without needing separate sounds.
+  function woodTap(bright = 1) {
+    beepEnv(230 * bright, 96 * bright, 0.07, 'sine', 0.055);
+    noiseBurst(0.045, 0.03, 1150 * bright);
+  }
+
+  return { init, resume, beep, beepEnv, noiseBurst, thunk, groupChime, chordSound, buzzSound, woodTap };
 }
