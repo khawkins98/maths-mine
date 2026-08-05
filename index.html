@@ -300,8 +300,16 @@
         gap: 18px; text-align: center; color: var(--ink-light);
         background:
           radial-gradient(1200px 800px at 50% 40%, rgba(10,8,4,0.28) 0%, rgba(10,8,4,0.55) 100%);
-        padding: 24px;
+        /* Bolt walks on at the bottom-left and greets the child from there, so
+           the card row is lifted clear of him rather than sitting on his head. */
+        padding: 24px 24px clamp(24px, 16vh, 165px);
       }
+      /* On the hub, Bolt's bubble said "Pick a game!" directly on top of the
+         first card's description, while the subtitle two lines up already said
+         "Pick a game to play with Bolt!". One message, not two, and no overlap:
+         Bolt still walks on and waves, and still says it out loud. Same
+         treatment the bubble already gets while a question is on screen. */
+      body:has(#hub:not(.hidden)) #bubble { display: none; }
       /* Title on a big wooden sign */
       #hub h1 {
         font-size: clamp(26px, 7vw, 46px); margin: 0;
