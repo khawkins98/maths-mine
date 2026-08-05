@@ -194,8 +194,13 @@ export function createShakeBatch(ctx) {
   // Painting the face removes the problem instead of fixing it: one
   // orientation, verified once.
   function makeFactorDie(value, others, pool) {
+    // Decoys must exclude the value itself: a die showing 6 on top and 6 on its
+    // side is not a die, and a child reading the wrong face gets the wrong sum.
+    const decoys = [...new Set(others)].filter((v) => v !== value);
     const values = [];
-    for (let i = 0; i < 6; i++) values.push(i === UP_FACE ? value : others[i % others.length]);
+    for (let i = 0, d = 0; i < 6; i++) {
+      values.push(i === UP_FACE ? value : (decoys.length ? decoys[d++ % decoys.length] : value));
+    }
     const mats = values.map((v) => {
       const t = numeralTexture(v);
       pool.tex.push(t);
@@ -244,8 +249,10 @@ export function createShakeBatch(ctx) {
   // Decoy faces: the other tables the child has unlocked, so a die that is not
   // showing its value still shows something plausible.
   function decoyTables() {
-    const t = mastery.activeTables();
-    return t.length ? t : [2, 5, 10];
+    // The unlocked tables first, topped up so a die has six distinct faces
+    // rather than the same two or three numbers repeating around it.
+    const seen = [...new Set([...mastery.activeTables(), 2, 3, 4, 5, 6, 10])];
+    return seen.length ? seen : [2, 5, 10];
   }
 
   // ---------- camera ----------
@@ -274,9 +281,14 @@ export function createShakeBatch(ctx) {
     }
   }
   function rollSound() {
-    audio.noiseBurst(0.12, 0.05, 1600);
-    audio.beep(260 + Math.random() * 40, 0.05, 'square', 0.04);
-    later(() => audio.beep(300 + Math.random() * 50, 0.04, 'square', 0.03), 70);
+    // A low wooden rattle. This used to be a bright noise burst plus two square
+    // waves, which at the corrected bus level came out as a loud hiss and a
+    // chirp: the "weird high-pitched sound" a playtester kept hearing after the
+    // roll. Lower cutoff and triangle waves give it a tumbling-wood character
+    // that sits under the chime instead of fighting it.
+    audio.noiseBurst(0.13, 0.028, 520);
+    audio.beepEnv(210, 130, 0.09, 'triangle', 0.03);
+    later(() => audio.beepEnv(180, 110, 0.08, 'triangle', 0.022), 90);
   }
   function celebrate() {
     for (let i = 0; i < 44; i++) {
@@ -338,7 +350,7 @@ export function createShakeBatch(ctx) {
     // left: how many groups. right: how many in each.
     const pool = { tex: tableTex, mats: tableMats };
     const specs = [
-      { value: round.target, others: [2, 3, 4, 5, 6], x: -FACTOR_GAP / 2 },
+      { value: round.target, others: [1, 2, 3, 4, 5, 6], x: -FACTOR_GAP / 2 },
       { value: round.groupSize, others: decoyTables(), x: FACTOR_GAP / 2 },
     ];
     for (const [i, sp] of specs.entries()) {
@@ -436,11 +448,11 @@ export function createShakeBatch(ctx) {
     // dice sit SETTLED in separated groups right above it — countable evidence.
     ui.fadeClaim();
     ui.setTally(`${round.target} groups of ${round.groupSize} …`);
-    ui.setStatus('Count the dice — how many?');
+    ui.setStatus('Count the blocks — how many?');
     ui.setAskEq(`${round.a} × ${round.b} = ?`);
     ui.hideConfirm();
-    bolt.say('How many dice altogether?', 'wow');
-    speak(pickPhrase([`Count the dice! How many altogether?`, `So, ${eqWords(round.a, round.b)}? Count them!`, `How many dice did you roll?`]));
+    bolt.say('How many blocks altogether?', 'wow');
+    speak(pickPhrase([`Count the blocks! How many altogether?`, `So, ${eqWords(round.a, round.b)}? Count them!`, `How many blocks did you get?`]));
     buildChoices();
   }
 
@@ -476,29 +488,29 @@ export function createShakeBatch(ctx) {
       countDice(() => {
         ui.setAskEq(eqStr);
         ui.popAskEq();
-        ui.setTally(`${round.target} groups of ${round.groupSize} = ${round.answer} dice`);
+        ui.setTally(`${round.target} groups of ${round.groupSize} = ${round.answer} blocks`);
         const reward = round.product;
         wallet.add(reward);
         audio.chordSound(); celebrate();
         ui.showToast(`+${reward} 🔩 collected!`, 'good');
-        ui.setStatus(`Yes! ${round.answer} dice altogether!`);
+        ui.setStatus(`Yes! ${round.answer} blocks altogether!`);
         bolt.say(`YES! +${reward} bolts!`, 'happy');
-        speak(pickPhrase([`That's right! ${eqWords(round.a, round.b, round.answer)} dice!`, `Yes! ${eqWords(round.a, round.b, round.answer)}!`, `You got it — ${round.answer} dice!`]));
+        speak(pickPhrase([`That's right! ${eqWords(round.a, round.b, round.answer)} blocks!`, `Yes! ${eqWords(round.a, round.b, round.answer)}!`, `You got it — ${round.answer} blocks!`]));
         later(() => finishRound(), 900);
       });
     } else {
       btn.classList.add('wrong');
       audio.buzzSound();
       bolt.say("Let's count them!", '');
-      ui.setStatus('Let’s count the dice together…');
+      ui.setStatus('Let’s count the blocks together…');
       speak("Let's count them together.");
       countDice(() => {
         const right = ui.choiceButtons().find((c) => Number(c.textContent) === round.answer);
         if (right) right.classList.add('right');
         ui.setAskEq(eqStr);
         ui.popAskEq();
-        ui.setTally(`${round.target} groups of ${round.groupSize} = ${round.answer} dice`);
-        ui.setStatus(`${round.answer} dice! Now you know it.`);
+        ui.setTally(`${round.target} groups of ${round.groupSize} = ${round.answer} blocks`);
+        ui.setStatus(`${round.answer} blocks! Now you know it.`);
         speak(`${eqWords(round.a, round.b, round.answer)}. Now you know it!`);
         bolt.say(`It's ${round.answer}!`, '');
         later(() => ui.fadeChoices(), 500);
@@ -526,7 +538,7 @@ export function createShakeBatch(ctx) {
       g++;
       popGroup(g - 1);
       audio.groupChime(g);
-      ui.setTally(`… ${g * round.groupSize} dice`);
+      ui.setTally(`… ${g * round.groupSize} blocks`);
       speak(`${g * round.groupSize}.`);
       if (g < round.target) later(step, ms);
       else later(done, ms + 220);
