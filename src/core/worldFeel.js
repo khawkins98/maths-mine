@@ -4,9 +4,12 @@
 // Two effects, both deliberately small. This is not a 3D camera control; the
 // games own the framing and a child must never be able to lose the play area.
 //
-//   1. PARALLAX. Moving a finger or the mouse turns the camera rig by a couple
-//      of degrees, so the blocks shift against the ground and the world reads as
-//      having depth. Heavily smoothed, and it always eases back to centre.
+//   1. PARALLAX. DRAGGING turns the camera rig by a couple of degrees, so the
+//      blocks shift against the ground and the world reads as having depth.
+//      Deliberately not hover-driven: following the cursor meant the world
+//      drifted continuously under an idle mouse, which is both distracting and
+//      faintly seasick. You now have to take hold of it, and it eases back to
+//      centre the moment you let go.
 //
 //   2. TOUCH. Tapping the ground makes it respond: the whole island dips and
 //      springs back on a damped spring, tilting toward wherever you touched
@@ -20,10 +23,11 @@
 import * as THREE from 'three';
 
 // --- parallax ---
-const YAW = 0.055;      // radians at full deflection (~3.2 degrees)
-const PITCH = 0.028;    // less vertically; too much reads as a camera fault
-const EASE = 3.2;       // approach rate; low enough to feel like weight
-const RECENTRE = 0.55;  // per-second drift back to centre when idle
+const YAW = 0.075;      // radians at full drag (~4.3 degrees)
+const PITCH = 0.038;    // less vertically; too much reads as a camera fault
+const EASE = 7.0;       // approach rate while dragging: should track the finger
+const RECENTRE = 6.5;   // snap-back rate once released
+const DRAG_SPAN = 0.42; // fraction of the screen for a full-deflection drag
 
 // --- ground spring ---
 const STIFFNESS = 155;  // how hard it pulls back to rest
@@ -42,7 +46,8 @@ export function createWorldFeel({ engine, audio, textures }) {
 
   // parallax state
   let targetYaw = 0, targetPitch = 0;
-  let pointerSeen = false;
+  let dragging = false;
+  let originX = 0, originY = 0;
 
   // spring state: vertical dip plus a lean on each horizontal axis
   let y = 0, vy = 0;
@@ -86,14 +91,21 @@ export function createWorldFeel({ engine, audio, textures }) {
     return hits.length ? hits[0].point : null;
   }
 
+  const clamp1 = (v) => Math.max(-1, Math.min(1, v));
+
+  // Turn is measured from where the drag STARTED, not from screen centre, so
+  // taking hold anywhere feels the same and a tap never jumps the view.
   function onPointerMove(e) {
-    pointerSeen = true;
-    targetYaw = ((e.clientX / window.innerWidth) * 2 - 1) * YAW;
-    targetPitch = ((e.clientY / window.innerHeight) * 2 - 1) * PITCH;
+    if (!dragging) return;
+    const dx = (e.clientX - originX) / (window.innerWidth * DRAG_SPAN);
+    const dy = (e.clientY - originY) / (window.innerHeight * DRAG_SPAN);
+    targetYaw = clamp1(dx) * YAW;
+    targetPitch = clamp1(dy) * PITCH;
   }
 
   function onPointerDown(e) {
-    onPointerMove(e);
+    dragging = true;
+    originX = e.clientX; originY = e.clientY;
     const p = groundHit(e.clientX, e.clientY);
     if (!p) return;
 
@@ -109,24 +121,26 @@ export function createWorldFeel({ engine, audio, textures }) {
     audio.thunk(0);
   }
 
-  // A finger leaving the screen shouldn't freeze the world off-centre.
-  function onPointerOut() { pointerSeen = false; }
+  // Letting go anywhere ends the drag: a finger lifted off-canvas, or the tab
+  // losing focus mid-drag, must not leave the world stuck off-centre.
+  function endDrag() { dragging = false; }
 
-  dom.addEventListener('pointermove', onPointerMove);
   dom.addEventListener('pointerdown', onPointerDown);
-  dom.addEventListener('pointerleave', onPointerOut);
-  window.addEventListener('blur', onPointerOut);
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
+  window.addEventListener('blur', endDrag);
 
   function update(dt) {
-    // --- parallax: ease toward the target, drift home when idle ---
-    if (!pointerSeen) {
-      const k = Math.min(1, dt * RECENTRE);
-      targetYaw += (0 - targetYaw) * k;
-      targetPitch += (0 - targetPitch) * k;
-    }
-    const k = Math.min(1, dt * EASE);
-    camRig.rotation.y += (targetYaw - camRig.rotation.y) * k;
-    camRig.rotation.x += (targetPitch - camRig.rotation.x) * k;
+    // --- parallax: track the drag, spring home once released ---
+    // Released means the target IS zero. Easing the target toward zero and then
+    // easing the rig toward that moving target compounds into a slow drift that
+    // is still visibly off-centre a second after letting go.
+    const wantYaw = dragging ? targetYaw : 0;
+    const wantPitch = dragging ? targetPitch : 0;
+    const k = Math.min(1, dt * (dragging ? EASE : RECENTRE));
+    camRig.rotation.y += (wantYaw - camRig.rotation.y) * k;
+    camRig.rotation.x += (wantPitch - camRig.rotation.x) * k;
 
     // --- ground spring (damped harmonic, integrated semi-implicitly) ---
     // Only touched while it is actually moving. Writing the platform transform
