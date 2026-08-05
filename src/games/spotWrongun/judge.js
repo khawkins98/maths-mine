@@ -69,27 +69,20 @@ export function createJudgeTier(ctx, stage, facts) {
     const cols = Math.max(a, b), rows = Math.min(a, b);
     const nugX = nugXFor(cols);
 
-    // the Nugget (teal) stands beside the wall, presenting its sign aloft
+    // the villager stands beside the wall it is making a claim about
     // a different villager each round, so the crew is not one repeated face
     const g = stage.makeNugget(judgeNo);
     g.position.set(nugX, BASE_Y, 0);
     stage.crewGroup.add(g);
 
-    const signMesh = new THREE.Mesh(stage.geo.sign, new THREE.MeshBasicMaterial({
-      map: stage.makeSignTex(a, b, claim), transparent: true, side: THREE.DoubleSide,
-    }));
-    const signY = Math.max(3.5, rows * CELL + 1.4);
-    signMesh.position.set(nugX, signY, 0.35);
-    stage.signGroup.add(signMesh);
-
     jr = {
       a, b, answer, claim, isTrue, cols, rows,
       nugget: {
-        group: g, sign: signMesh, joints: g.userData.joints,
-        groupBaseY: BASE_Y, signBaseY: signMesh.position.y,
+        group: g, joints: g.userData.joints,
+        groupBaseY: BASE_Y,
         bob: Math.random() * Math.PI * 2, blinkIn: 2 + Math.random() * 3, blinkT: 0,
       },
-      blocks: [], askT: 0, answered: false, signFlashT: 0,
+      blocks: [], askT: 0, answered: false,
     };
 
     frameJudge(cols, rows);
@@ -104,7 +97,7 @@ export function createJudgeTier(ctx, stage, facts) {
     ui.hideBigTotal();
     ui.setTally('');
     ui.els.btnRecenter.style.display = 'none';
-    ui.setStatus('Watch the blocks — is the sign telling the truth?');
+    ui.setStatus('Watch the emeralds — is the villager telling the truth?');
     bolt.say('Is this villager telling the truth?', 'wow');
     speak(pickPhrase([
       `This villager says ${a} times ${b} is ${claim}. Let's count and check!`,
@@ -148,11 +141,16 @@ export function createJudgeTier(ctx, stage, facts) {
   }
 
   function onBuilt() {
+    // The array counted itself aloud on the way up ("10. 20. 30..."), one line
+    // per row. Those are queued, so on a tall wall they were still playing
+    // after the question had been asked: the child heard "is that right?" and
+    // then a stream of numbers. The question supersedes them.
+    speech.reset();
     state.phase = 'judging';
     jr.askT = nowT();
-    // The villager's 3D sign already shows the claim — don't repeat it in the
-    // DOM. The child judges from the sign + the built array (the evidence); the
-    // reveal re-counts and shows the real total.
+    // The claim lives in ONE place: the big headline above the buttons. It used
+    // to also hang on a small 3D board over the array, which said exactly the
+    // same thing in a third of the size and cluttered the sky.
     ui.setTally('');
     // the CLAIM gets its big DOM home directly above the True/False buttons —
     // the biggest text on screen during the question.
@@ -162,8 +160,8 @@ export function createJudgeTier(ctx, stage, facts) {
     ui.setStatus('Is that right?');
     bolt.say('You be the judge!', 'wow');
     speak(pickPhrase([
-      `The sign says ${jr.claim}. Is that right? True, or false?`,
-      `So — is the sign true, or false?`,
+      `It says ${jr.claim}. Is that right? True, or false?`,
+      `So — true, or false?`,
     ]));
     ui.showChoices([TRUE_LABEL, FALSE_LABEL], (val) => judgeTap(val === TRUE_LABEL));
   }
@@ -186,8 +184,6 @@ export function createJudgeTier(ctx, stage, facts) {
       if (btn.textContent === truthLabel) btn.classList.add('right', 'solo');
     });
     later(() => ui.fadeChoices(), 600);
-    // fade the DOM claim headline so the corrected 3D sign becomes the sole hero
-    ui.fadeClaim();
 
     if (correct) {
       const reward = jr.answer;
@@ -227,15 +223,10 @@ export function createJudgeTier(ctx, stage, facts) {
 
   function showVerdict(correct) {
     const { a, b, answer, claim, isTrue } = jr;
-    // THE HERO: swap the sign to the confirmed TRUE fact (correcting a fib) with
-    // a green ✓ badge, then flash green AND scale it up ~2.8× before it settles —
-    // its text is momentarily the largest thing on screen. No floating number,
-    // no DOM equation, no status equation competes with it.
-    jr.nugget.sign.material.map = stage.makeSignTex(a, b, answer, { mark: 'check' });
-    jr.nugget.sign.material.needsUpdate = true;
-    jr.signFlashT = 1.1;               // green flash
-    jr.signHeroT = 1.35;               // big scale-up-then-settle (see update)
-    jr.signHeroDur = 1.35;
+    // THE HERO: the claim headline is rewritten to the confirmed TRUE fact and
+    // pops, so a fib is visibly corrected in the place the child was reading.
+    ui.setClaim(`${a} × ${b} = ${answer}`);
+    ui.popClaim();
 
     // status: personality only, NO equation.
     if (isTrue) {
@@ -258,9 +249,8 @@ export function createJudgeTier(ctx, stage, facts) {
 
     if (correct) {
       audio.chordSound();
-      // confetti bursts at the sign — not floating in empty sky.
-      const sp = jr.nugget.sign.position;
-      stage.celebrate(sp.x, sp.y, 0);
+      // confetti bursts over the array the child just counted
+      stage.celebrate(WALL_CX, Math.max(2.4, jr.rows * CELL), 0);
       if (bolt.playWave) later(() => bolt.playWave(), 400);
     } else { audio.groupChime(jr.rows); } // gentle, encouraging — never a buzzer
 
@@ -285,28 +275,6 @@ export function createJudgeTier(ctx, stage, facts) {
     const eyeS = n.blinkT > 0 ? 0.12 : 1;
     for (const e of j.eyes) e.scale.y = eyeS;
 
-    // sign: bob with holder, billboard to camera, green flash + pop on verdict
-    n.sign.position.y = n.signBaseY + bob;
-    n.sign.quaternion.copy(camera.quaternion);
-    if (jr.signFlashT > 0) {
-      jr.signFlashT -= dt;
-      const k = Math.max(0, jr.signFlashT / 1.1);
-      n.sign.material.color.setRGB(1, 1, 1).lerp(new THREE.Color(GOOD_GREEN), k * 0.55);
-      if (jr.signFlashT <= 0) n.sign.material.color.setRGB(1, 1, 1);
-    }
-    // HERO scale: pop the corrected sign up to ~2.8× then settle back to 1 so
-    // its text is briefly the largest thing on screen (it still billboards).
-    if (jr.signHeroT > 0) {
-      jr.signHeroT -= dt;
-      const dur = jr.signHeroDur || 1.35;
-      const p = Math.min(1, 1 - jr.signHeroT / dur); // 0 → 1
-      const PEAK = 2.8, RISE = 0.28;
-      let s;
-      if (p < RISE) s = 1 + (PEAK - 1) * easeOutBack(p / RISE);
-      else { const k = (p - RISE) / (1 - RISE); s = PEAK + (1 - PEAK) * (1 - Math.pow(1 - k, 3)); }
-      n.sign.scale.setScalar(s);
-      if (jr.signHeroT <= 0) n.sign.scale.setScalar(1);
-    } else n.sign.scale.setScalar(1);
   }
 
   // what the headless smoke test reads

@@ -26,8 +26,12 @@ export const BLOCK = CELL * 0.86;
 export const CAP_H = 0.2 * BLOCK;     // grass cap thickness
 export const BODY_H = BLOCK - CAP_H;  // dirt body height
 
-export function createBlockKit(textures) {
-  const { dirtTex, grassTex } = textures;
+// `body`/`cap` override the default dirt-and-grass pair, so the same block
+// geometry, jitter and rim treatment can be cut from another material. Spot the
+// Wrong'un uses emerald: same shape, same seams, more precious stuff.
+export function createBlockKit(textures, { body, cap } = {}) {
+  const dirtTex = body || textures.dirtTex;
+  const grassTex = cap || textures.grassTex;
 
   const bodyGeo = new RoundedBoxGeometry(BLOCK, BODY_H, BLOCK, 2, 0.03);
   const capGeo = new THREE.BoxGeometry(BLOCK, CAP_H, BLOCK);

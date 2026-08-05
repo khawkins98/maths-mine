@@ -68,6 +68,10 @@ export function createTextures() {
   // job is to be counted. Same rim treatment as the dirt blocks so each one
   // reads as a separate cube in a grid.
   const stoneTex = pixelTex('#9d9d9a', ['#8d8d8a', '#adadaa', '#7f7f7c', '#b6b6b3'], { cell: 8, bias: 0.6, edge: 0.34 });
+  // emerald, for Spot the Wrong'un: the array a child counts there is the most
+  // advanced of the three, so it is made of the most precious block.
+  const emeraldTex = pixelTex('#2fbf6d', ['#27a95e', '#41d47f', '#1e9152', '#59e493'], { cell: 8, bias: 0.55, edge: 0.4 });
+  const emeraldTopTex = pixelTex('#41d47f', ['#35c471', '#5ae596', '#2bb267', '#77f0ad'], { cell: 8, bias: 0.55, edge: 0.32 });
   // subtle ground texture (soft-filtered so it doesn't shimmer at distance)
   const groundTex = fleckTex('#7CC860', ['#74C158', '#84D06A', '#6FBE52'], 60, { nearest: false, repeat: 42 });
   // soft round puff, used for dust sprites + Bolt's blob shadow
@@ -125,5 +129,5 @@ export function createTextures() {
   const platDirtTex = fleckTex('#8B5A2B', ['#7A4A22', '#9C6B38', '#6B4226', '#5C3A1F'], 120);
   platDirtTex.wrapS = platDirtTex.wrapT = THREE.RepeatWrapping;
 
-  return { dirtTex, grassTex, stoneTex, groundTex, puffTex, slotTex, skyTex, woodTex, platGrassTex, platDirtTex };
+  return { dirtTex, grassTex, stoneTex, emeraldTex, emeraldTopTex, groundTex, puffTex, slotTex, skyTex, woodTex, platGrassTex, platDirtTex };
 }

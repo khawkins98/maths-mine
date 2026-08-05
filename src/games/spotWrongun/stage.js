@@ -59,9 +59,10 @@ export function createStage(ctx) {
   const shardMat = new THREE.MeshBasicMaterial({ color: 0xfff3dd, side: THREE.DoubleSide });
   const dotMat = new THREE.MeshStandardMaterial({ color: GOOD_GREEN, emissive: 0x1f7a44, emissiveIntensity: 0.5, roughness: 0.5 });
 
-  // The array blocks are Block Builder's kit, so both games draw the exact same
-  // wall — that visual rhyme is the teaching point, not a coincidence.
-  const blocks = createBlockKit(textures);
+  // Same kit, same geometry and seams as Block Builder's wall — the visual
+  // rhyme is the teaching point — but cut from emerald. The three games step up
+  // through the materials: dirt, then stone, then the precious one.
+  const blocks = createBlockKit(textures, { body: textures.emeraldTex, cap: textures.emeraldTopTex });
   const { makeBlock, setCapGrass } = blocks;
 
   const sharedGeos = new Set([...Object.values(geo), ...blocks.sharedGeos]);

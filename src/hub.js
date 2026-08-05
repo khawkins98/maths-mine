@@ -1,3 +1,5 @@
+import { blockIconDataURL, ICON_PALETTES } from './core/blockIcon.js';
+
 // hub.js — the kid-friendly game picker. After the wake gate, main.js shows the
 // hub (instead of going straight into Block Builder). It renders one big card
 // per registered game; tapping a card starts that game via ctx.startGame(id)
@@ -7,15 +9,25 @@
 // to hand the shared ctx to. Games share the mastery ledger, Bolt, and the
 // Bolts currency, so progress carries across.
 
-// One-line, kid-facing blurb + emoji per game id.
+// One-line, kid-facing blurb per game, and the block each one is made of.
+// The three materials are a difficulty ladder a Minecraft player already
+// reads without being told: dirt, then stone, then emerald.
 const META = {
-  'block-builder': { emoji: '🧱', desc: 'Build number-walls out of blocks. × and ÷.' },
-  'shake-a-batch': { emoji: '🎲', desc: 'Shake out groups of dice and count them up!' },
-  'spot-the-wrongun': { emoji: '🕵️', desc: 'Find the sign that’s fibbing!' },
+  'block-builder': { icon: 'dirt', desc: 'Build number-walls out of blocks. × and ÷.' },
+  'shake-a-batch': { icon: 'stone', desc: 'Roll the dice, then count the blocks!' },
+  'spot-the-wrongun': { icon: 'emerald', desc: 'Find the sign that’s fibbing!' },
 };
 
 export function createHub(ctx) {
   const { ui, bolt, speech } = ctx;
+
+  // Drawn once and reused: the cards are rebuilt every time the hub opens.
+  const iconCache = {};
+  function iconFor(name) {
+    const key = ICON_PALETTES[name] ? name : 'stone';
+    if (!iconCache[key]) iconCache[key] = blockIconDataURL(ICON_PALETTES[key]);
+    return iconCache[key];
+  }
 
   function list() { return Object.keys(ctx.games || {}); }
 
@@ -26,12 +38,12 @@ export function createHub(ctx) {
     for (const id of list()) {
       const factory = ctx.games[id];
       const title = (META[id] && META[id].title) || id;
-      const meta = META[id] || { emoji: '🎮', desc: '' };
+      const meta = META[id] || { icon: 'stone', desc: '' };
       const card = document.createElement('button');
       card.className = 'hub-card';
       card.dataset.game = id;
       card.innerHTML =
-        `<div class="hc-emoji">${meta.emoji}</div>` +
+        `<img class="hc-icon" alt="" src="${iconFor(meta.icon)}">` +
         `<div class="hc-title">${(factory && factory.title) || title}</div>` +
         `<div class="hc-desc">${meta.desc}</div>`;
       card.addEventListener('click', () => play(id));
