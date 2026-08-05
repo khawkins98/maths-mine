@@ -35,7 +35,16 @@ export function createEngine({ textures }) {
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 220);
   camera.position.set(0, 3.2, 15);
-  scene.add(camera); // camera must be in the scene graph for its children (Bolt) to draw
+
+  // The camera hangs off a rig rather than off the scene directly. Games own
+  // `camera.position` outright — Block Builder animates it every frame during
+  // the commutativity rotate — so the parallax must never write to it. Turning
+  // the RIG instead orbits the camera a couple of degrees around the origin,
+  // which layers on top of whatever a game is doing and cannot fight it.
+  const camRig = new THREE.Group();
+  camRig.name = 'camera-rig';
+  scene.add(camRig);
+  camRig.add(camera); // camera must be in the scene graph for its children (Bolt) to draw
 
   // ---- hard Minecraft lighting: strong even fill + one short-shadow sun ----
   // Strong hemisphere + ambient lift shadows out of the murk so nothing looks
@@ -118,7 +127,7 @@ export function createEngine({ textures }) {
   function start() { resize(); tick(); }
 
   return {
-    renderer, scene, camera, ground, platform, key, fill, clock,
+    renderer, scene, camera, camRig, ground, platform, key, fill, clock,
     VIEW_DIR,
     nowT, worldToScreen, projectToScreen,
     placeCamera, resetCamera,
