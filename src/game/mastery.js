@@ -9,6 +9,8 @@
 // multiplication sibling a×b, and only once that sibling is "known" (level ≥
 // DIV_UNLOCK_LEVEL) — i.e. division unlocks after its × sibling, per the PRD.
 
+import { localStore, readJSON, writeJSON } from '../core/storage.js';
+
 const TABLE_TIERS = [
   [2, 5, 10],
   [3, 4],
@@ -36,7 +38,7 @@ export class MasteryStore {
   // (which is what the tests want, and what a browser with storage blocked
   // gives us anyway). Progress loads on construction and saves after every
   // recorded answer — a child closing the tab mid-session loses nothing.
-  constructor({ storage = defaultStorage() } = {}) {
+  constructor({ storage = localStore() } = {}) {
     this.facts = new Map();
     this.unlockedTiers = 1; // start with 2/5/10 only
     this.recent = [];       // rolling window of last outcomes (bool)
@@ -58,28 +60,16 @@ export class MasteryStore {
   }
 
   load() {
-    if (!this._storage) return false;
-    try {
-      const raw = this._storage.getItem(SAVE_KEY);
-      if (!raw) return false;
-      const d = JSON.parse(raw);
-      if (!d || !Array.isArray(d.facts)) return false;
-      this.facts = new Map(d.facts);
-      this.unlockedTiers = d.unlockedTiers || 1;
-      this.totalCorrect = d.totalCorrect || 0;
-      this.recent = Array.isArray(d.recent) ? d.recent : [];
-      return true;
-    } catch (_) {
-      return false; // corrupt or unreadable save: start fresh, never crash
-    }
+    const d = readJSON(this._storage, SAVE_KEY);
+    if (!d || !Array.isArray(d.facts)) return false;
+    this.facts = new Map(d.facts);
+    this.unlockedTiers = d.unlockedTiers || 1;
+    this.totalCorrect = d.totalCorrect || 0;
+    this.recent = Array.isArray(d.recent) ? d.recent : [];
+    return true;
   }
 
-  save() {
-    if (!this._storage) return;
-    try {
-      this._storage.setItem(SAVE_KEY, JSON.stringify(this));
-    } catch (_) { /* quota or private mode — progress just won't persist */ }
-  }
+  save() { writeJSON(this._storage, SAVE_KEY, this); }
 
   // Wipe a child's progress (a fresh start, or a second child on the tablet).
   reset() {
@@ -279,18 +269,6 @@ export class MasteryStore {
       score += Math.min(r.correct, 4) + r.level * 0.5; // practice + mastery bonus
     }
     return Math.min(1, score / 24); // ~a handful of practised facts fills it
-  }
-}
-
-// localStorage, if this browser will give it to us. Private mode and blocked
-// third-party storage both throw on ACCESS, not on use, so probe it here.
-function defaultStorage() {
-  try {
-    if (typeof localStorage === 'undefined') return null;
-    localStorage.getItem('__probe');
-    return localStorage;
-  } catch (_) {
-    return null;
   }
 }
 

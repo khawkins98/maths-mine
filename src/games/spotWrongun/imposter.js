@@ -122,7 +122,7 @@ export function createImposterTier(ctx, stage, facts) {
       for (const other of crew) if (other !== n && !other.imposter) other.cheerT = 1.3;
 
       const reward = n.answer;
-      state.bolts += reward; ui.setBolts(state.bolts); ui.rewardPop();
+      ui.setBolts(ctx.wallet.add(reward)); ui.rewardPop();
       ui.showToast(`+${reward} 🔩`, 'good');
       // title card stays the mode name — never feedback.
       ui.setStatus(`That sign said ${n.a} × ${n.b} = ${n.shown} — but it’s really ${n.answer}!`);

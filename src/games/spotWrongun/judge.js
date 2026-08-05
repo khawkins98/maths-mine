@@ -190,7 +190,7 @@ export function createJudgeTier(ctx, stage, facts) {
 
     if (correct) {
       const reward = jr.answer;
-      state.bolts += reward; ui.setBolts(state.bolts); ui.rewardPop();
+      ui.setBolts(ctx.wallet.add(reward)); ui.rewardPop();
       ui.showToast(`+${reward} 🔩`, 'good');
     }
 

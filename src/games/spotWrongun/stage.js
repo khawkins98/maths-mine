@@ -92,8 +92,9 @@ export function createStage(ctx) {
 
   // ---------- state both tiers and the shell read ----------
   // Held in an object rather than as module-level `let`s so a tier can update
-  // the phase and the shell can see it without a setter round-trip.
-  const state = { phase: 'idle', bolts: 0 };
+  // the phase and the shell can see it without a setter round-trip. Bolts are
+  // NOT here: they live in the shared wallet, which outlives the game.
+  const state = { phase: 'idle' };
 
   // ---------- owned sign textures (created + disposed here; NOT ctx.textures) ----------
   const signTextures = [];

@@ -29,7 +29,7 @@ const COLS = [0xff6b6b, 0xffd24a, 0x58e08a, 0x6ad2ff, 0xb98bff, 0xff9f5a, 0x7ef0
 
 
 export function createBlockBuilder(ctx) {
-  const { scene, camera, engine, textures, audio, speech, ui, bolt, mastery, sensors } = ctx;
+  const { scene, camera, engine, textures, audio, speech, ui, bolt, mastery, wallet, sensors } = ctx;
   const { dirtTex, grassTex, slotTex, puffTex } = textures;
   const speak = speech.speak, eqWords = speech.eqWords, divWords = speech.divWords, pickPhrase = speech.pickPhrase;
   const nowT = engine.nowT;
@@ -83,7 +83,7 @@ export function createBlockBuilder(ctx) {
   let moldGroup = null, pulsedTile = null;
   let forcedOp = null;   // test hook: force the next round's operation
   let flashT = 0, flashCol = null;
-  let bolts = 0;
+
 
   function sensorsLive() { return sensors.enabled && sensors.available; }
 
@@ -368,7 +368,7 @@ export function createBlockBuilder(ctx) {
       ui.setAskEq(eqStr);
       ui.popAskEq();
       const reward = round.blocksTotal;
-      bolts += reward;
+      ui.setBolts(wallet.add(reward));
       ui.setBolts(bolts);
       ui.rewardPop();
       audio.chordSound();
@@ -670,7 +670,7 @@ export function createBlockBuilder(ctx) {
       C: round?.C, R: round?.R, answer: round?.answer,
       op: round?.op, mode: round?.op,
       choices: ui.currentChoiceValues(),
-      bolts,
+      bolts: wallet.bolts,
     });
     window.__place = (c, r) => placeInCell(c, r);
     window.__cellXY = (c, r) => { const p = cellPos(c, r, round.C, round.R); return engine.worldToScreen(p.x + wall.position.x, p.y + wall.position.y); };

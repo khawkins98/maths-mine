@@ -58,7 +58,7 @@ const PIP = {
 
 
 export function createShakeBatch(ctx) {
-  const { scene, engine, audio, speech, ui, bolt, mastery } = ctx;
+  const { scene, engine, audio, speech, ui, bolt, mastery, wallet } = ctx;
   const speak = speech.speak, eqWords = speech.eqWords, pickPhrase = speech.pickPhrase;
   const nowT = engine.nowT;
   const VIEW_DIR = engine.VIEW_DIR;
@@ -188,7 +188,7 @@ export function createShakeBatch(ctx) {
   // 'settling'  last group still landing
   // 'asking' | 'next'
   let phase = 'idle';
-  let bolts = 0;
+
 
   // ---------- tray ----------
   function disposeTray() {
@@ -518,7 +518,7 @@ export function createShakeBatch(ctx) {
         ui.popAskEq();
         ui.setTally(`${round.target} groups of ${round.groupSize} = ${round.answer} dice`);
         const reward = round.product;
-        bolts += reward; ui.setBolts(bolts); ui.rewardPop();
+        ui.setBolts(wallet.add(reward)); ui.rewardPop();
         audio.chordSound(); celebrate();
         ui.showToast(`+${reward} 🔩 collected!`, 'good');
         ui.setStatus(`Yes! ${round.answer} dice altogether!`);
@@ -667,7 +667,7 @@ export function createShakeBatch(ctx) {
       // what the settled factor dice are actually SHOWING
       shown: round ? round.factorDice.map(upFaceValue) : [],
       dice: round ? round.dice.length : 0,
-      choices: ui.currentChoiceValues(), bolts,
+      choices: ui.currentChoiceValues(), bolts: wallet.bolts,
     });
     window.__shake = () => rollFactors(); // a test cannot shake a device
   }

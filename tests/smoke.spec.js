@@ -174,6 +174,35 @@ test.describe('progress', () => {
     expect(after.totalCorrect).toBe(1);
     expect(after.facts.length).toBeGreaterThan(0);
   });
+
+  // Bolts used to be a local in each game module, so they reset to zero on
+  // every game switch and every reload while mastery persisted. A currency that
+  // visibly evaporates reads as the game losing your things.
+  test('bolts survive a game switch and a reload', async ({ page }) => {
+    await boot(page);
+    await pick(page, 'block-builder', '__bb');
+
+    const round = await state(page, '__bb');
+    await page.evaluate(({ C, R }) => {
+      for (let c = 0; c < C; c++) for (let r = 0; r < R; r++) window.__place(c, r);
+    }, round);
+    await waitForState(page, '__bb', "s.phase === 'asking'");
+    await answer(page, (await state(page, '__bb')).answer);
+    await waitForState(page, '__bb', "s.phase === 'rotate' || s.phase === 'next'");
+
+    const earned = (await state(page, '__bb')).bolts;
+    expect(earned).toBeGreaterThan(0);
+
+    // switch games: the count must carry, not reset
+    await page.locator('#btn-back').click();
+    await expect(page.locator('#hub')).toBeVisible();
+    await pick(page, 'shake-a-batch', '__sbb');
+    expect((await state(page, '__sbb')).bolts).toBe(earned);
+
+    // and survive a reload, showing in the HUD as soon as the gate is passed
+    await boot(page);
+    expect(await page.locator('#bolts').textContent()).toBe(String(earned));
+  });
 });
 
 test.describe('teardown', () => {

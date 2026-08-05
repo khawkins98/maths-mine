@@ -94,7 +94,7 @@ export function createSpotWrongun(ctx) {
     window.__stw = () => ({
       tier: tierName,
       phase: stage.state.phase,
-      bolts: stage.state.bolts,
+      bolts: ctx.wallet.bolts,
       ...active().debugState(),
     });
     window.__judge = (bool) => tiers.judge.judgeTap(!!bool);

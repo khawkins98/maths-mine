@@ -17,6 +17,7 @@ import { createUI } from './core/ui.js';
 import { createWorldFeel } from './core/worldFeel.js';
 
 import { MasteryStore } from './game/mastery.js';
+import { Wallet } from './game/wallet.js';
 import { TiltInput } from './game/sensors.js';
 import { createBolt } from './game/bolt.js';
 
@@ -32,6 +33,7 @@ const audio = createAudio();
 const speech = createSpeech();
 const ui = createUI();
 const mastery = new MasteryStore();
+const wallet = new Wallet();
 const sensors = new TiltInput();
 const bolt = createBolt({ camera: engine.camera, textures, nowT: engine.nowT, bubbleEl: ui.els.bubble });
 // Parallax + a springy, touchable ground. Long-lived: it belongs to the world,
@@ -56,6 +58,7 @@ const ctx = {
   ui,            // HUD helpers
   bolt,          // 3D mascot: say/react/update/setOxidation
   mastery,       // shared adaptive per-fact ledger (× and ÷)
+  wallet,        // bolts (🔩): shared across games AND sessions
   sensors,       // tilt input
   worldFeel,     // parallax + ground spring: worldFeel.impulse(strength, x, z)
   nowT: engine.nowT,
@@ -154,6 +157,7 @@ ui.els.btnWake.addEventListener('click', async () => {
   }
 
   ui.hideGate();
+  ui.setBolts(wallet.bolts); // carry the child's bolts in from last session
   bolt.show(true);
   audio.beep(660, 0.12, 'triangle', 0.06);
 
