@@ -19,6 +19,14 @@ export function createAudio() {
   let noiseBuf = null;
   let master = null;
 
+  // Every sounding node, so a game switch can silence the ones still ringing.
+  // Nodes remove themselves on 'ended', so this stays small.
+  const live = new Set();
+  function track(node) {
+    live.add(node);
+    node.addEventListener?.('ended', () => live.delete(node));
+  }
+
   function init() {
     try { audio = new (window.AudioContext || window.webkitAudioContext)(); }
     catch (_) { audio = null; }
@@ -40,6 +48,14 @@ export function createAudio() {
   const out = () => master || audio.destination;
   function resume() { if (audio && audio.state === 'suspended') audio.resume(); }
 
+  // Browsers suspend an AudioContext when the tab goes to the background, and
+  // do not always resume it on return. resume() was only ever called once, at
+  // the wake gate, so coming back to the tab left the game silent.
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) resume(); });
+    window.addEventListener?.('focus', resume);
+  }
+
   function beep(freq, dur = 0.08, type = 'square', gain = 0.05) {
     if (!audio) return;
     const o = audio.createOscillator();
@@ -47,6 +63,7 @@ export function createAudio() {
     o.type = type; o.frequency.value = freq;
     g.gain.value = gain;
     o.connect(g); g.connect(out());
+    track(o);
     const t = audio.currentTime;
     o.start(t);
     g.gain.setValueAtTime(gain, t);
@@ -54,16 +71,19 @@ export function createAudio() {
     o.stop(t + dur);
   }
   // a tone with a pitch glide + envelope (nicer than a flat beep)
-  function beepEnv(f0, f1, dur, type, gain) {
+  // `delay` schedules ahead on the audio clock. Sample accurate, and it needs
+  // no JS timer that could outlive the game that started it.
+  function beepEnv(f0, f1, dur, type, gain, delay = 0) {
     if (!audio) return;
     const o = audio.createOscillator(), g = audio.createGain();
-    const t = audio.currentTime;
+    const t = audio.currentTime + delay;
     o.type = type;
     o.frequency.setValueAtTime(f0, t);
     o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
     g.gain.setValueAtTime(gain, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g); g.connect(out());
+    track(o);
     o.start(t); o.stop(t + dur);
   }
   function noiseBurst(dur, gain, cutoff = 1200) {
@@ -78,13 +98,19 @@ export function createAudio() {
     const g = audio.createGain(); const t = audio.currentTime;
     g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     s.connect(f); f.connect(g); g.connect(out());
+    track(s);
     s.start(t); s.stop(t + dur);
   }
 
   // block lands: soft low thud + a little earthy noise (pitch by stack height)
   function thunk(y) { beepEnv(150 + Math.max(0, y + 3) * 6, 95, 0.14, 'sine', 0.058); noiseBurst(0.06, 0.038, 900); }
   function groupChime(g) { beepEnv(520 + g * 70, 660 + g * 70, 0.18, 'triangle', 0.061); } // rises per group
-  function chordSound() { [523, 659, 784, 1046, 1319].forEach((f, i) => setTimeout(() => beepEnv(f, f, 0.3, 'triangle', 0.046), i * 80)); }
+  // The win chord: five notes 80ms apart. Scheduled on the AUDIO clock rather
+  // than with setTimeout, so it cannot drift under load and leaves no JS timer
+  // running after the game that fired it has been torn down.
+  function chordSound() {
+    [523, 659, 784, 1046, 1319].forEach((f, i) => beepEnv(f, f, 0.3, 'triangle', 0.046, i * 0.08));
+  }
   function buzzSound() { beepEnv(300, 170, 0.24, 'sine', 0.062); } // gentle "not quite" — never harsh
 
   // Wooden knock for pressing a control. Everything in this world is planks and
@@ -96,8 +122,15 @@ export function createAudio() {
     noiseBurst(0.05, 0.041, 1150 * bright);
   }
 
+  // Silence whatever is still sounding. Called when a game is torn down: a
+  // celebration chord ringing out over the next screen is disorienting.
+  function hush() {
+    for (const n of live) { try { n.stop(0); } catch (_) { /* already stopped */ } }
+    live.clear();
+  }
+
   return {
-    init, resume, beep, beepEnv, noiseBurst, thunk, groupChime, chordSound, buzzSound, woodTap,
+    init, resume, hush, beep, beepEnv, noiseBurst, thunk, groupChime, chordSound, buzzSound, woodTap,
     // the mixer bus, so output level can actually be measured rather than guessed at
     context: () => audio,
     bus: () => master,

@@ -79,7 +79,7 @@ const GAMES = {
 };
 let current = null;
 function startGame(id, opts) {
-  if (current) current.teardown();
+  if (current) { current.teardown(); audio.hush(); }
   const factory = GAMES[id];
   if (!factory) { console.warn('unknown game', id); return; }
   current = factory(ctx);
@@ -87,7 +87,7 @@ function startGame(id, opts) {
   return current;
 }
 // tear down the active game without starting another (used when opening the hub)
-function stopGame() { if (current) { current.teardown(); current = null; } }
+function stopGame() { if (current) { current.teardown(); audio.hush(); current = null; } }
 // expose for the hub + tests
 ctx.startGame = startGame;
 ctx.stopGame = stopGame;
