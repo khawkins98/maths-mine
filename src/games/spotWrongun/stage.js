@@ -134,7 +134,7 @@ export function createStage(ctx) {
     c.textAlign = 'center'; c.textBaseline = 'middle';
     let px = 122;
     const maxW = W * 0.82;
-    do { c.font = `800 ${px}px "Pixelify Sans", system-ui, sans-serif`; px -= 4; }
+    do { c.font = `700 ${px}px "Fredoka", system-ui, sans-serif`; px -= 4; }
     while (c.measureText(text).width > maxW && px > 30);
     c.lineJoin = 'round';
     c.lineWidth = 10; c.strokeStyle = '#f6ecd6'; c.strokeText(text, W / 2, H / 2 + 4);

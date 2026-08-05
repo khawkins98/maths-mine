@@ -12,9 +12,17 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Pixelify Sans: a legible pixel display font for headers/equation/numbers/
-         buttons. Body copy stays in a clean system fallback for readability. -->
-    <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- Two display faces, split by job:
+         Fredoka       - every number, equation and answer. Rounded and chunky
+                         enough to suit the blocks, with unambiguous digits.
+                         This matters more here than anywhere else: Pixelify
+                         Sans renders 2, 5 and 8 near-identically at small
+                         sizes, so the jar labels for the 2x/5x/10x tables all
+                         read as "8x", and a 3 on an answer button reads as 8.
+         Pixelify Sans - decorative only, on the big title and hub cards, where
+                         it is large enough to read and carries the voxel feel.
+         Body copy stays in the system stack. -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Pixelify+Sans:wght@600;700&display=swap" rel="stylesheet" />
     <style>
       :root {
         --bg: #8cc5ef;                 /* flat Minecraft sky */
@@ -33,7 +41,8 @@
         --bad: #e0563f; --bad-dark: #a83a28;
         --brand: #ffce54;              /* loot-fill amber */
         /* fonts */
-        --pix: "Pixelify Sans", system-ui, sans-serif;
+        --pix: "Pixelify Sans", system-ui, sans-serif;   /* decorative only */
+        --num: "Fredoka", system-ui, sans-serif;         /* anything with digits */
         --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
         /* reusable plank fill (planks + faint grain bands) */
         --wood-fill:
@@ -54,10 +63,14 @@
           inset -4px -4px 0 3px rgba(0,0,0,0.32);
         font-family: var(--body);
       }
-      /* pixel display font on the loud, short bits only */
-      h1, .prompt, .counter, .tally, button.big, button.choice,
-      #bigtotal, .toast, .askeq, .claim, .hc-title, #btn-back, .hinttext {
+      /* The pixel face is reserved for large decorative text. */
+      h1, .hc-title {
         font-family: var(--pix);
+      }
+      /* Everything a child has to READ A NUMBER off uses the rounded face. */
+      .prompt, .counter, .tally, button.big, button.choice,
+      #bigtotal, .toast, .askeq, .claim, #btn-back, .hinttext {
+        font-family: var(--num);
       }
       * { box-sizing: border-box; }
       html, body {
@@ -211,7 +224,7 @@
       .jars:empty { display: none; }
       .jars::before {
         content: 'FACTS';
-        font-family: var(--pix);
+        font-family: var(--num);
         font-size: 11px; font-weight: 700; letter-spacing: 1px;
         color: var(--ink-light); text-shadow: 0 1px 0 rgba(0,0,0,0.4);
       }
@@ -242,7 +255,7 @@
       .jar .lbl {
         position: absolute; inset: 0; z-index: 3;
         display: flex; align-items: center; justify-content: center;
-        font-family: var(--pix); font-size: 13px; font-weight: 700; color: #fff;
+        font-family: var(--num); font-size: 14px; font-weight: 700; color: #fff;
         text-shadow: 0 2px 0 rgba(0,0,0,0.55);
       }
 
