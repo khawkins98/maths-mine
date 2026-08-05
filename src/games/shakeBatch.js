@@ -295,7 +295,10 @@ export function createShakeBatch(ctx) {
     // depth must also cover the two factor dice parked behind the tray
     const d = round.target * STEP + Math.max(0, round.target - 1) * GROUP_GAP + 0.9
       + FACTOR_BACK + DIE * FACTOR_SCALE;
-    engine.placeCamera(0.4, Math.max(w, d) * 1.5 + 6.5, SB_VIEW);
+    const dist = Math.max(w, d) * 1.5 + 6.5;
+    engine.placeCamera(0.4, dist, SB_VIEW);
+    // clear of the tray, on the near-left so the dice stay unobstructed
+    bolt.placeAt(-w / 2 - dist * 0.16, dist * 0.10);
   }
 
   // ---------- juice ----------

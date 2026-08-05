@@ -25,7 +25,11 @@ export function createImposterTier(ctx, stage, facts) {
   let hovered = -1;
   let accuseT = 0;
 
-  function frameImposter() { engine.placeCamera(1.55, 12.6, VIEW); }
+  function frameImposter() {
+    engine.placeCamera(1.55, 12.6, VIEW);
+    // the crew occupies x -3.35..3.35, so Bolt stands outside them and forward
+    bolt.placeAt(-5.6, 4.4);
+  }
 
   function newRound() {
     stage.clearRound();

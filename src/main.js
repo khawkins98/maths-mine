@@ -35,7 +35,7 @@ const ui = createUI();
 const mastery = new MasteryStore();
 const wallet = new Wallet();
 const sensors = new TiltInput();
-const bolt = createBolt({ camera: engine.camera, textures, nowT: engine.nowT, bubbleEl: ui.els.bubble });
+const bolt = createBolt({ scene: engine.scene, camera: engine.camera, textures, nowT: engine.nowT, bubbleEl: ui.els.bubble });
 // Parallax + a springy, touchable ground. Long-lived: it belongs to the world,
 // not to any one game, so it survives every game switch.
 const worldFeel = createWorldFeel({ engine, audio, textures });

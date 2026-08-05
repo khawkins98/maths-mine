@@ -170,7 +170,14 @@ export function createBlockBuilder(ctx) {
     const dist = maxDim * 2.15 + 8;
     return { dist, centerY };
   }
-  function frameCamera(C, R) { const f = frameValues(C, R); engine.placeCamera(f.centerY, f.dist, VIEW_DIR); }
+  function frameCamera(C, R) {
+    const f = frameValues(C, R);
+    engine.placeCamera(f.centerY, f.dist, VIEW_DIR);
+    // Bolt stands on the grass to the left of the wall, stepped back from it so
+    // he never overlaps the blocks the child is counting. Tied to the framing
+    // distance so he stays in shot for a 2x3 wall and a 6x10 one alike.
+    bolt.placeAt(-(C * CELL) / 2 - f.dist * 0.20, f.dist * 0.14);
+  }
   function wallCenterYFor(R) { return frameValues(1, R).centerY; }
 
   // ---------- round flow ----------
@@ -256,6 +263,7 @@ export function createBlockBuilder(ctx) {
 
     if (firstRound && round.placed === 1) dismissDemo();
     if (groupJustCompleted(c, r)) onGroupComplete();
+    else updateTally();
     return true;
   }
 
@@ -275,6 +283,50 @@ export function createBlockBuilder(ctx) {
     placeInCell(c, r);
   }
 
+  // What the wall actually holds right now, independent of the order it was
+  // filled in.
+  function wallState() {
+    let complete = 0;
+    if (round.groupAxis === 'row') {
+      for (let r = 0; r < round.R; r++) {
+        let full = true;
+        for (let c = 0; c < round.C; c++) if (!round.cells[c][r]) { full = false; break; }
+        if (full) complete++;
+      }
+    } else {
+      for (let c = 0; c < round.C; c++) if (round.cells[c].every(Boolean)) complete++;
+    }
+    return { complete, extra: round.placed - complete * round.groupSize };
+  }
+
+  // The running caption, refreshed after EVERY block rather than only when a
+  // group closes. A child filling freeform - a bit of one column, a bit of
+  // another - used to get a caption that was both stale and misleading: it read
+  // "1 group of 6 = 6" while a second column was half built.
+  //
+  // It never states a multiplication that is not on the board yet. Before the
+  // first group closes there is no product to name, so it just counts what is
+  // there; after that it names the completed groups and keeps the loose blocks
+  // separate. Voice stays on group milestones only: narrating every block would
+  // turn an array into counting by ones, which is the habit this is trying to
+  // replace.
+  function updateTally() {
+    if (!round || phase !== 'building') return;
+    const { complete, extra } = wallState();
+    const n = round.placed;
+    if (round.op === 'div') {
+      if (complete === 0) return ui.setTally(n ? `${n} shared out` : '');
+      return ui.setTally(`${complete} of ${round.divisor} groups shared`
+        + (extra ? `, and ${extra} more` : ''));
+    }
+    if (complete === 0) {
+      return ui.setTally(n ? `${n} block${n > 1 ? 's' : ''}` : '');
+    }
+    ui.setTally(`${complete} group${complete > 1 ? 's' : ''} of ${round.groupSize}`
+      + ` = ${complete * round.groupSize}`
+      + (extra ? ` … and ${extra}` : ''));
+  }
+
   function onGroupComplete() {
     round.groupsDone++;
     if (round.groupsDone >= round.groupsTotal) return onBuilt();
@@ -282,12 +334,12 @@ export function createBlockBuilder(ctx) {
     audio.groupChime(g);
     if (round.op === 'div') {
       // sharing language — count groups shared, don't reveal the per-group count
-      ui.setTally(`${g} of ${round.divisor} groups shared`);
+      updateTally();
       speak(pickPhrase([`${g} groups shared.`, `Keep sharing.`, `${g} so far.`]));
       if (g === Math.floor(round.divisor / 2)) bolt.say('Share them evenly!', 'happy');
     } else {
       // truthful skip-count of COMPLETED groups: 1×R, 2×R, 3×R …
-      ui.setTally(`${g} group${g > 1 ? 's' : ''} of ${round.groupSize} = ${g * round.groupSize}`);
+      updateTally();
       const gs = g > 1 ? 's' : '', tot = g * round.groupSize;
       speak(pickPhrase([`${g} group${gs} of ${round.groupSize}. That's ${tot}.`, `That makes ${tot}.`, `${tot}!`, `Now we've got ${tot}.`]));
       if (g === 2 || g === Math.floor(round.groupsTotal / 2)) bolt.say('Keep going!', 'happy');

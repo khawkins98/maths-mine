@@ -46,6 +46,8 @@ export function createJudgeTier(ctx, stage, facts) {
     const centerY = Math.max(rows * CELL, 3.6) / 2 + 0.5;
     const dist = 11.5 + Math.max(cols + 3.2, rows * 1.5) * 1.15;
     engine.placeCamera(centerY, dist, VIEW_JUDGE);
+    // near-left, well clear of the Nugget and its sign
+    bolt.placeAt(-dist * 0.26, dist * 0.20);
   }
 
   function newRound() {
