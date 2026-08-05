@@ -19,7 +19,10 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
 export const CELL = 1.0;              // grid spacing
-export const BLOCK = CELL * 0.92;     // visual block size inside a 1.0 cell
+// Inset within its cell, so neighbouring blocks are separated by a visible
+// gap rather than fusing into one slab. Widened from 0.92 after playtesting:
+// a six-tall column read as a single column of dirt and could not be counted.
+export const BLOCK = CELL * 0.86;
 export const CAP_H = 0.2 * BLOCK;     // grass cap thickness
 export const BODY_H = BLOCK - CAP_H;  // dirt body height
 

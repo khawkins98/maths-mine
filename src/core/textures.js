@@ -37,7 +37,7 @@ export function fleckTex(base, flecks, n = 80, opts) {
 // chunky square (true Minecraft look). `bias` weights how often a cell keeps the
 // base colour vs. a fleck. NearestFilter + no mipmaps keeps the edges razor
 // sharp; high-contrast palettes read crisp instead of smudgy.
-export function pixelTex(base, palette, { size = 64, cell = 8, bias = 0.6 } = {}) {
+export function pixelTex(base, palette, { size = 64, cell = 8, bias = 0.6, edge = 0 } = {}) {
   return makeCanvasTex(size, (ctx) => {
     for (let y = 0; y < size; y += cell) {
       for (let x = 0; x < size; x += cell) {
@@ -45,13 +45,25 @@ export function pixelTex(base, palette, { size = 64, cell = 8, bias = 0.6 } = {}
         ctx.fillRect(x, y, cell, cell);
       }
     }
+    // Optional darkened rim. Each block face maps exactly one copy of this
+    // texture, so a border here draws an outline around every individual cube.
+    // Without it a stacked column of dirt reads as one solid slab and a child
+    // cannot count the blocks, which is the entire point of the array.
+    if (edge > 0) {
+      const b = cell * 0.75; // thinner than a full texel: a seam, not a frame
+      ctx.fillStyle = `rgba(30, 17, 7, ${edge})`;
+      ctx.fillRect(0, 0, size, b);
+      ctx.fillRect(0, size - b, size, b);
+      ctx.fillRect(0, 0, b, size);
+      ctx.fillRect(size - b, 0, b, size);
+    }
   }, { nearest: true });
 }
 
 export function createTextures() {
   // --- game blocks: chunky, high-contrast, hard-pixel (match platform texel) ---
-  const dirtTex = pixelTex('#7a4622', ['#623718', '#8a5730', '#4f2c13', '#96633a'], { cell: 8, bias: 0.55 });
-  const grassTex = pixelTex('#57ab3b', ['#4a962f', '#69c24a', '#3f8a2a', '#7ad257'], { cell: 8, bias: 0.55 });
+  const dirtTex = pixelTex('#7a4622', ['#623718', '#8a5730', '#4f2c13', '#96633a'], { cell: 8, bias: 0.55, edge: 0.42 });
+  const grassTex = pixelTex('#57ab3b', ['#4a962f', '#69c24a', '#3f8a2a', '#7ad257'], { cell: 8, bias: 0.55, edge: 0.3 });
   // subtle ground texture (soft-filtered so it doesn't shimmer at distance)
   const groundTex = fleckTex('#7CC860', ['#74C158', '#84D06A', '#6FBE52'], 60, { nearest: false, repeat: 42 });
   // soft round puff, used for dust sprites + Bolt's blob shadow
