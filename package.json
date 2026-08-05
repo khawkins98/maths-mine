@@ -15,5 +15,10 @@
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "vite": "^8.2.0"
+  },
+  "homepage": "https://khawkins98.github.io/maths-mine/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/khawkins98/maths-mine.git"
   }
 }

@@ -54,8 +54,21 @@ npm run build # production build into dist/
 Safari grants `DeviceOrientation` permission only over **HTTPS** and only from a
 user tap. Plain `http://` on the LAN often works for testing, but if the iPad
 refuses motion, serve over HTTPS (`npx vite --https`, or a tunnel like
-`ngrok http 5173`). No sensors, or permission denied? Every game falls back to
-press-and-drag, which is also the desktop path — nothing is sensor-only.
+`ngrok http 5173`) — or just use the deployed site below, which is HTTPS by
+default and is the easiest way to get real tilt and shake working on an iPad.
+
+No sensors, or permission denied? Every game falls back to press-and-drag, which
+is also the desktop path — nothing is sensor-only.
+
+## Deploying
+
+Pushing to `main` builds the site and publishes it to GitHub Pages, but only
+after the smoke tests pass (`.github/workflows/ci.yml`). Enable it once, at
+**Settings → Pages → Build and deployment → Source: GitHub Actions**.
+
+Asset paths are relative (`base: './'` in `vite.config.js`), so the build works
+from a project subpath like `https://<user>.github.io/maths-mine/` as well as
+from a domain root — and keeps working if the repo is renamed.
 
 ## Design notes
 
