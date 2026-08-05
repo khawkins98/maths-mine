@@ -354,13 +354,11 @@ export function createShakeBatch(ctx) {
     ui.setTally('');
     ui.els.btnRecenter.style.display = 'none';
     // Title card = mode name only (never the equation, never feedback).
-    ui.setPrompt('Shake-a-Batch', 'Roll the dice');
     ui.setClaim('Shake to roll!');
     ui.setStatus('');
     ui.showConfirm('Shake! 🎲');
     bolt.say('Shake the dice!', '');
     speak(pickPhrase(['Shake the dice!', 'Give them a shake!', 'Roll the dice!']));
-    ui.renderJars(mastery);
   }
 
   // Tumble the two factor dice in, loaded to this round's fact.
@@ -474,7 +472,6 @@ export function createShakeBatch(ctx) {
     // dice sit SETTLED in separated groups right above it — countable evidence.
     ui.fadeClaim();
     ui.setTally(`${round.target} groups of ${round.groupSize} …`);
-    ui.setPrompt(`${round.a} × ${round.b} = ?`, null);
     ui.setStatus('Count the dice — how many?');
     ui.setAskEq(`${round.a} × ${round.b} = ?`);
     ui.hideConfirm();
@@ -502,7 +499,6 @@ export function createShakeBatch(ctx) {
     ui.lockChoices();
 
     mastery.record(round.a, round.b, correct, ms);
-    ui.renderJars(mastery);
     bolt.setOxidation(mastery.overallProgress());
 
     const eqStr = `${round.a} × ${round.b} = ${round.answer}`;
@@ -518,7 +514,7 @@ export function createShakeBatch(ctx) {
         ui.popAskEq();
         ui.setTally(`${round.target} groups of ${round.groupSize} = ${round.answer} dice`);
         const reward = round.product;
-        ui.setBolts(wallet.add(reward)); ui.rewardPop();
+        wallet.add(reward);
         audio.chordSound(); celebrate();
         ui.showToast(`+${reward} 🔩 collected!`, 'good');
         ui.setStatus(`Yes! ${round.answer} dice altogether!`);

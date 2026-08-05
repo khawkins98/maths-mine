@@ -57,6 +57,15 @@
           inset 0 0 0 3px var(--wood-edge),
           inset 4px 4px 0 3px rgba(255,228,175,0.22),
           inset -4px -4px 0 3px rgba(0,0,0,0.30);
+        /* Non-interactive display text. The wooden plank + pixel frame + drop
+           shadow is the language of a CONTROL, so anything you cannot tap wears
+           none of it: heavy cream type with a hard dark outline, which stays
+           readable over both bright grass and open sky. */
+        --readout-ink: #fff6e2;
+        --readout-edge:
+           0 3px 0 rgba(40,26,10,0.55),
+           2px 0 0 rgba(40,26,10,0.45), -2px 0 0 rgba(40,26,10,0.45),
+           0 -2px 0 rgba(40,26,10,0.45), 0 6px 14px rgba(0,0,0,0.4);
         --frame-stone:
           inset 0 0 0 3px var(--stone-edge),
           inset 4px 4px 0 3px rgba(255,255,255,0.20),
@@ -68,7 +77,7 @@
         font-family: var(--pix);
       }
       /* Everything a child has to READ A NUMBER off uses the rounded face. */
-      .prompt, .counter, .tally, button.big, button.choice,
+      .tally, button.big, button.choice,
       #bigtotal, .toast, .askeq, .claim, #btn-back, .hinttext {
         font-family: var(--num);
       }
@@ -97,30 +106,6 @@
       .hud.top { top: 0; padding: max(12px, env(safe-area-inset-top)) 16px 12px; }
       .hud.bottom { bottom: 0; padding: 12px 16px max(16px, env(safe-area-inset-bottom)); }
 
-      /* ---- the prompt: a small wooden signboard (label + equation) ---- */
-      .prompt {
-        display: inline-block;
-        margin-left: 58px; /* clear the square ← button in the top-left corner */
-        background: var(--wood-fill);
-        border: 3px solid var(--wood-dark);
-        border-radius: 0;
-        padding: 7px 15px;
-        /* Title card = mode name only, kept SMALL (~35% of the question). */
-        font-size: clamp(15px, 3.4vw, 24px);
-        font-weight: 700;
-        letter-spacing: 0.5px;
-        color: var(--ink-light);
-        text-shadow: 0 2px 0 rgba(0,0,0,0.35);
-        box-shadow: var(--frame), 0 6px 0 var(--wood-drop);
-        image-rendering: pixelated;
-      }
-      .prompt small {
-        font-family: var(--body); font-weight: 700; font-size: 0.42em;
-        color: #f0dcae; opacity: 0.9; display: block; letter-spacing: 0;
-      }
-      /* Don't repeat the equation in the top-left sign while it's shown big
-         above the answer choices — collapse the sign to just its label. */
-      body:has(#askeq:not(.hidden)) #prompt-eq { display: none; }
       /* During the question hide Bolt's bubble so it can't overlap centre text. */
       body:has(#askeq:not(.hidden)) #bubble { display: none; }
       /* ASK / FEEDBACK: the big equation + answer cards are the only primary
@@ -128,37 +113,15 @@
       body:has(#askeq:not(.hidden)) #tally,
       body:has(#askeq:not(.hidden)) #status { display: none; }
 
-      /* ---- bolts counter → an INVENTORY ITEM SLOT (pixel-framed dark socket) ---
-         a passive readout, NOT a control: a recessed slot holding 🔩 + a count. */
-      .counter {
-        float: right;
-        display: inline-flex; align-items: center; gap: 7px;
-        background:
-          repeating-linear-gradient(0deg, rgba(0,0,0,0.18) 0 2px, transparent 2px 8px),
-          linear-gradient(180deg, #3a2a17, #2b1e11);
-        border: 3px solid var(--wood-dark);
-        border-radius: 0;
-        padding: 7px 13px;
-        font-weight: 700;
-        font-size: clamp(17px, 4.2vw, 23px);
-        color: #ffe9b0;
-        text-shadow: 0 2px 0 rgba(0,0,0,0.5);
-        box-shadow:
-          inset 3px 3px 0 rgba(0,0,0,0.45),
-          inset -3px -3px 0 rgba(255,220,160,0.14),
-          0 4px 0 var(--wood-drop);
-        image-rendering: pixelated;
-      }
-      .counter .b { color: var(--gold); }
 
       .status {
         text-align: center;
-        color: var(--ink);
+        color: var(--readout-ink);
         /* Helper/status ~35% of the question. */
         font-size: clamp(15px, 3.4vw, 24px);
         font-weight: 700;
         min-height: 24px;
-        text-shadow: 0 1px 0 rgba(255,240,205,0.7);
+        text-shadow: var(--readout-edge);
       }
 
       .actions {
@@ -209,56 +172,7 @@
       /* ---- mastery meters → little wooden CHESTS/JARS that fill with loot ----
          Passive containers on a right-edge shelf: no button chrome, no pointer
          events. Each fills with amber "loot" as that table is mastered. */
-      .jars {
-        position: fixed; z-index: 5; pointer-events: none;
-        right: max(8px, env(safe-area-inset-right)); top: 50%;
-        transform: translateY(-50%);
-        display: flex; flex-direction: column; gap: 10px; align-items: center;
-        padding: 10px 9px 9px;
-        border-radius: 0;
-        background: var(--wood-fill);
-        border: 3px solid var(--wood-dark);
-        box-shadow: var(--frame), 0 5px 0 var(--wood-drop);
-      }
-      /* hide the empty shelf on the gate/hub; it appears once a game fills it */
-      .jars:empty { display: none; }
-      .jars::before {
-        content: 'FACTS';
-        font-family: var(--num);
-        font-size: 11px; font-weight: 700; letter-spacing: 1px;
-        color: var(--ink-light); text-shadow: 0 1px 0 rgba(0,0,0,0.4);
-      }
-      .jar {
-        /* a small wooden chest: dark inner well that fills with amber loot */
-        width: 38px; height: 42px;
-        border: 3px solid var(--wood-dark);
-        border-radius: 0;
-        position: relative; overflow: hidden;
-        background: linear-gradient(180deg, #3a2a17, #2b1e11);
-        box-shadow:
-          inset 3px 3px 0 rgba(0,0,0,0.4),
-          inset -3px -3px 0 rgba(255,220,160,0.12);
-        image-rendering: pixelated;
-      }
-      /* chest lid line */
-      .jar::before {
-        content: ''; position: absolute; left: 0; right: 0; top: 9px; height: 3px;
-        background: rgba(0,0,0,0.45); z-index: 2;
-      }
-      .jar .fill {
-        position: absolute; left: 0; right: 0; bottom: 0;
-        background:
-          repeating-linear-gradient(0deg, rgba(255,255,255,0.14) 0 2px, transparent 2px 6px),
-          linear-gradient(180deg, #ffe08a, var(--brand));
-        transition: height 0.5s cubic-bezier(.2,.8,.2,1);
-      }
-      .jar .lbl {
-        position: absolute; inset: 0; z-index: 3;
-        display: flex; align-items: center; justify-content: center;
-        font-family: var(--num); font-size: 14px; font-weight: 700; color: #fff;
-        text-shadow: 0 2px 0 rgba(0,0,0,0.55);
-      }
-
+ 
       /* ---- pixel-framed square icon buttons (shared skin for 🔊 and ←) ---- */
       #btn-voice, #btn-back {
         position: fixed; z-index: 9; pointer-events: auto;
@@ -286,7 +200,7 @@
       }
 
       /* back-to-menu: top-left corner, same pixel skin; the prompt sign is
-         shifted right (see .prompt margin) so they never overlap. */
+         so they never overlap. */
       #btn-back {
         top: max(14px, calc(env(safe-area-inset-top) + 8px)); left: 14px;
         font-weight: 700; font-size: 26px;
@@ -312,15 +226,11 @@
       body:has(#hub:not(.hidden)) #bubble { display: none; }
       /* Title on a big wooden sign */
       #hub h1 {
-        font-size: clamp(26px, 7vw, 46px); margin: 0;
-        padding: 14px 28px; color: var(--ink-light);
-        background: var(--wood-fill);
-        border: 4px solid var(--wood-dark); border-radius: 0;
-        text-shadow: 0 3px 0 rgba(0,0,0,0.4);
-        box-shadow: var(--frame), 0 8px 0 var(--wood-drop);
-        image-rendering: pixelated;
+        font-size: clamp(30px, 8vw, 54px); margin: 0 0 6px;
+        padding: 0; color: var(--readout-ink);
+        text-shadow: var(--readout-edge);
+        letter-spacing: 1px;
       }
-      #hub .hub-sub { color: #f0e2c4; margin: 0 0 4px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.6); }
       #hub-cards { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
       /* wooden signpost cards */
       button.hub-card {
@@ -357,12 +267,10 @@
         padding: 24px;
       }
       #gate h1 {
-        font-size: clamp(26px, 8vw, 46px); margin: 0;
-        padding: 12px 26px; color: var(--ink-light);
-        background: var(--wood-fill);
-        border: 4px solid var(--wood-dark); border-radius: 0;
-        text-shadow: 0 3px 0 rgba(0,0,0,0.4);
-        box-shadow: var(--frame), 0 8px 0 var(--wood-drop);
+        font-size: clamp(30px, 9vw, 54px); margin: 0;
+        padding: 0; color: var(--readout-ink);
+        text-shadow: var(--readout-edge);
+        letter-spacing: 1px;
       }
       #gate p { color: #f0e2c4; max-width: 30ch; margin: 0; line-height: 1.5; text-shadow: 0 2px 4px rgba(0,0,0,0.6); }
       .bolt {
@@ -378,15 +286,10 @@
       .toast {
         position: fixed; left: 50%; top: 22%;
         transform: translate(-50%, -6px);
-        background: var(--stone-fill);
-        border: 3px solid var(--stone-dark);
-        border-radius: 0;
-        padding: 11px 20px;
+        padding: 6px 12px;
         font-weight: 700; font-size: clamp(18px, 5vw, 26px);
-        color: var(--ink-light);
-        text-shadow: 0 2px 0 rgba(0,0,0,0.4);
-        box-shadow: var(--frame-stone), 0 6px 0 var(--stone-drop);
-        image-rendering: pixelated;
+        color: var(--readout-ink);
+        text-shadow: var(--readout-edge);
         opacity: 0; transition: opacity .2s ease, transform .2s ease;
         z-index: 8; pointer-events: none;
       }
@@ -403,27 +306,22 @@
         min-height: 30px;
       }
       .tally.show {
-        display: table; margin: 2px auto; padding: 4px 14px;
-        border-radius: 0;
-        background: var(--wood-fill);
-        border: 3px solid var(--wood-dark);
-        text-shadow: 0 2px 0 rgba(0,0,0,0.35);
-        box-shadow: var(--frame), 0 4px 0 var(--wood-drop);
+        display: table; margin: 2px auto; padding: 2px 8px;
+        color: var(--readout-ink);
+        text-shadow: var(--readout-edge);
       }
 
       /* ---- the equation, shown big on a WOODEN SIGN above the answer cards ---- */
       .askeq, .claim {
-        display: table; margin: 4px auto 8px;
-        text-align: center; color: var(--ink-light);
+        display: table; margin: 4px auto 10px;
+        text-align: center; color: var(--readout-ink);
         font-weight: 700;
         /* The QUESTION / CLAIM = 100%: the single largest text on the screen. */
         font-size: clamp(40px, 9vw, 68px); line-height: 1.05;
-        padding: 10px 28px; border-radius: 0;
-        background: var(--wood-fill);
-        border: 4px solid var(--wood-dark);
-        text-shadow: 0 3px 0 rgba(0,0,0,0.4);
-        box-shadow: var(--frame), 0 7px 0 var(--wood-drop);
-        image-rendering: pixelated;
+        padding: 2px 10px;
+        /* No plank. This sat directly above three plank-and-frame answer cards
+           and looked exactly like a fourth one, inviting a tap on the question. */
+        text-shadow: var(--readout-edge);
       }
       /* '?' → answer pop on the equation sign when it resolves. */
       .askeq.pop, .claim.pop { animation: askPop 0.32s ease; }
@@ -483,16 +381,18 @@
         position: fixed; z-index: 7; pointer-events: none;
         transform: translate(-50%, -115%); /* centred above Bolt's head */
         transform-origin: 50% 100%;
-        background: var(--wood-fill);
-        border: 3px solid var(--wood-dark); border-radius: 0;
-        color: var(--ink-light); font-weight: 700;
+        /* Speech needs a container, but not a raised wooden one: the pixel
+           frame and drop shadow are what make the buttons look pressable, so
+           the bubble uses a flat dark slab instead and cannot be confused for
+           a control. */
+        background: rgba(28, 20, 10, 0.72);
+        border: 0; border-radius: 10px;
+        color: var(--readout-ink); font-weight: 700;
         /* Mascot bubble ~40% of the question. */
         font-size: clamp(16px, 4vw, 27px);
-        padding: 9px 14px; max-width: 34vw;
+        padding: 8px 14px; max-width: 34vw;
         text-align: center;
-        text-shadow: 0 2px 0 rgba(0,0,0,0.35);
-        box-shadow: var(--frame), 0 5px 0 var(--wood-drop);
-        image-rendering: pixelated;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.5);
         animation: bubblePop 0.28s ease;
       }
       #bubble::after {
@@ -524,11 +424,6 @@
       }
 
       /* ---- counter pop when rewarded ---- */
-      .counter.reward { animation: rewardPop 0.5s ease; }
-      @keyframes rewardPop {
-        0%,100% { transform: scale(1); }
-        40% { transform: scale(1.35); color: var(--gold); }
-      }
 
       /* ---- first-touch demo: ghost finger ---- */
       #hint { position: fixed; inset: 0; z-index: 6; pointer-events: none; }
@@ -557,8 +452,6 @@
 
     <!-- Gameplay HUD -->
     <div class="hud top hidden" id="hud-top">
-      <span class="counter" id="counter">🔩 <span class="b" id="bolts">0</span></span>
-      <div class="prompt" id="prompt"><small id="prompt-sub">Build the wall</small><span id="prompt-eq">—</span></div>
     </div>
 
     <div class="hud bottom hidden" id="hud-bottom">
@@ -575,11 +468,6 @@
       </div>
     </div>
 
-    <!-- Mastery meters: passive wooden chests on a right-side shelf, out of the
-         bottom-center thumb zone so they're glanceable, never mistaken for
-         tappable controls. -->
-    <div class="jars" id="jars" aria-hidden="true"></div>
-
     <!-- Bolt's speech bubble (Bolt himself is a 3D mesh; this follows his head) -->
     <div id="bubble" class="hidden">Let's build!</div>
 
@@ -589,7 +477,6 @@
     <!-- Hub: the game picker (shown after the wake gate) -->
     <div id="hub" class="hidden">
       <h1>The Maths Mine</h1>
-      <p class="hub-sub">Pick a game to play with Bolt!</p>
       <div id="hub-cards"></div>
     </div>
 

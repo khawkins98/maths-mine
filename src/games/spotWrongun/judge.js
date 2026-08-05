@@ -100,9 +100,7 @@ export function createJudgeTier(ctx, stage, facts) {
     ui.hideBigTotal();
     ui.setTally('');
     ui.els.btnRecenter.style.display = 'none';
-    ui.setPrompt('Truth Check', 'Spot the wrong’un');
     ui.setStatus('Watch the blocks — is the sign telling the truth?');
-    ui.renderJars(mastery);
     bolt.say('Is this crewmate telling the truth?', 'wow');
     speak(pickPhrase([
       `This crewmate says ${a} times ${b} is ${claim}. Let's count and check!`,
@@ -173,7 +171,6 @@ export function createJudgeTier(ctx, stage, facts) {
     const ms = (nowT() - jr.askT) * 1000;
 
     mastery.record(jr.a, jr.b, correct, ms);
-    ui.renderJars(mastery);
     bolt.setOxidation(mastery.overallProgress());
 
     ui.lockChoices();
@@ -190,7 +187,7 @@ export function createJudgeTier(ctx, stage, facts) {
 
     if (correct) {
       const reward = jr.answer;
-      ui.setBolts(ctx.wallet.add(reward)); ui.rewardPop();
+      ctx.wallet.add(reward);
       ui.showToast(`+${reward} 🔩`, 'good');
     }
 

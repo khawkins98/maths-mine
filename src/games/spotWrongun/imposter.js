@@ -92,9 +92,7 @@ export function createImposterTier(ctx, stage, facts) {
     ui.hideBigTotal();
     ui.setTally('');
     ui.els.btnRecenter.style.display = 'none';
-    ui.setPrompt('Truth Check', 'Who’s fibbing?');
     ui.setStatus('Tap the sign that’s wrong to bounce it off!');
-    ui.renderJars(mastery);
     bolt.say('One sign is fibbing!', 'wow');
     speak(pickPhrase([
       'One sign is fibbing! Tap the wrong one.',
@@ -113,7 +111,6 @@ export function createImposterTier(ctx, stage, facts) {
       state.phase = 'ejecting';
       stage.ring.visible = false;
       mastery.record(n.a, n.b, true, ms);
-      ui.renderJars(mastery);
       bolt.setOxidation(mastery.overallProgress());
 
       ejectNugget(n);
@@ -122,7 +119,7 @@ export function createImposterTier(ctx, stage, facts) {
       for (const other of crew) if (other !== n && !other.imposter) other.cheerT = 1.3;
 
       const reward = n.answer;
-      ui.setBolts(ctx.wallet.add(reward)); ui.rewardPop();
+      ctx.wallet.add(reward);
       ui.showToast(`+${reward} 🔩`, 'good');
       // title card stays the mode name — never feedback.
       ui.setStatus(`That sign said ${n.a} × ${n.b} = ${n.shown} — but it’s really ${n.answer}!`);
@@ -147,7 +144,6 @@ export function createImposterTier(ctx, stage, facts) {
       if (!n.proven) {
         n.proven = true;
         mastery.record(n.a, n.b, false, ms);
-        ui.renderJars(mastery);
       }
       proveInnocent(n);
       ui.setStatus(`Yep, ${n.answer} — that one’s true! Keep looking…`);

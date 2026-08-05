@@ -1,9 +1,10 @@
 // game/wallet.js — the child's bolts (🔩), shared across games and sessions.
 //
-// Bolts used to be a `let bolts = 0` inside each game module, which meant the
-// count reset to zero every time a child changed game and again every reload.
-// Mastery persists, so a currency that visibly evaporates reads as the game
-// losing your things.
+// There is deliberately no on-screen counter: a permanent readout of a number
+// a child does not care about is chrome, and it wore the same wooden frame as
+// the buttons without being tappable. The reward moment is the "+N bolts" toast
+// and Bolt's reaction. The running total is kept because it costs nothing and
+// a shop or a parent view would want it.
 
 import { localStore, readJSON, writeJSON } from '../core/storage.js';
 
@@ -17,8 +18,7 @@ export class Wallet {
     this.bolts = (saved && Number.isFinite(saved.bolts)) ? saved.bolts : 0;
   }
 
-  // Award `n` bolts and return the new total, so a caller can hand it straight
-  // to ui.setBolts without reading back.
+  // Award `n` bolts and return the new total.
   add(n) {
     this.bolts += Math.max(0, Math.round(n) || 0);
     this.save();

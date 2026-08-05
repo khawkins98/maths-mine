@@ -157,7 +157,6 @@ ui.els.btnWake.addEventListener('click', async () => {
   }
 
   ui.hideGate();
-  ui.setBolts(wallet.bolts); // carry the child's bolts in from last session
   bolt.show(true);
   audio.beep(660, 0.12, 'triangle', 0.06);
 

@@ -176,8 +176,9 @@ test.describe('progress', () => {
   });
 
   // Bolts used to be a local in each game module, so they reset to zero on
-  // every game switch and every reload while mastery persisted. A currency that
-  // visibly evaporates reads as the game losing your things.
+  // every game switch and every reload. There is no on-screen counter any more
+  // (a readout a child does not care about, wearing button chrome), so this
+  // checks the ledger behind it rather than the HUD.
   test('bolts survive a game switch and a reload', async ({ page }) => {
     await boot(page);
     await pick(page, 'block-builder', '__bb');
@@ -199,9 +200,10 @@ test.describe('progress', () => {
     await pick(page, 'shake-a-batch', '__sbb');
     expect((await state(page, '__sbb')).bolts).toBe(earned);
 
-    // and survive a reload, showing in the HUD as soon as the gate is passed
+    // and survive a reload
     await boot(page);
-    expect(await page.locator('#bolts').textContent()).toBe(String(earned));
+    await pick(page, 'block-builder', '__bb');
+    expect((await state(page, '__bb')).bolts).toBe(earned);
   });
 });
 

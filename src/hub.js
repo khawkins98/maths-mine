@@ -63,9 +63,7 @@ export function createHub(ctx) {
     // the jar shelf. Clear the text too so it's fresh when a game shows it again.
     ui.hideGameHud();
     ui.setStatus('');
-    ui.setPrompt('', '');
     ui.hideClaim();
-    ui.clearJars();
     renderCards();
     ui.showHub();
     bolt.show(true);

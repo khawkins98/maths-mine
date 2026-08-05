@@ -78,7 +78,7 @@ had already grown their own copy.
 | `ctx.ui` | HUD helpers — see `core/ui.js`; raw elements at `ui.els` |
 | `ctx.bolt` | mascot — `say(text, mood)`, `react(mood)`, `setOxidation(0..1)`, `show(v)`, `group`, `headAnchor` (moods: `'happy'`, `'wow'`, `''`) |
 | `ctx.mastery` | shared ledger — `nextQuestion({op?})`, `record(a,b,correct,ms)`, `levelOf(a,b)`, `activeTables()`, `tableMastery(t)`, `overallProgress()`, `reset()` |
-| `ctx.wallet` | the child's bolts, shared across games and sessions — `bolts`, `add(n)` (returns the new total), `reset()` |
+| `ctx.wallet` | the child's bolts, shared across games and sessions — `bolts`, `add(n)`, `reset()`. No on-screen readout by design |
 | `ctx.worldFeel` | the living island — `impulse(strength, x, z)` to punch the ground on a landing block or a thrown die |
 | `ctx.sensors` | `TiltInput`: `enabled, available, x, y, update(), recenter()` |
 | `ctx.nowT` / `ctx.worldToScreen` | convenience re-exports of the engine helpers |
@@ -88,9 +88,9 @@ had already grown their own copy.
 
 ## Mastery / narration expectations
 
-- Award bolts with `ctx.ui.setBolts(ctx.wallet.add(n))`. Never keep your own
-  running total: bolts persist across games and sessions, and a local counter
-  silently resets both.
+- Award bolts with `ctx.wallet.add(n)`. Never keep your own running total:
+  bolts persist across games and sessions, and a local counter silently resets
+  both. There is no on-screen counter; the reward moment is the toast.
 - Ask a real retrieval question and score it with `ctx.mastery.record(a, b,
   correct, ms)` where `a,b` are the canonical factors (for division, the two
   factors of the fact — `record` shares one ledger for `a×b` and `(a·b)÷b`).

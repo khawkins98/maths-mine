@@ -222,7 +222,6 @@ export function createBlockBuilder(ctx) {
 
     if (q.op === 'div') {
       // Title card = mode name only (never the equation, never feedback).
-      ui.setPrompt(`${q.dividend} ÷ ${q.divisor}`, 'Block Builder');
       // One instruction only: Bolt speaks it. In sensor mode there's no ghost
       // finger, so keep a short tilt cue; in drag mode the first-touch hint +
       // Bolt cover placement — no redundant footer.
@@ -230,13 +229,11 @@ export function createBlockBuilder(ctx) {
       bolt.say(`Share ${q.dividend} into ${q.divisor} groups!`, '');
       speak(`Let's share ${q.dividend} into ${q.divisor} equal groups.`);
     } else {
-      ui.setPrompt(`${q.a} × ${q.b}`, 'Block Builder');
       ui.setStatus(sensorsLive() ? 'Tilt forward to pour · tilt left/right to aim' : '');
       bolt.say(`Build ${q.a} groups of ${q.b}!`, '');
       speak(`Let's build ${q.a} groups of ${q.b}.`);
     }
 
-    ui.renderJars(mastery);
     if (sensorsLive()) sensors.recenter();
     if (firstRound && !sensorsLive()) startDemo();
   }
@@ -304,14 +301,12 @@ export function createBlockBuilder(ctx) {
     if (round.op === 'div') {
       ui.setTally(`${round.divisor} equal groups …`);
       // title card stays the mode name; the big askeq sign is the question's home
-      ui.setPrompt(`${round.dividend} ÷ ${round.divisor} = ?`, null);
       ui.setStatus('How many in each group?');
       ui.setAskEq(`${round.dividend} ÷ ${round.divisor} = ?`);
       bolt.say('How many in each?!', 'wow');
       speak(pickPhrase([`How many in each group? ${divWords(round.dividend, round.divisor)}?`, `So, ${divWords(round.dividend, round.divisor)}?`, `How many did each group get?`]));
     } else {
       ui.setTally(`${round.groupsTotal} groups of ${round.groupSize} …`);
-      ui.setPrompt(`${round.a} × ${round.b} = ?`, null);
       ui.setStatus('How many blocks altogether?');
       ui.setAskEq(`${round.a} × ${round.b} = ?`);
       bolt.say('How many?!', 'wow');
@@ -352,7 +347,6 @@ export function createBlockBuilder(ctx) {
     ui.lockChoices();
 
     mastery.record(round.a, round.b, correct, ms);
-    ui.renderJars(mastery);
     bolt.setOxidation(mastery.overallProgress()); // weather Bolt as mastery grows
 
     const eqStr = round.op === 'div'
@@ -368,9 +362,7 @@ export function createBlockBuilder(ctx) {
       ui.setAskEq(eqStr);
       ui.popAskEq();
       const reward = round.blocksTotal;
-      ui.setBolts(wallet.add(reward));
-      ui.setBolts(bolts);
-      ui.rewardPop();
+      wallet.add(reward);
       audio.chordSound();
       celebrate();
       ui.showToast(`+${reward} 🔩`, 'good');
