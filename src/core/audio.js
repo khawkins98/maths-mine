@@ -2,15 +2,30 @@
 // user gesture (the wake-gate tap) — call init() there. All helpers no-op
 // silently until then, so games can call them freely.
 
+// One master gain in front of the destination. Every effect was authored at a
+// gain of roughly 0.05, which sits far below the speech-synthesis track and was
+// close to inaudible on a tablet speaker: taps on the ground could not be heard
+// at all. Trimming levels one call at a time would drift, so the whole bus is
+// lifted here instead.
+const MASTER = 2.6;
+
 export function createAudio() {
   let audio = null;
   let noiseBuf = null;
+  let master = null;
 
   function init() {
     try { audio = new (window.AudioContext || window.webkitAudioContext)(); }
     catch (_) { audio = null; }
+    if (audio) {
+      master = audio.createGain();
+      master.gain.value = MASTER;
+      master.connect(audio.destination);
+    }
     return audio;
   }
+  // everything routes through the master bus, never straight to destination
+  const out = () => master || audio.destination;
   function resume() { if (audio && audio.state === 'suspended') audio.resume(); }
 
   function beep(freq, dur = 0.08, type = 'square', gain = 0.05) {
@@ -19,7 +34,7 @@ export function createAudio() {
     const g = audio.createGain();
     o.type = type; o.frequency.value = freq;
     g.gain.value = gain;
-    o.connect(g); g.connect(audio.destination);
+    o.connect(g); g.connect(out());
     const t = audio.currentTime;
     o.start(t);
     g.gain.setValueAtTime(gain, t);
@@ -36,7 +51,7 @@ export function createAudio() {
     o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
     g.gain.setValueAtTime(gain, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(audio.destination);
+    o.connect(g); g.connect(out());
     o.start(t); o.stop(t + dur);
   }
   function noiseBurst(dur, gain, cutoff = 1200) {
@@ -50,7 +65,7 @@ export function createAudio() {
     const f = audio.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = cutoff;
     const g = audio.createGain(); const t = audio.currentTime;
     g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    s.connect(f); f.connect(g); g.connect(audio.destination);
+    s.connect(f); f.connect(g); g.connect(out());
     s.start(t); s.stop(t + dur);
   }
 
