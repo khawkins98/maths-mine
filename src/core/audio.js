@@ -2,17 +2,17 @@
 // user gesture (the wake-gate tap) — call init() there. All helpers no-op
 // silently until then, so games can call them freely.
 
-// Every effect was authored at a gain of about 0.05, while speech synthesis
-// plays at full scale, so the two were roughly 25 dB apart: taps on the ground
-// were inaudible next to Bolt's voice. Rather than retune ~10 call sites and
-// have them drift apart again, the whole effects bus is lifted here, to a peak
-// of about 0.45 against speech's 1.0.
+// Effects were authored around a gain of 0.05 while speech synthesis plays at
+// full scale, leaving them roughly 25 dB down: inaudible next to Bolt's voice.
 //
-// A limiter sits after it because several effects deliberately overlap
-// (chordSound alone fires five notes, and a landing stacks a thud on a noise
-// burst); without one, a loud bus clips into distortion exactly at the game's
-// happiest moments.
-const MASTER = 9;
+// Measured at the bus rather than guessed at. A first pass at 9x brought the
+// five-note chordSound to 0.46 but left the common short effects at 0.07-0.09,
+// because their authored gains were both lower and inconsistent, and because
+// the limiter threshold was set below the signal and simply squashed it back
+// down. So: the bus is louder, the individual gains are levelled against each
+// other, and the limiter now sits just under full scale where it only catches
+// genuine overlap instead of acting as a permanent volume cut.
+const MASTER = 15;
 
 export function createAudio() {
   let audio = null;
@@ -26,11 +26,11 @@ export function createAudio() {
       master = audio.createGain();
       master.gain.value = MASTER;
       const limiter = audio.createDynamicsCompressor();
-      limiter.threshold.value = -8;
-      limiter.knee.value = 6;
-      limiter.ratio.value = 12;
-      limiter.attack.value = 0.003;
-      limiter.release.value = 0.15;
+      limiter.threshold.value = -1.5; // just under full scale, not under the signal
+      limiter.knee.value = 2;
+      limiter.ratio.value = 20;
+      limiter.attack.value = 0.002;
+      limiter.release.value = 0.12;
       master.connect(limiter);
       limiter.connect(audio.destination);
     }
@@ -82,19 +82,24 @@ export function createAudio() {
   }
 
   // block lands: soft low thud + a little earthy noise (pitch by stack height)
-  function thunk(y) { beepEnv(150 + Math.max(0, y + 3) * 6, 95, 0.12, 'sine', 0.05); noiseBurst(0.05, 0.025, 900); }
-  function groupChime(g) { beepEnv(520 + g * 70, 660 + g * 70, 0.16, 'triangle', 0.06); } // rises per group
-  function chordSound() { [523, 659, 784, 1046, 1319].forEach((f, i) => setTimeout(() => beepEnv(f, f, 0.3, 'triangle', 0.05), i * 80)); }
-  function buzzSound() { beepEnv(300, 170, 0.22, 'sine', 0.05); } // gentle "not quite" — never harsh
+  function thunk(y) { beepEnv(150 + Math.max(0, y + 3) * 6, 95, 0.14, 'sine', 0.058); noiseBurst(0.06, 0.038, 900); }
+  function groupChime(g) { beepEnv(520 + g * 70, 660 + g * 70, 0.18, 'triangle', 0.061); } // rises per group
+  function chordSound() { [523, 659, 784, 1046, 1319].forEach((f, i) => setTimeout(() => beepEnv(f, f, 0.3, 'triangle', 0.046), i * 80)); }
+  function buzzSound() { beepEnv(300, 170, 0.24, 'sine', 0.062); } // gentle "not quite" — never harsh
 
   // Wooden knock for pressing a control. Everything in this world is planks and
   // dirt, so a UI click should sound like knuckles on a board, not a beep.
   // `bright` shifts the pitch so a small back button and a big answer slab feel
   // like different objects without needing separate sounds.
   function woodTap(bright = 1) {
-    beepEnv(230 * bright, 96 * bright, 0.07, 'sine', 0.055);
-    noiseBurst(0.045, 0.03, 1150 * bright);
+    beepEnv(230 * bright, 96 * bright, 0.08, 'sine', 0.053);
+    noiseBurst(0.05, 0.041, 1150 * bright);
   }
 
-  return { init, resume, beep, beepEnv, noiseBurst, thunk, groupChime, chordSound, buzzSound, woodTap };
+  return {
+    init, resume, beep, beepEnv, noiseBurst, thunk, groupChime, chordSound, buzzSound, woodTap,
+    // the mixer bus, so output level can actually be measured rather than guessed at
+    context: () => audio,
+    bus: () => master,
+  };
 }
