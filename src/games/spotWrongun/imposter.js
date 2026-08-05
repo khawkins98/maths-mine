@@ -32,6 +32,7 @@ export function createImposterTier(ctx, stage, facts) {
   }
 
   function newRound() {
+    speech.reset(); // a new round starts a new sentence, not a queue
     stage.clearRound();
     crew = [];
     roundNo++;

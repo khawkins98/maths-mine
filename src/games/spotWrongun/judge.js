@@ -51,6 +51,7 @@ export function createJudgeTier(ctx, stage, facts) {
   }
 
   function newRound() {
+    speech.reset(); // a new round starts a new sentence, not a queue
     stage.clearRound();
     jr = null;
     judgeNo++;

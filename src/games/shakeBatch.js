@@ -332,6 +332,7 @@ export function createShakeBatch(ctx) {
 
   // ---------- round flow ----------
   function newRound() {
+    speech.reset(); // a new round starts a new sentence, not a queue
     clearDice();
     const q = mastery.nextQuestion({ op: 'mul' }); // this game is pure ×
 

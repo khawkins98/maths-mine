@@ -182,6 +182,7 @@ export function createBlockBuilder(ctx) {
 
   // ---------- round flow ----------
   function newRound() {
+    speech.reset(); // a new round starts a new sentence, not a queue
     const q = mastery.nextQuestion(forcedOp ? { op: forcedOp } : {});
     forcedOp = null;
     clearWall();

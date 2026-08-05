@@ -99,6 +99,7 @@ const hub = createHub(ctx);
 // debug hook: the shared mascot (headless smoke tests + oxidation checks)
 window.__bolt = bolt;
 window.__audio = audio;
+window.__speech = speech;
 
 // ---------- render loop dispatch ----------
 // The engine owns the loop; here we fan out per-frame work: the active game's
