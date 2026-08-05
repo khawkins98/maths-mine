@@ -14,8 +14,10 @@ import { createEngine } from './core/engine.js';
 import { createAudio } from './core/audio.js';
 import { createSpeech } from './core/speech.js';
 import { createUI } from './core/ui.js';
+import { createWorldFeel } from './core/worldFeel.js';
 
 import { MasteryStore } from './game/mastery.js';
+import { Wallet } from './game/wallet.js';
 import { TiltInput } from './game/sensors.js';
 import { createBolt } from './game/bolt.js';
 
@@ -31,8 +33,12 @@ const audio = createAudio();
 const speech = createSpeech();
 const ui = createUI();
 const mastery = new MasteryStore();
+const wallet = new Wallet();
 const sensors = new TiltInput();
-const bolt = createBolt({ camera: engine.camera, textures, nowT: engine.nowT, bubbleEl: ui.els.bubble });
+const bolt = createBolt({ scene: engine.scene, camera: engine.camera, textures, nowT: engine.nowT, bubbleEl: ui.els.bubble });
+// Parallax + a springy, touchable ground. Long-lived: it belongs to the world,
+// not to any one game, so it survives every game switch.
+const worldFeel = createWorldFeel({ engine, audio, textures });
 
 let usingSensors = false;
 
@@ -41,7 +47,6 @@ let usingSensors = false;
 // and fully tears them down; it never reaches into the DOM or the engine
 // internals except through these handles.
 const ctx = {
-  THREE,
   renderer: engine.renderer,
   scene: engine.scene,
   camera: engine.camera,
@@ -52,9 +57,9 @@ const ctx = {
   ui,            // HUD helpers
   bolt,          // 3D mascot: say/react/update/setOxidation
   mastery,       // shared adaptive per-fact ledger (× and ÷)
+  wallet,        // bolts (🔩): shared across games AND sessions
   sensors,       // tilt input
-  nowT: engine.nowT,
-  worldToScreen: engine.worldToScreen,
+  worldFeel,     // parallax + ground spring: worldFeel.impulse(strength, x, z)
   get usingSensors() { return usingSensors; },
   onExit: null,  // set by the host (hub/main) so a game can request to leave
 };
@@ -71,7 +76,11 @@ const GAMES = {
 };
 let current = null;
 function startGame(id, opts) {
-  if (current) current.teardown();
+  // A throwing teardown must not leave `current` pointing at a half-dead game
+  // that the render loop keeps calling update() on.
+  if (current) {
+    try { current.teardown(); } finally { current = null; audio.hush(); }
+  }
   const factory = GAMES[id];
   if (!factory) { console.warn('unknown game', id); return; }
   current = factory(ctx);
@@ -79,7 +88,10 @@ function startGame(id, opts) {
   return current;
 }
 // tear down the active game without starting another (used when opening the hub)
-function stopGame() { if (current) { current.teardown(); current = null; } }
+function stopGame() {
+  if (!current) return;
+  try { current.teardown(); } finally { current = null; audio.hush(); }
+}
 // expose for the hub + tests
 ctx.startGame = startGame;
 ctx.stopGame = stopGame;
@@ -90,6 +102,8 @@ const hub = createHub(ctx);
 
 // debug hook: the shared mascot (headless smoke tests + oxidation checks)
 window.__bolt = bolt;
+window.__audio = audio;
+window.__speech = speech;
 
 // ---------- render loop dispatch ----------
 // The engine owns the loop; here we fan out per-frame work: the active game's
@@ -98,10 +112,25 @@ engine.onFrame((dt) => {
   if (current) current.update(dt);
   bolt.update(dt);
   bolt.updateBubble();
+  worldFeel.update(dt);
 });
 engine.start();
 
 // ---------- cross-cutting chrome ----------
+// Every control knocks like wood. Delegated from the document on pointerdown
+// (not click) so the sound lands the instant a finger touches, which is what
+// makes a control feel physical rather than laggy. New buttons get it free.
+document.addEventListener('pointerdown', (e) => {
+  const btn = e.target.closest && e.target.closest('button');
+  if (!btn || btn.disabled) return;
+  if (btn === ui.els.btnWake) return; // the gate itself: audio isn't unlocked yet
+  const bright = btn.classList.contains('hub-card') ? 0.8    // big soft plank
+    : btn.classList.contains('choice') ? 1.2                 // answer slab
+    : btn.classList.contains('big') ? 1.0                    // confirm / next
+    : 1.45;                                                  // small chrome
+  audio.woodTap(bright);
+}, true);
+
 // voice on/off toggle
 if (ui.els.btnVoice) ui.els.btnVoice.addEventListener('click', () => {
   const on = !speech.isVoiceOn();
@@ -123,6 +152,15 @@ ui.els.btnWake.addEventListener('click', async () => {
   if (granted) await new Promise((r) => setTimeout(r, 500));
   usingSensors = granted && sensors.available;
   if (usingSensors) sensors.recenter();
+
+  // The wooden signs paint their equation onto a canvas, and canvas text does
+  // NOT wait for a webfont — it silently falls back to system-ui and stays that
+  // way, because the texture is only drawn once. Wait for the font here (we're
+  // well past first paint by now, so this is normally instant), but never hang
+  // the game on a font that fails to load.
+  if (document.fonts && document.fonts.ready) {
+    await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]);
+  }
 
   ui.hideGate();
   bolt.show(true);

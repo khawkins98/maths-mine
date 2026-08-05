@@ -19,6 +19,7 @@
 import * as THREE from 'three';
 import { createTimers } from '../core/timers.js';
 import { createPointerInput } from '../core/pointer.js';
+import { buildChoiceSet } from '../core/choices.js';
 import { easeOutBack, easeOutBounce } from '../core/ease.js';
 import { createBlockKit, CELL, BLOCK, CAP_H, BODY_H } from '../core/blocks.js';
 
@@ -29,7 +30,7 @@ const COLS = [0xff6b6b, 0xffd24a, 0x58e08a, 0x6ad2ff, 0xb98bff, 0xff9f5a, 0x7ef0
 
 
 export function createBlockBuilder(ctx) {
-  const { scene, camera, engine, textures, audio, speech, ui, bolt, mastery, sensors } = ctx;
+  const { scene, camera, engine, textures, audio, speech, ui, bolt, mastery, wallet, sensors } = ctx;
   const { dirtTex, grassTex, slotTex, puffTex } = textures;
   const speak = speech.speak, eqWords = speech.eqWords, divWords = speech.divWords, pickPhrase = speech.pickPhrase;
   const nowT = engine.nowT;
@@ -83,7 +84,8 @@ export function createBlockBuilder(ctx) {
   let moldGroup = null, pulsedTile = null;
   let forcedOp = null;   // test hook: force the next round's operation
   let flashT = 0, flashCol = null;
-  let bolts = 0;
+  let spinRAF = 0;    // the commutativity rotate's own animation frame
+
 
   function sensorsLive() { return sensors.enabled && sensors.available; }
 
@@ -170,11 +172,19 @@ export function createBlockBuilder(ctx) {
     const dist = maxDim * 2.15 + 8;
     return { dist, centerY };
   }
-  function frameCamera(C, R) { const f = frameValues(C, R); engine.placeCamera(f.centerY, f.dist, VIEW_DIR); }
+  function frameCamera(C, R) {
+    const f = frameValues(C, R);
+    engine.placeCamera(f.centerY, f.dist, VIEW_DIR);
+    // Bolt stands on the grass to the left of the wall, stepped back from it so
+    // he never overlaps the blocks the child is counting. Tied to the framing
+    // distance so he stays in shot for a 2x3 wall and a 6x10 one alike.
+    bolt.placeAt(-(C * CELL) / 2 - f.dist * 0.20, f.dist * 0.14);
+  }
   function wallCenterYFor(R) { return frameValues(1, R).centerY; }
 
   // ---------- round flow ----------
   function newRound() {
+    speech.reset(); // a new round starts a new sentence, not a queue
     const q = mastery.nextQuestion(forcedOp ? { op: forcedOp } : {});
     forcedOp = null;
     clearWall();
@@ -222,7 +232,6 @@ export function createBlockBuilder(ctx) {
 
     if (q.op === 'div') {
       // Title card = mode name only (never the equation, never feedback).
-      ui.setPrompt(`${q.dividend} ÷ ${q.divisor}`, 'Block Builder');
       // One instruction only: Bolt speaks it. In sensor mode there's no ghost
       // finger, so keep a short tilt cue; in drag mode the first-touch hint +
       // Bolt cover placement — no redundant footer.
@@ -230,13 +239,11 @@ export function createBlockBuilder(ctx) {
       bolt.say(`Share ${q.dividend} into ${q.divisor} groups!`, '');
       speak(`Let's share ${q.dividend} into ${q.divisor} equal groups.`);
     } else {
-      ui.setPrompt(`${q.a} × ${q.b}`, 'Block Builder');
       ui.setStatus(sensorsLive() ? 'Tilt forward to pour · tilt left/right to aim' : '');
       bolt.say(`Build ${q.a} groups of ${q.b}!`, '');
       speak(`Let's build ${q.a} groups of ${q.b}.`);
     }
 
-    ui.renderJars(mastery);
     if (sensorsLive()) sensors.recenter();
     if (firstRound && !sensorsLive()) startDemo();
   }
@@ -259,6 +266,7 @@ export function createBlockBuilder(ctx) {
 
     if (firstRound && round.placed === 1) dismissDemo();
     if (groupJustCompleted(c, r)) onGroupComplete();
+    else updateTally();
     return true;
   }
 
@@ -278,6 +286,50 @@ export function createBlockBuilder(ctx) {
     placeInCell(c, r);
   }
 
+  // What the wall actually holds right now, independent of the order it was
+  // filled in.
+  function wallState() {
+    let complete = 0;
+    if (round.groupAxis === 'row') {
+      for (let r = 0; r < round.R; r++) {
+        let full = true;
+        for (let c = 0; c < round.C; c++) if (!round.cells[c][r]) { full = false; break; }
+        if (full) complete++;
+      }
+    } else {
+      for (let c = 0; c < round.C; c++) if (round.cells[c].every(Boolean)) complete++;
+    }
+    return { complete, extra: round.placed - complete * round.groupSize };
+  }
+
+  // The running caption, refreshed after EVERY block rather than only when a
+  // group closes. A child filling freeform - a bit of one column, a bit of
+  // another - used to get a caption that was both stale and misleading: it read
+  // "1 group of 6 = 6" while a second column was half built.
+  //
+  // It never states a multiplication that is not on the board yet. Before the
+  // first group closes there is no product to name, so it just counts what is
+  // there; after that it names the completed groups and keeps the loose blocks
+  // separate. Voice stays on group milestones only: narrating every block would
+  // turn an array into counting by ones, which is the habit this is trying to
+  // replace.
+  function updateTally() {
+    if (!round || phase !== 'building') return;
+    const { complete, extra } = wallState();
+    const n = round.placed;
+    if (round.op === 'div') {
+      if (complete === 0) return ui.setTally(n ? `${n} shared out` : '');
+      return ui.setTally(`${complete} of ${round.divisor} groups shared`
+        + (extra ? `, and ${extra} more` : ''));
+    }
+    if (complete === 0) {
+      return ui.setTally(n ? `${n} block${n > 1 ? 's' : ''}` : '');
+    }
+    ui.setTally(`${complete} group${complete > 1 ? 's' : ''} of ${round.groupSize}`
+      + ` = ${complete * round.groupSize}`
+      + (extra ? ` … and ${extra}` : ''));
+  }
+
   function onGroupComplete() {
     round.groupsDone++;
     if (round.groupsDone >= round.groupsTotal) return onBuilt();
@@ -285,12 +337,12 @@ export function createBlockBuilder(ctx) {
     audio.groupChime(g);
     if (round.op === 'div') {
       // sharing language — count groups shared, don't reveal the per-group count
-      ui.setTally(`${g} of ${round.divisor} groups shared`);
+      updateTally();
       speak(pickPhrase([`${g} groups shared.`, `Keep sharing.`, `${g} so far.`]));
       if (g === Math.floor(round.divisor / 2)) bolt.say('Share them evenly!', 'happy');
     } else {
       // truthful skip-count of COMPLETED groups: 1×R, 2×R, 3×R …
-      ui.setTally(`${g} group${g > 1 ? 's' : ''} of ${round.groupSize} = ${g * round.groupSize}`);
+      updateTally();
       const gs = g > 1 ? 's' : '', tot = g * round.groupSize;
       speak(pickPhrase([`${g} group${gs} of ${round.groupSize}. That's ${tot}.`, `That makes ${tot}.`, `${tot}!`, `Now we've got ${tot}.`]));
       if (g === 2 || g === Math.floor(round.groupsTotal / 2)) bolt.say('Keep going!', 'happy');
@@ -298,20 +350,21 @@ export function createBlockBuilder(ctx) {
   }
 
   function onBuilt() {
+    // drop any skip-count still queued from the build: the question is what
+    // matters now, and trailing numbers talk over it
+    speech.reset();
     phase = 'asking';
     if (moldGroup) moldGroup.visible = false;
     round.askT = nowT();
     if (round.op === 'div') {
       ui.setTally(`${round.divisor} equal groups …`);
       // title card stays the mode name; the big askeq sign is the question's home
-      ui.setPrompt(`${round.dividend} ÷ ${round.divisor} = ?`, null);
       ui.setStatus('How many in each group?');
       ui.setAskEq(`${round.dividend} ÷ ${round.divisor} = ?`);
       bolt.say('How many in each?!', 'wow');
       speak(pickPhrase([`How many in each group? ${divWords(round.dividend, round.divisor)}?`, `So, ${divWords(round.dividend, round.divisor)}?`, `How many did each group get?`]));
     } else {
       ui.setTally(`${round.groupsTotal} groups of ${round.groupSize} …`);
-      ui.setPrompt(`${round.a} × ${round.b} = ?`, null);
       ui.setStatus('How many blocks altogether?');
       ui.setAskEq(`${round.a} × ${round.b} = ?`);
       bolt.say('How many?!', 'wow');
@@ -321,27 +374,10 @@ export function createBlockBuilder(ctx) {
   }
 
   function buildChoices() {
-    const p = round.answer;
-    let opts;
-    if (round.op === 'div') {
-      // distractors: one-per-group off (the natural sharing slip)
-      const set = new Set([p]);
-      if (p - 1 > 0) set.add(p - 1);
-      set.add(p + 1);
-      while (set.size < 3) set.add(p + set.size);
-      opts = [...set].slice(0, 3);
-    } else {
-      const R = round.groupSize;
-      const set = new Set([p]);
-      if (p - R > 0) set.add(p - R);
-      set.add(p + R);
-      while (set.size < 3) set.add(p + R * set.size);
-      opts = [...set].slice(0, 3);
-    }
-    // deterministic shuffle (no Math.random): rotate by round.placed
-    const rot = round.placed % opts.length;
-    const ordered = opts.slice(rot).concat(opts.slice(0, rot));
-    ui.showChoices(ordered, answerChosen);
+    // step = the natural near-miss: a whole group for x, one-per-group for a
+    // share-out. core/choices.js owns the ordering so no position leaks.
+    const step = round.op === 'div' ? 1 : round.groupSize;
+    ui.showChoices(buildChoiceSet(round.answer, step), answerChosen);
   }
 
   function answerChosen(val, btn) {
@@ -352,7 +388,6 @@ export function createBlockBuilder(ctx) {
     ui.lockChoices();
 
     mastery.record(round.a, round.b, correct, ms);
-    ui.renderJars(mastery);
     bolt.setOxidation(mastery.overallProgress()); // weather Bolt as mastery grows
 
     const eqStr = round.op === 'div'
@@ -368,9 +403,7 @@ export function createBlockBuilder(ctx) {
       ui.setAskEq(eqStr);
       ui.popAskEq();
       const reward = round.blocksTotal;
-      bolts += reward;
-      ui.setBolts(bolts);
-      ui.rewardPop();
+      wallet.add(reward);
       audio.chordSound();
       celebrate();
       ui.showToast(`+${reward} 🔩`, 'good');
@@ -449,13 +482,15 @@ export function createBlockBuilder(ctx) {
 
   function doRotate() {
     phase = 'rotating';
+    cancelAnimationFrame(spinRAF);
     ui.setConfirmEnabled(false);
     const from = wall.rotation.z;
     const to = from - Math.PI / 2;
     const y0 = wall.position.y;
-    const target = frameValues(round.R, round.C);
-    const y1 = target.centerY;
-    const z0 = camera.position.z, cy0 = camera.position.y;
+    // The wall swaps its columns and rows, so the framing it needs swaps too.
+    const fromF = frameValues(round.C, round.R);
+    const toF = frameValues(round.R, round.C);
+    const y1 = toF.centerY;
     const t0 = nowT();
     const square = round.a === round.b;
     // the commuted fact on the sign; title card stays the mode name (no feedback)
@@ -478,14 +513,27 @@ export function createBlockBuilder(ctx) {
     const lift = Math.max(0, (diag - half) / 2) + 0.15;
     const dur = 0.75;
     (function spin() {
+      // This animates on its own rAF chain rather than through update(dt), so
+      // nothing stops it when the game goes away: it kept driving the camera
+      // over the hub and then threw destructuring a null round.
+      if (!round || phase !== 'rotating') { spinRAF = 0; return; }
       const k = Math.min(1, (nowT() - t0) / dur);
       const e = 1 - Math.pow(1 - k, 3);
       wall.rotation.z = from + (to - from) * e;
       wall.position.y = y0 + (y1 - y0) * e + Math.sin(Math.PI * e) * lift;
-      camera.position.z = z0 + (target.dist - z0) * e;
-      camera.position.y = cy0 + (y1 - cy0) * e;
-      camera.lookAt(0, camera.position.y, 0);
-      if (k < 1) requestAnimationFrame(spin);
+      // Move along the SAME (centerY, dist) parameterisation placeCamera uses,
+      // rather than poking .y and .z directly. `dist` is a distance ALONG the
+      // isometric view direction, not a z coordinate: assigning it to .z walked
+      // the camera off that direction and eased its height down to the wall's
+      // centre, which put it at knee height. The result was the camera skimming
+      // and then clipping through the island, showing its underside and
+      // z-fighting against the grass, and dragging Bolt underground with it.
+      engine.placeCamera(
+        fromF.centerY + (toF.centerY - fromF.centerY) * e,
+        fromF.dist + (toF.dist - fromF.dist) * e,
+        VIEW_DIR,
+      );
+      if (k < 1) spinRAF = requestAnimationFrame(spin);
       else {
         settleRotation();
         ui.pulseBigTotal();
@@ -619,6 +667,9 @@ export function createBlockBuilder(ctx) {
         landing.push({ mesh: f.mesh, t: 0 });
         dustPuff(f.mesh.position.x + wall.position.x, f.targetY + wall.position.y, 0.3);
         audio.thunk(f.targetY);
+        // the island takes the weight: small, because a full wall is a lot of
+        // blocks and they must not stack into an earthquake
+        ctx.worldFeel.impulse(0.09, f.mesh.position.x + wall.position.x, 0);
       }
     }
     for (let i = landing.length - 1; i >= 0; i--) {
@@ -670,7 +721,7 @@ export function createBlockBuilder(ctx) {
       C: round?.C, R: round?.R, answer: round?.answer,
       op: round?.op, mode: round?.op,
       choices: ui.currentChoiceValues(),
-      bolts,
+      bolts: wallet.bolts,
     });
     window.__place = (c, r) => placeInCell(c, r);
     window.__cellXY = (c, r) => { const p = cellPos(c, r, round.C, round.R); return engine.worldToScreen(p.x + wall.position.x, p.y + wall.position.y); };
@@ -692,6 +743,9 @@ export function createBlockBuilder(ctx) {
   }
 
   function teardown() {
+    cancelAnimationFrame(spinRAF); spinRAF = 0;
+    dismissDemo();  // the first-touch hint is outside the HUD, so hideGameHud misses it
+    speech.reset(); // a child leaving must not hear the old round finish
     input.detach();
     ui.els.btnConfirm.removeEventListener('click', onConfirm);
     ui.els.btnRecenter.removeEventListener('click', onRecenter);
@@ -706,6 +760,7 @@ export function createBlockBuilder(ctx) {
       else mm?.dispose?.();
     });
     blocks.dispose(); slotGeo.dispose();
+    ui.els.btnRecenter.style.display = ''; // restore what start() hid
     engine.resetCamera();
     round = null; phase = 'idle';
   }

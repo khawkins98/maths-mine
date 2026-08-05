@@ -1,7 +1,7 @@
 // core/ui.js — HUD helpers over the DOM defined in index.html. Games drive the
-// shared chrome (prompt, status, tally, equation, answer choices, toast, the
-// big surviving-total badge, mastery jars, the Next/Re-center buttons) through
-// this thin layer so no game reaches into document.getElementById itself.
+// shared chrome (status, tally, equation, answer choices, toast, the big
+// surviving-total badge, the Next/Re-center buttons) through this thin layer so
+// no game reaches into document.getElementById itself.
 //
 // The raw elements are also exposed as `els` for game-specific extras (e.g. the
 // first-touch demo finger). Element IDs are kept in sync with index.html.
@@ -13,10 +13,6 @@ export function createUI() {
     gate: el('gate'),
     hudTop: el('hud-top'),
     hudBottom: el('hud-bottom'),
-    promptEq: el('prompt-eq'),
-    promptSub: el('prompt-sub'),
-    bolts: el('bolts'),
-    counter: el('counter'),
     status: el('status'),
     tally: el('tally'),
     askEq: el('askeq'),
@@ -29,7 +25,6 @@ export function createUI() {
     btnBack: el('btn-back'),
     hub: el('hub'),
     hubCards: el('hub-cards'),
-    jars: el('jars'),
     toast: el('toast'),
     bigTotal: el('bigtotal'),
     hint: el('hint'),
@@ -59,16 +54,10 @@ export function createUI() {
   function showBack(onClick) { if (!els.btnBack) return; els.btnBack.classList.remove('hidden'); els.btnBack.onclick = onClick; }
   function hideBack() { if (!els.btnBack) return; els.btnBack.classList.add('hidden'); els.btnBack.onclick = null; }
 
-  function setPrompt(eq, sub) {
-    if (eq != null) els.promptEq.textContent = eq;
-    if (sub != null) els.promptSub.textContent = sub;
-  }
   function setStatus(t) { els.status.textContent = t; }
   // skip-count caption: wrap it in a readable chip (high contrast on the grass)
   function setTally(t) { els.tally.textContent = t || ''; els.tally.classList.toggle('show', !!t); }
 
-  function setBolts(n) { els.bolts.textContent = n; }
-  function rewardPop() { els.counter.classList.remove('reward'); void els.counter.offsetWidth; els.counter.classList.add('reward'); }
 
   function setAskEq(text) {
     if (text == null) { els.askEq.classList.add('hidden'); return; }
@@ -129,37 +118,17 @@ export function createUI() {
     _toastT = setTimeout(() => { els.toast.className = 'toast'; }, 1400);
   }
 
-  // empty the jar shelf so the `.jars:empty { display:none }` rule hides it
-  // (used when leaving a game for the hub, so it doesn't bleed onto the menu).
-  function clearJars() { els.jars.innerHTML = ''; }
 
-  // mastery jars per active table (0..1 fill). `mastery` is the MasteryStore.
-  function renderJars(mastery) {
-    const tables = mastery.activeTables();
-    els.jars.innerHTML = '';
-    for (const t of tables) {
-      const jar = document.createElement('div');
-      jar.className = 'jar';
-      const fill = document.createElement('div');
-      fill.className = 'fill';
-      fill.style.height = `${Math.round(mastery.tableMastery(t) * 100)}%`;
-      const lbl = document.createElement('div');
-      lbl.className = 'lbl';
-      lbl.textContent = `${t}×`;
-      jar.appendChild(fill); jar.appendChild(lbl);
-      els.jars.appendChild(jar);
-    }
-  }
 
   return {
     els,
     hideGate, showGameHud, hideGameHud,
     showHub, hideHub, showBack, hideBack,
-    setPrompt, setStatus, setTally, setBolts, rewardPop, setAskEq, popAskEq,
+    setStatus, setTally, setAskEq, popAskEq,
     setClaim, hideClaim, fadeClaim, popClaim,
     showChoices, hideChoices, fadeChoices, choiceButtons, lockChoices, currentChoiceValues,
     showBigTotal, pulseBigTotal, hideBigTotal,
     showConfirm, hideConfirm, setConfirmEnabled,
-    showToast, renderJars, clearJars,
+    showToast,
   };
 }

@@ -9,6 +9,8 @@
 // multiplication sibling a×b, and only once that sibling is "known" (level ≥
 // DIV_UNLOCK_LEVEL) — i.e. division unlocks after its × sibling, per the PRD.
 
+import { localStore, readJSON, writeJSON } from '../core/storage.js';
+
 const TABLE_TIERS = [
   [2, 5, 10],
   [3, 4],
@@ -36,7 +38,7 @@ export class MasteryStore {
   // (which is what the tests want, and what a browser with storage blocked
   // gives us anyway). Progress loads on construction and saves after every
   // recorded answer — a child closing the tab mid-session loses nothing.
-  constructor({ storage = defaultStorage() } = {}) {
+  constructor({ storage = localStore() } = {}) {
     this.facts = new Map();
     this.unlockedTiers = 1; // start with 2/5/10 only
     this.recent = [];       // rolling window of last outcomes (bool)
@@ -57,29 +59,42 @@ export class MasteryStore {
     };
   }
 
+  // A bad save must degrade to a fresh start, never to a dead app. This runs at
+  // module scope, so anything that throws here is a blank screen with no in-app
+  // way out - a parent would have to clear site data. `new Map(d.facts)` throws
+  // on a non-pair array, and a null record crashes on the first question, so
+  // every entry is validated rather than trusted.
   load() {
-    if (!this._storage) return false;
     try {
-      const raw = this._storage.getItem(SAVE_KEY);
-      if (!raw) return false;
-      const d = JSON.parse(raw);
+      const d = readJSON(this._storage, SAVE_KEY);
       if (!d || !Array.isArray(d.facts)) return false;
-      this.facts = new Map(d.facts);
-      this.unlockedTiers = d.unlockedTiers || 1;
-      this.totalCorrect = d.totalCorrect || 0;
-      this.recent = Array.isArray(d.recent) ? d.recent : [];
+
+      const num = (v, fallback = 0) => (Number.isFinite(v) ? v : fallback);
+      const facts = new Map();
+      for (const entry of d.facts) {
+        if (!Array.isArray(entry) || entry.length !== 2) continue;
+        const [k, r] = entry;
+        if (typeof k !== 'string' || !r || typeof r !== 'object') continue;
+        if (!Number.isFinite(r.a) || !Number.isFinite(r.b)) continue;
+        facts.set(k, {
+          a: r.a, b: r.b,
+          correct: num(r.correct), attempts: num(r.attempts), streak: num(r.streak),
+          level: Math.max(0, Math.min(4, num(r.level))),
+          avgMs: num(r.avgMs), seen: num(r.seen),
+        });
+      }
+
+      this.facts = facts;
+      this.unlockedTiers = Math.max(1, Math.min(TABLE_TIERS.length, Math.round(num(d.unlockedTiers, 1))));
+      this.totalCorrect = Math.max(0, num(d.totalCorrect));
+      this.recent = Array.isArray(d.recent) ? d.recent.slice(-8).map(Boolean) : [];
       return true;
     } catch (_) {
-      return false; // corrupt or unreadable save: start fresh, never crash
+      return false; // unreadable save: start fresh rather than not start at all
     }
   }
 
-  save() {
-    if (!this._storage) return;
-    try {
-      this._storage.setItem(SAVE_KEY, JSON.stringify(this));
-    } catch (_) { /* quota or private mode — progress just won't persist */ }
-  }
+  save() { writeJSON(this._storage, SAVE_KEY, this); }
 
   // Wipe a child's progress (a fresh start, or a second child on the tablet).
   reset() {
@@ -145,8 +160,20 @@ export class MasteryStore {
   }
 
   // Facts whose × sibling is known well enough to also ask as division.
+  // The same product cap multiplication uses. Without it a share-out ignored
+  // difficulty entirely: a child capped at 12 for x could be handed 60 / 6,
+  // which in Block Builder is a sixty-tap build.
+  _productCap() {
+    const acc = this.recentAccuracy();
+    if (this.recent.length < 4) return 12;
+    if (acc > 0.85) return 60;
+    if (acc > 0.7) return 30;
+    return 20;
+  }
+
   _divisibleFacts() {
     const out = [];
+    const cap = this._productCap();
     const tables = this.activeTables();
     const seen = new Set();
     for (const t of tables) {
@@ -154,7 +181,7 @@ export class MasteryStore {
         const k = factKey(t, m);
         if (seen.has(k)) continue; seen.add(k);
         const r = this.facts.get(k);
-        if (r && r.level >= DIV_UNLOCK_LEVEL && r.a !== r.b) out.push(r); // skip squares (a÷a is trivial)
+        if (r && r.level >= DIV_UNLOCK_LEVEL && r.a !== r.b && r.a * r.b <= cap) out.push(r); // skip squares (a/a is trivial)
       }
     }
     return out;
@@ -228,8 +255,12 @@ export class MasteryStore {
         const f = this._pickMulFact();
         r = { a: Math.min(f.a, f.b), b: Math.max(f.a, f.b) };
       }
-      const divisor = r.a;     // fewer groups (smaller factor) → cleaner share
-      const quotient = r.b;    // how many in each group (the asked answer)
+      // Alternate which factor divides. It was always the smaller one, so a
+      // child met 60 / 6 = 10 but never 60 / 10 = 6: half of every fact family
+      // went unpractised.
+      const flip = (this._divToggle = (this._divToggle || 0) + 1) % 2 === 0;
+      const divisor = flip ? r.b : r.a;
+      const quotient = flip ? r.a : r.b;
       const dividend = divisor * quotient;
       this.lastKey = factKey(r.a, r.b);
       this._rec(r.a, r.b).seen++;
@@ -252,8 +283,13 @@ export class MasteryStore {
       r.streak++;
       this.totalCorrect++;
       r.avgMs = r.avgMs ? r.avgMs * 0.6 + ms * 0.4 : ms;
+      // A level-up consumes the streak, so each level needs its own fresh run
+      // of three. Without the reset, streak stayed above 3 forever and every
+      // subsequent correct answer bumped a level: four answers reached "strong"
+      // and five reached level 4, which is not mastery, it is a hot streak.
       if (r.streak >= 3 && r.avgMs <= LEVEL_MS[Math.min(r.level + 1, 4)]) {
         r.level = Math.min(4, r.level + 1);
+        r.streak = 0;
       }
     } else {
       r.streak = 0;
@@ -279,18 +315,6 @@ export class MasteryStore {
       score += Math.min(r.correct, 4) + r.level * 0.5; // practice + mastery bonus
     }
     return Math.min(1, score / 24); // ~a handful of practised facts fills it
-  }
-}
-
-// localStorage, if this browser will give it to us. Private mode and blocked
-// third-party storage both throw on ACCESS, not on use, so probe it here.
-function defaultStorage() {
-  try {
-    if (typeof localStorage === 'undefined') return null;
-    localStorage.getItem('__probe');
-    return localStorage;
-  } catch (_) {
-    return null;
   }
 }
 

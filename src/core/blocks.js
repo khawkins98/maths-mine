@@ -19,12 +19,19 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
 export const CELL = 1.0;              // grid spacing
-export const BLOCK = CELL * 0.92;     // visual block size inside a 1.0 cell
+// Inset within its cell, so neighbouring blocks are separated by a visible
+// gap rather than fusing into one slab. Widened from 0.92 after playtesting:
+// a six-tall column read as a single column of dirt and could not be counted.
+export const BLOCK = CELL * 0.86;
 export const CAP_H = 0.2 * BLOCK;     // grass cap thickness
 export const BODY_H = BLOCK - CAP_H;  // dirt body height
 
-export function createBlockKit(textures) {
-  const { dirtTex, grassTex } = textures;
+// `body`/`cap` override the default dirt-and-grass pair, so the same block
+// geometry, jitter and rim treatment can be cut from another material. Spot the
+// Wrong'un uses emerald: same shape, same seams, more precious stuff.
+export function createBlockKit(textures, { body, cap } = {}) {
+  const dirtTex = body || textures.dirtTex;
+  const grassTex = cap || textures.grassTex;
 
   const bodyGeo = new RoundedBoxGeometry(BLOCK, BODY_H, BLOCK, 2, 0.03);
   const capGeo = new THREE.BoxGeometry(BLOCK, CAP_H, BLOCK);

@@ -43,6 +43,15 @@ const GAMES = { 'block-builder': createBlockBuilder, 'my-game': createMyGame };
 creates and adds to `ctx.scene`, so teardown is `scene.remove(root)` + dispose.
 Bolt is parented to the camera and is shared — never add it to your group.
 
+**Restore what you hid.** The HUD is shared chrome. If your `start()` hides or
+restyles a shared element (`btnRecenter`, the hint overlay), put it back in
+`teardown()` — the next game inherits whatever you leave.
+
+**Release any `engine.onFrame` subscription.** It returns an unsubscribe
+function; a game that registers one per visit and never calls it will
+double-update and keep a torn-down closure alive. Games are normally driven by
+`update(dt)` and should not need `onFrame` at all.
+
 **Timer rule:** never call `setTimeout` directly. Schedule through a
 `createTimers()` pool (`src/core/timers.js`) and call `clearAll()` in teardown.
 A child can leave mid-reveal at any moment, and a stray callback firing against
@@ -57,6 +66,8 @@ had already grown their own copy.
 |---|---|
 | `core/engine.js` | renderer, scene, camera, lights, ground, clouds, the loop, camera framing |
 | `core/timers.js` | `createTimers()` → `later(fn, ms)`, `cancel(id)`, `clearAll()` — cancellable scheduling |
+| `core/storage.js` | `localStore()`, `readJSON`, `writeJSON` — guarded persistence that degrades to memory-only |
+| `core/worldFeel.js` | pointer parallax + the springy, touchable ground (owned by the shell, not by games) |
 | `core/blocks.js` | `createBlockKit(textures)` → `makeBlock()`, `setCapGrass()`, `sharedGeos`, `dispose()`, plus `CELL/BLOCK/CAP_H/BODY_H`. The dirt-and-grass voxel block |
 | `core/pointer.js` | `createPointerInput(dom, { onDown, onMove, onUp })` → `attach()` / `detach()`. Unifies pointer + touch |
 | `core/ease.js` | `easeOutBack`, `easeOutBounce`, `easeOutCubic` |
@@ -67,7 +78,6 @@ had already grown their own copy.
 
 | Field | What it is |
 |---|---|
-| `ctx.THREE` | the three.js namespace (you may also `import * as THREE`) |
 | `ctx.renderer` / `ctx.scene` / `ctx.camera` | the shared renderer, scene, camera |
 | `ctx.engine` | `placeCamera(centerY, dist, viewDir?)`, `resetCamera()`, `worldToScreen(x,y)`, `projectToScreen(obj)`, `nowT()`, `VIEW_DIR`, `onFrame(cb)` |
 | `ctx.textures` | shared `CanvasTexture`s: `dirtTex, grassTex, groundTex, puffTex, slotTex, skyTex` (do NOT dispose) |
@@ -76,14 +86,18 @@ had already grown their own copy.
 | `ctx.ui` | HUD helpers — see `core/ui.js`; raw elements at `ui.els` |
 | `ctx.bolt` | mascot — `say(text, mood)`, `react(mood)`, `setOxidation(0..1)`, `show(v)`, `group`, `headAnchor` (moods: `'happy'`, `'wow'`, `''`) |
 | `ctx.mastery` | shared ledger — `nextQuestion({op?})`, `record(a,b,correct,ms)`, `levelOf(a,b)`, `activeTables()`, `tableMastery(t)`, `overallProgress()`, `reset()` |
+| `ctx.wallet` | the child's bolts, shared across games and sessions — `bolts`, `add(n)`, `reset()`. No on-screen readout by design |
+| `ctx.worldFeel` | the living island — `impulse(strength, x, z)` to punch the ground on a landing block or a thrown die |
 | `ctx.sensors` | `TiltInput`: `enabled, available, x, y, update(), recenter()` |
-| `ctx.nowT` / `ctx.worldToScreen` | convenience re-exports of the engine helpers |
 | `ctx.usingSensors` | whether real motion data arrived (tilt mode vs tap mode) |
 | `ctx.startGame(id, opts)` | switch to another registered game |
 | `ctx.onExit` | host-provided callback a game calls to request leaving (back to the hub) |
 
 ## Mastery / narration expectations
 
+- Award bolts with `ctx.wallet.add(n)`. Never keep your own running total:
+  bolts persist across games and sessions, and a local counter silently resets
+  both. There is no on-screen counter; the reward moment is the toast.
 - Ask a real retrieval question and score it with `ctx.mastery.record(a, b,
   correct, ms)` where `a,b` are the canonical factors (for division, the two
   factors of the fact — `record` shares one ledger for `a×b` and `(a·b)÷b`).

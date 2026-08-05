@@ -19,8 +19,18 @@
 
 import * as THREE from 'three';
 
-const BOLT_SCALE = 0.6;                                  // fully in frame
-const BOLT_HOME = new THREE.Vector3(-2.3, -1.72, -6.2); // local to camera
+// Bolt stands ON the island rather than being pinned to the camera. Parented to
+// the camera he was really a 3D HUD element: he ignored the terrain, and when a
+// camera move took his fixed offset below the ground he sank into it, which is
+// exactly what the commutativity rotate used to do to him.
+//
+// In the world he casts onto the same grass as the blocks, is occluded like
+// anything else, and moves with the parallax for free. The cost is that each
+// game must put him somewhere its own camera framing can see, via placeAt().
+const BOLT_SCALE = 1.25;
+const FOOT_DROP = 0.92 * BOLT_SCALE;  // model origin sits this far above his feet
+const BOLT_HOME = new THREE.Vector3(-4.6, FOOT_DROP, 4.2); // default: front-left
+const EDGE = 0.74;  // how close to the frame edge he may stand, in NDC
 
 // Endpoint palette per material role: `fresh` = un-oxidised shiny copper (0),
 // `oxid` = weathered verdigris/copper (1, == the original hard-coded colours).
@@ -32,8 +42,10 @@ const OX = {
   copperDk: { fresh: 0xc0703a, oxid: 0x9c5a2b }, // neck / mouth
 };
 
-export function createBolt({ camera, textures, nowT, bubbleEl }) {
+export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
   const bolt = new THREE.Group();
+  const _camPos = new THREE.Vector3();
+  const _ndc = new THREE.Vector3();
 
   let boltEyes = [], boltBulbMat = null, boltShadow = null;
 
@@ -129,9 +141,31 @@ export function createBolt({ camera, textures, nowT, bubbleEl }) {
   bolt.add(boltShadow);
 
   bolt.scale.setScalar(BOLT_SCALE);
-  bolt.position.copy(BOLT_HOME);
+  const home = BOLT_HOME.clone();
+  bolt.userData.scale = BOLT_SCALE;
+  bolt.position.copy(home);
   bolt.visible = false;
-  camera.add(bolt);
+  scene.add(bolt);
+
+  // Stand Bolt on the island at (x, z), optionally resized for the framing.
+  //
+  // Each game puts its camera at a different distance, so one world scale gives
+  // him a wildly different apparent size from game to game: in the imposter
+  // tier he filled nearly half the screen height and covered a villager the
+  // child has to be able to see. `scale` is relative to his default.
+  // Back to the menu pose. Games move Bolt to suit their own framing and none
+  // of them put him back, so the mascot greeted the child at 62% scale in the
+  // wrong place depending on which game they had just left.
+  function resetPlacement() {
+    bolt.userData.scale = BOLT_SCALE;
+    home.copy(BOLT_HOME);
+  }
+
+  function placeAt(x, z, scale = 1) {
+    const sc = BOLT_SCALE * scale;
+    bolt.userData.scale = sc;
+    home.set(x, 0.92 * sc, z);
+  }
   // speech-bubble anchor — parented to the head pivot so it tracks the now
   // articulated head. (0.1,1.21,0) in neck-local == (0.1,1.55,0) in bolt-local.
   const headAnchor = new THREE.Object3D(); headAnchor.position.set(0.1, 1.21, 0); neckPivot.add(headAnchor);
@@ -201,7 +235,7 @@ export function createBolt({ camera, textures, nowT, bubbleEl }) {
     resetPose();
 
     // ---- root hover (kept subtle; the joints do the "alive" work) ----
-    let rootY = BOLT_HOME.y + Math.sin(t * 2) * 0.04;
+    let rootY = home.y + Math.sin(t * 2) * 0.04;
     let rootRZ = Math.sin(t * 1.3) * 0.03;
     let rootRX = 0;
 
@@ -282,13 +316,39 @@ export function createBolt({ camera, textures, nowT, bubbleEl }) {
       if (actionT >= dur) action = null;
     }
 
-    // ---- apply root transform (kept in-frame: scale is constant) ----
-    bolt.position.y = rootY;
-    bolt.rotation.set(rootRX, 0, rootRZ);
-    bolt.scale.setScalar(BOLT_SCALE);
+    // ---- apply root transform ----
+    bolt.position.set(home.x, rootY, home.z);
+    // Keep him inside the frame. A game picks his spot in world units to suit
+    // its own layout, but the horizontal field of view shrinks in portrait, so
+    // a spot that reads well on a laptop puts him off the left edge on an
+    // upright tablet — which is the orientation this is actually played in.
+    // Nudge inward when he crosses the margin, in world space, so he is still
+    // genuinely standing on the island: he just stands a little closer in.
+    _ndc.copy(bolt.position).project(camera);
+    if (_ndc.x < -EDGE || _ndc.x > EDGE) {
+      _ndc.x = Math.max(-EDGE, Math.min(EDGE, _ndc.x));
+      _ndc.unproject(camera);
+      bolt.position.x = _ndc.x;
+      bolt.position.z = _ndc.z;
+      bolt.position.y = rootY; // unproject moved him off the grass; put him back
+    }
+    // Turn to face the camera, from wherever he ended up. In the world he no
+    // longer inherits its orientation, and a mascot addressing the child must
+    // not be seen in profile when a game frames the island from another angle.
+    _camPos.setFromMatrixPosition(camera.matrixWorld);
+    bolt.rotation.set(
+      rootRX,
+      Math.atan2(_camPos.x - bolt.position.x, _camPos.z - bolt.position.z),
+      rootRZ,
+    );
+    bolt.scale.setScalar(bolt.userData.scale);
+    // Turn to face the camera. In the world he no longer inherits its
+    // orientation, and a mascot addressing the child must not be seen in
+    // profile when a game frames the island from a different angle.
+
 
     // ---- blob shadow: shrinks/fades as he bobs higher ----
-    const bob = rootY - BOLT_HOME.y;
+    const bob = rootY - home.y;
     boltShadow.position.y = -0.92 - bob;
     const sh = Math.max(0.35, 1 - bob * 1.6);
     boltShadow.scale.set(sh, sh, 1);
@@ -318,7 +378,13 @@ export function createBolt({ camera, textures, nowT, bubbleEl }) {
     // The bubble is centred over Bolt's head (CSS translate(-50%,…)); clamp its
     // x to the LEFT region so it never covers the centre HUD text (tally /
     // question) — a real overlap bug two playtesters hit.
-    const x = Math.max(W * 0.14, Math.min((_proj.x * 0.5 + 0.5) * W, W * 0.40));
+    //
+    // The left bound has to account for the bubble's own width, not just a
+    // fraction of the viewport: on an upright tablet a fixed 14% margin still
+    // let half the bubble hang off the screen edge.
+    const halfW = (bubbleEl.offsetWidth || 0) / 2;
+    const lo = Math.min(halfW + 8, W * 0.45);
+    const x = Math.max(lo, Math.min((_proj.x * 0.5 + 0.5) * W, W * 0.40));
     bubbleEl.style.left = `${x}px`;
     bubbleEl.style.top = `${(-_proj.y * 0.5 + 0.5) * window.innerHeight}px`;
   }
@@ -348,7 +414,7 @@ export function createBolt({ camera, textures, nowT, bubbleEl }) {
     camera.remove(bolt);
   }
 
-  return { group: bolt, headAnchor, react, say, update, updateBubble, setOxidation, show,
+  return { group: bolt, headAnchor, react, say, update, updateBubble, setOxidation, show, placeAt, resetPlacement,
     playWave, playWalk, dispose,
     get oxidation() { return oxidation; } };
 }

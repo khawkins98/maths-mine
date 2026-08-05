@@ -1,7 +1,7 @@
 // TIER 2 — IMPOSTER (advanced).
 //
 // Three Nuggets, three signs, one of them fibbing. The child taps the wrong sign
-// to bounce that crewmate off the island; the survivors cheer. Unlocks once the
+// to bounce that villager off the island; the survivors cheer. Unlocks once the
 // child is fluent enough that checking three facts at once isn't overwhelming.
 //
 // Accusing an innocent is not punished — that Nugget just proves itself with a
@@ -25,9 +25,25 @@ export function createImposterTier(ctx, stage, facts) {
   let hovered = -1;
   let accuseT = 0;
 
-  function frameImposter() { engine.placeCamera(1.55, 12.6, VIEW); }
+  function frameImposter() {
+    // Pulled back from 12.6 to leave room OUTSIDE the crew. Bolt is clamped
+    // into the frame, so with a tighter camera he was shoved on top of the
+    // left-hand villager rather than standing clear of them.
+    engine.placeCamera(1.75, 15.5, VIEW);
+    // the crew occupies x -3.35..3.35, so Bolt stands outside them and forward
+    // Roughly level with the crew in depth, not four units in front of them:
+    // Bolt is a world object now, so standing nearer the camera makes him
+    // render larger, and he was dwarfing the villagers he is introducing.
+    // In FRONT of the crew rather than beside them. The three villagers span
+    // the full width of the frame, so on an upright tablet there is no room at
+    // either side and the in-frame clamp shoved Bolt straight on top of the
+    // left-hand one, hiding a villager the child has to be able to tap. There
+    // is plenty of empty ground in front, at every aspect ratio.
+    bolt.placeAt(-2.0, 4.0, 0.62);
+  }
 
   function newRound() {
+    speech.reset(); // a new round starts a new sentence, not a queue
     stage.clearRound();
     crew = [];
     roundNo++;
@@ -39,7 +55,9 @@ export function createImposterTier(ctx, stage, facts) {
     const impFact = drawn[0];
     const trueFacts = [drawn[1], drawn[2]];
 
-    imposterIndex = roundNo % 3;
+    // Was `roundNo % 3` - left, middle, right in fixed rotation, which a child
+    // can follow without checking a single sum.
+    imposterIndex = (Math.random() * 3) | 0;
     const wrong = facts.plausibleWrong(impFact.a, impFact.b, roundNo);
 
     let tIdx = 0;
@@ -48,7 +66,11 @@ export function createImposterTier(ctx, stage, facts) {
       const f = isImp ? impFact : trueFacts[tIdx++];
       const shown = isImp ? wrong : f.answer;
 
-      const g = stage.makeNugget(seat);
+      // three distinct varieties, rotating between rounds. Distinct matters:
+      // the child has to hold "the one on the left said 12" in mind while
+      // checking the others, and identical villagers make that harder than the
+      // maths it is meant to be testing.
+      const g = stage.makeNugget(roundNo + seat * 2);
       g.position.set(NUG_X[seat], BASE_Y, NUG_Z[seat]);
       stage.crewGroup.add(g);
 
@@ -92,9 +114,7 @@ export function createImposterTier(ctx, stage, facts) {
     ui.hideBigTotal();
     ui.setTally('');
     ui.els.btnRecenter.style.display = 'none';
-    ui.setPrompt('Truth Check', 'Who’s fibbing?');
     ui.setStatus('Tap the sign that’s wrong to bounce it off!');
-    ui.renderJars(mastery);
     bolt.say('One sign is fibbing!', 'wow');
     speak(pickPhrase([
       'One sign is fibbing! Tap the wrong one.',
@@ -113,7 +133,6 @@ export function createImposterTier(ctx, stage, facts) {
       state.phase = 'ejecting';
       stage.ring.visible = false;
       mastery.record(n.a, n.b, true, ms);
-      ui.renderJars(mastery);
       bolt.setOxidation(mastery.overallProgress());
 
       ejectNugget(n);
@@ -122,7 +141,7 @@ export function createImposterTier(ctx, stage, facts) {
       for (const other of crew) if (other !== n && !other.imposter) other.cheerT = 1.3;
 
       const reward = n.answer;
-      state.bolts += reward; ui.setBolts(state.bolts); ui.rewardPop();
+      ctx.wallet.add(reward);
       ui.showToast(`+${reward} 🔩`, 'good');
       // title card stays the mode name — never feedback.
       ui.setStatus(`That sign said ${n.a} × ${n.b} = ${n.shown} — but it’s really ${n.answer}!`);
@@ -147,7 +166,6 @@ export function createImposterTier(ctx, stage, facts) {
       if (!n.proven) {
         n.proven = true;
         mastery.record(n.a, n.b, false, ms);
-        ui.renderJars(mastery);
       }
       proveInnocent(n);
       ui.setStatus(`Yep, ${n.answer} — that one’s true! Keep looking…`);
@@ -166,6 +184,8 @@ export function createImposterTier(ctx, stage, facts) {
     n.espin = 8 + Math.random() * 4;
     n.hit.userData.index = -1;
     stage.dustPuff(n.group.position.x, BASE_Y - 0.4, n.group.position.z);
+    // launching a villager off the island should be felt through your feet
+    ctx.worldFeel.impulse(0.75, n.group.position.x, n.group.position.z);
   }
 
   function shatterSign(n) {
@@ -303,7 +323,7 @@ export function createImposterTier(ctx, stage, facts) {
       }
     }
 
-    // the ejected crewmate tumbles off, limbs flailing
+    // the ejected villager tumbles off, limbs flailing
     for (const n of crew) {
       if (!n.ejecting) continue;
       n.ev.y -= 26 * dt;
