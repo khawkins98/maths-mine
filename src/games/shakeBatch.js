@@ -442,6 +442,7 @@ export function createShakeBatch(ctx) {
   }
 
   function onAllRolled() {
+    speech.reset(); // the question supersedes any counting still queued
     phase = 'asking';
     round.askT = nowT();
     // the goal headline fades; the equation sign takes over as the question. The

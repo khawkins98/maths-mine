@@ -348,6 +348,9 @@ export function createBlockBuilder(ctx) {
   }
 
   function onBuilt() {
+    // drop any skip-count still queued from the build: the question is what
+    // matters now, and trailing numbers talk over it
+    speech.reset();
     phase = 'asking';
     if (moldGroup) moldGroup.visible = false;
     round.askT = nowT();
