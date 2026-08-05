@@ -2,12 +2,17 @@
 // user gesture (the wake-gate tap) — call init() there. All helpers no-op
 // silently until then, so games can call them freely.
 
-// One master gain in front of the destination. Every effect was authored at a
-// gain of roughly 0.05, which sits far below the speech-synthesis track and was
-// close to inaudible on a tablet speaker: taps on the ground could not be heard
-// at all. Trimming levels one call at a time would drift, so the whole bus is
-// lifted here instead.
-const MASTER = 2.6;
+// Every effect was authored at a gain of about 0.05, while speech synthesis
+// plays at full scale, so the two were roughly 25 dB apart: taps on the ground
+// were inaudible next to Bolt's voice. Rather than retune ~10 call sites and
+// have them drift apart again, the whole effects bus is lifted here, to a peak
+// of about 0.45 against speech's 1.0.
+//
+// A limiter sits after it because several effects deliberately overlap
+// (chordSound alone fires five notes, and a landing stacks a thud on a noise
+// burst); without one, a loud bus clips into distortion exactly at the game's
+// happiest moments.
+const MASTER = 9;
 
 export function createAudio() {
   let audio = null;
@@ -20,7 +25,14 @@ export function createAudio() {
     if (audio) {
       master = audio.createGain();
       master.gain.value = MASTER;
-      master.connect(audio.destination);
+      const limiter = audio.createDynamicsCompressor();
+      limiter.threshold.value = -8;
+      limiter.knee.value = 6;
+      limiter.ratio.value = 12;
+      limiter.attack.value = 0.003;
+      limiter.release.value = 0.15;
+      master.connect(limiter);
+      limiter.connect(audio.destination);
     }
     return audio;
   }
