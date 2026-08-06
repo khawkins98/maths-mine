@@ -1,8 +1,8 @@
 # The Maths Mine — Product Requirements Document
 
-**Status:** Prototype / vertical slice in progress
+**Status:** Prototype — all three games playable, wrapper partly built
 **Owner:** Ken
-**Last updated:** 2026-08-02
+**Last updated:** 2026-08-06
 **Document type:** Living PRD for a learning prototype (expect churn)
 
 ---
@@ -16,12 +16,14 @@ share one adaptive "mastery" engine and one friendly mascot (Bolt), so a parent
 can see which style of play actually lands for their child while the child makes
 real progress no matter which game they pick.
 
-The first game being built is **Block Builder**: the child builds a
+The anchor game is **Block Builder**, the first one built: the child builds a
 multiplication array out of Minecraft-style blocks — tapping squares (or, on a
 tablet, tilting to pour) — then answers how many blocks they built, then rotates
-the wall to *feel* that `a × b = b × a`.
+the wall to *feel* that `a × b = b × a`. It also does division, as sharing the
+same blocks into equal rows. Two more games sit alongside it, and a hub picks
+between them.
 
-This document describes the product vision, the first slice, and the roadmap.
+This document describes the product vision, what is built, and the roadmap.
 It is deliberately honest about what is proven, what is faked, and what is
 unresolved.
 
@@ -92,31 +94,38 @@ no-sensor fallback.
 ## 5. The suite
 
 Three mini-games, three *lenses* on the same skill, one shared mastery engine
-and mascot. All progress writes to the same per-fact ledger, so practicing
-`6 × 7` in any game moves the child's mastery everywhere.
+and mascot. All three are built. All progress writes to the same per-fact
+ledger, so practising `6 × 7` in any game moves the child's mastery everywhere.
 
 | Game | Metaphor | Primary input | Teaches | Status |
 |---|---|---|---|---|
 | **Block Builder** | Minecraft dirt/grass blocks | Tap squares (or tilt to pour) | Multiplication as an array; division as equal rows | **Built (× and ÷)** |
 | **Shake-a-Batch** | 3D dice | Shake (button + accelerometer) | Multiplication as equal groups | **Built** |
-| **Spot the Wrong'un** | Blocky "Nugget" crew (Bolt's cousins) | Tap to accuse | Error-detection / fact-checking | **Built (× slice)** |
+| **Spot the Wrong'un** | Blocky villager crew (Bolt's cousins) | Tap to accuse | Error-detection / fact-checking | **Built (× only, two tiers)** |
 
-A **hub** ("The Maths Mine") lets the child pick between the three built
-games; a **back-to-menu** button returns from either. Both share one mastery
+Spot the Wrong'un ships two tiers on one stage: **Judge** (one villager, one
+claim, True/False) and **Imposter** (three villagers, one fibbing sign), which
+takes over once overall mastery passes a threshold. It asks multiplication
+only.
+
+A **hub** ("The Maths Mine") lets the child pick between the three games; a
+**back-to-menu** button returns from any of them. All three share one mastery
 ledger and the mascot Bolt, who **oxidizes from shiny copper to verdigris teal
 as overall mastery grows** (Minecraft-copper inspired). The codebase is
-**modular** (`core/` shell services, `game/` shared pieces, `games/` one file
+**modular** (`core/` shell services, `game/` shared pieces, `games/` one module
 per mini-game, all behind a documented `createGame(ctx)` interface).
 
-A light wrapper ("The Maths Mine") ties them together: a hub, a shared
-currency (**Bolts**, cosmetic only), and per-table progress shown as filling
-jars. The wrapper is deferred until at least two games exist.
+The wrapper around the suite is partly built: the hub and the shared currency
+(**Bolts**, earned per correct answer and persisted) exist. Per-table progress
+shown to the child as filling jars does not — the ledger can report a per-table
+fill (`tableMastery`), but nothing draws it yet, so the child's only visible
+progress signal is Bolt's oxidation.
 
 ---
 
-## 6. Block Builder — detailed requirements (the current slice)
+## 6. Block Builder — detailed requirements
 
-### 6.1 Core loop
+### 6.1 Core loop (multiplication)
 1. **Prompt** — "Build `2 × 3`" (no answer shown; never a false equation).
 2. **Build** — the child fills a `cols × rows` array. Each **completed column
    is one group of `rows`**, and a truthful skip-count appears as groups land:
@@ -131,6 +140,20 @@ jars. The wrapper is deferred until at least two games exist.
 5. **Rotate (commutativity)** — the wall flips 90°; the total flies up big and
    survives the flip ("still 6!"), showing `a × b = b × a`.
 6. **Next.**
+
+### 6.1a Division loop (built)
+
+Same blocks, same array, different story. "Share 12 into 3 equal groups": each
+**row** is one group, so rows = the divisor and the row length is the answer.
+The child fills the array, the caption counts groups shared out (never the
+per-group size, which would give the answer away), and the question is "how
+many in each group?" — `12 ÷ 3 = ?`. There is no rotate: commutativity is not
+true of division, and faking it would teach something false. Instead the round
+ends by showing the ×/÷ fact family, so the child sees `3 × 4` and `12 ÷ 3` as
+the same fact seen from two sides.
+
+Division rounds are drawn from the same ledger record as their multiplication
+sibling, and only appear once that sibling is known (see §8).
 
 ### 6.2 Input
 - **Tap-to-place (primary, touch/mouse):** tap a square to drop a block there;
@@ -187,8 +210,10 @@ jars. The wrapper is deferred until at least two games exist.
   count unchanged — a concrete "aha."
 - **Retrieval practice:** the answer question forces recall (or at least a
   commit), which is what actually builds fluency; reading a number does not.
-- **Division (planned):** the same blocks split into equal rows/shelves is the
-  equal-sharing model, connecting `a × b` to `a·b ÷ b`.
+- **Division (built):** the same blocks shared into equal rows is the
+  equal-sharing model, connecting `a × b` to `a·b ÷ b`. Because both draw on one
+  ledger record, a child who has just built `3 × 4` meets `12 ÷ 3` soon after,
+  which is the point.
 
 ---
 
@@ -199,18 +224,25 @@ mastery model.
 
 - **Per fact** (e.g. `6×7`): correct/attempts, streak, rolling avg *answer*
   time (retrieval speed, not build speed), and a mastery level 0–4.
-- **Level up** when a fact is answered correctly on a streak and fast enough;
-  **forgiving decay** of one level on a miss.
+- **Level up** when a fact is answered correctly three times running and fast
+  enough; the level-up consumes the streak, so every level needs its own fresh
+  run of three. **Forgiving decay** of one level on a miss.
 - **Question selection:** a weighted draw favoring weak/unseen facts, with a few
   strong facts sprinkled in for confidence, and anti-repeat.
 - **Difficulty by total size, not just multiplier:** early rounds are capped by
   *number of blocks* (small totals like 2×2, 2×3), ramping the cap up with
   accuracy — so "easy" genuinely means "a short build," not "a small factor
   times ten."
-- **Table unlock order:** 2/5/10 → 3/4 → 6/8 → 9 → 7; division facts unlock
-  after their multiplication sibling.
-- **Shown to the child** as filling jars per table; never as a score or a
-  percentage. A future **parent view** exposes the real per-fact table.
+- **Table unlock order:** 2/5/10 → 3/4 → 6/8 → 9 → 7, the next tier opening
+  once ~60% of the facts asked so far are solid. Division facts share the
+  record of their multiplication sibling and unlock once that sibling is known,
+  so `12 ÷ 3` and `3 × 4` move the same number. Multipliers are capped at 6 in
+  this slice, so it is a 2–6 times-table toy, not the full grid.
+- **Shown to the child** never as a score or a percentage. Today the only
+  progress the child sees is Bolt's oxidation; the per-table "filling jars" are
+  designed but not drawn (`tableMastery(t)` returns the fill nothing renders).
+  A **parent view** over the real per-fact table now exists, behind a long-press
+  on the hub title — see §11.
 
 ---
 
@@ -218,14 +250,20 @@ mastery model.
 
 - **Stack:** three.js + Vite, plain JavaScript, no framework.
 - **Rendering:** individual block meshes sharing geometry (counts are small;
-  `InstancedMesh` is a noted future optimization). Per-face materials give the
-  grass-on-dirt look.
-- **No physics library** in the slice; blocks fall with a simple tween.
-- **Files:** `src/main.js` (scene, loop, input, juice), `src/sensors.js` (tilt
-  input + iOS permission), `src/mastery.js` (adaptive engine). See `README.md`
-  to run.
-- **Verification:** headless-browser smoke tests drive the full loop
-  (build → ask → correct/wrong → rotate → next) and assert no console errors.
+  `InstancedMesh` is a noted future optimisation, still not done). Per-face
+  materials give the grass-on-dirt look.
+- **No physics library**; blocks fall with a simple tween.
+- **Files:** `src/main.js` builds one shared `ctx` and hands it to whichever
+  game the hub (`src/hub.js`) picks. `src/core/` holds the shell services
+  (engine, ui, audio, speech, textures, blocks, pointer, timers, choices,
+  storage, world feel), `src/game/` the shared pieces (`mastery.js` the
+  adaptive ledger, `wallet.js` the Bolts, `sensors.js` tilt input + iOS
+  permission, `bolt.js` the mascot), and `src/games/` one module per mini-game
+  against the contract in `src/games/README.md`. See `README.md` to run.
+- **Verification:** headless-browser smoke tests play every game through a full
+  round (including a division round), check that leaving mid-round tears down
+  cleanly, that mastery and Bolts survive a reload, and that the answer cards
+  are not guessable by value or position — all asserting no console errors.
 
 ---
 
@@ -237,34 +275,37 @@ mastery model.
   question).
 - Drop-off points within a round (e.g. build length fatigue).
 
-For the prototype, these are observed by watching the child play plus the
-parent view, not instrumented analytics.
+For the prototype, these are observed by watching the child play — and, once
+the parent view lands, by reading the ledger — not by instrumented analytics.
 
 ---
 
 ## 11. Roadmap
 
-**Milestone 0 — Block Builder vertical slice (in progress)**
+**Milestone 0 — Block Builder vertical slice — done**
 Build → skip-count → retrieval → commutativity → next; adaptive engine; tap +
-tilt input; Minecraft/iso visuals; 3D Bolt; sounds; first-touch demo. *Mostly
-done.*
+tilt input; Minecraft/iso visuals; 3D Bolt; sounds; first-touch demo.
 
-**Milestone 1 — On-device pass**
+**Milestone 1 — On-device pass — not done**
 Tune tilt/shake thresholds on a real iPad; test tap-to-place with a real child;
-fix motor/readability issues found.
+fix motor/readability issues found. Still the biggest gap between "works" and
+"works for a child."
 
-**Milestone 2 — Division mode in Block Builder**
-Tilt/tap a pile into equal rows/shelves; wire division facts into the ledger.
+**Milestone 2 — Division mode in Block Builder — done**
+Share a pile into equal rows; division facts wired into the ledger against the
+same record as their multiplication sibling.
 
-**Milestone 3 — Game 2: Shake-a-Batch (dice / shake)**
-Validate the shake sensor and the equal-groups/dealing model.
+**Milestone 3 — Game 2: Shake-a-Batch (dice / shake) — done**
+Shake sensor plus the equal-groups model; multiplication only.
 
-**Milestone 4 — Game 3: Spot the Wrong'un (imposter)**
-Fact-checking / error-detection recall game.
+**Milestone 4 — Game 3: Spot the Wrong'un — done**
+Fact-checking / error-detection. Judge and imposter tiers, now also over ÷
+facts, with larger crews and drag-scrub inspection.
 
-**Milestone 5 — The wrapper**
-Hub, shared Bolts economy, cosmetics, parent dashboard, spaced-repetition
-scheduling.
+**Milestone 5 — The wrapper — partly done**
+Hub: done. Shared Bolts economy: earned and persisted, nothing to spend them
+on. Parent dashboard: done. Spaced-repetition scheduling: done, as a Leitner
+ladder in the ledger. Cosmetics shop: not built.
 
 ---
 
@@ -278,8 +319,9 @@ scheduling.
   consider auto-filling the tail or shortening.
 - **Does the child connect the wall to "times tables"?** The link is currently
   implicit; may need clearer framing.
-- **Which convention for division** (rows = divisor?) should be locked before
-  Milestone 2 so it's consistent across games.
+- **The convention for division is now locked:** rows = divisor, each row is
+  one shared group, and the row length is the answer. Block Builder is the only
+  game that asks division so far; anything new must match it.
 - **Reward economy:** Bolts are cosmetic-only by design; confirm that stays
   motivating without becoming a grind.
 
@@ -287,9 +329,16 @@ scheduling.
 
 ## 13. Appendix: what's real vs. faked in the current build
 
-- **Real:** tap-to-place ray-picking, the adaptive engine, retrieval scoring,
-  commutativity, Minecraft/iso rendering, 3D Bolt, sound, sensor permission flow
-  and fallback.
-- **Faked / deferred:** true block physics (simple tween instead), the workshop
-  hub, cosmetics, parent dashboard, division, spaced repetition, games 2 & 3,
-  and any on-device sensor tuning.
+- **Real:** all three games; tap-to-place ray-picking; the adaptive engine with
+  multiplication and division on one ledger; retrieval scoring; commutativity;
+  answer cards that can't be beaten by value or position; Minecraft/iso
+  rendering; 3D Bolt and his oxidation; sound; the hub; Bolts earned and
+  persisted; sensor permission flow and fallback; progress that survives a
+  reload.
+- **Also real, newly added:** the parent progress report, spaced-repetition
+  scheduling (a Leitner ladder on each fact, with the picker favouring overdue
+  ones), and Spot the Wrong'un's later tiers.
+- **Faked / deferred:** true block physics (a simple tween instead), the
+  cosmetics shop (Bolts accumulate with nothing to spend them on), the
+  per-table jars for the child, `InstancedMesh`, and any on-device sensor
+  tuning with a real tablet and a real child.

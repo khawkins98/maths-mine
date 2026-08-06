@@ -23,7 +23,7 @@ lesson; answering "how many altogether?" afterwards is the drill.
 |---|---|---|
 | 🧱 | **Block Builder** | Tap (or tilt-pour) blocks into a mould to build an `a × b` wall, answer the total, then **rotate** the wall 90° to feel that `6 × 4 = 4 × 6`. Also does division as equal sharing. |
 | 🎲 | **Shake-a-Batch** | Shake the tablet to spill groups of dice, then count them up. Same maths, completely different hands. |
-| 🕵️ | **Spot the Wrong'un** | Check facts instead of producing them. A villager holds a sign claiming `7 × 8 = 54`; the array builds in front of you and you judge it true or false. Later, three villagers and one is fibbing. |
+| 🕵️ | **Spot the Wrong'un** | Check facts instead of producing them. A villager holds a sign claiming `7 × 8 = 54`; the array builds in front of you and you judge it true or false. Once mastery is far enough along, three villagers turn up and one of them is fibbing. |
 
 All three share one ledger, so practising `6 × 7` anywhere moves mastery
 everywhere.
@@ -58,6 +58,25 @@ default and is the easiest way to get real tilt and shake working on an iPad.
 No sensors, or permission denied? Every game falls back to press-and-drag, which
 is also the desktop path — nothing is sensor-only.
 
+## The progress report (for grown-ups)
+
+The child only ever sees Bolt slowly oxidising. To see the real ledger — which
+facts are strong, which are shaky, which the game wants to ask next, and the
+lifetime accuracy — **press and hold the title "The Maths Mine" on the
+game-picker screen for about a second and a half.** It's a deliberate hold
+rather than a tap, so a child can't land on it by accident, and it only works on
+the picker, never mid-game.
+
+The report is honest about how little it knows. With a handful of answers
+recorded it says so at the top instead of drawing a confident-looking chart, and
+it separates the practice meters (which move within a single session, by design)
+from the stricter count of facts actually known.
+
+It also holds **Erase all progress**, behind an in-page confirmation. Worth
+knowing if a second child starts using the same tablet — otherwise they inherit
+the first child's ledger and the questions come out wrong for both of them. That
+clears facts, levels and bolts together.
+
 ## Deploying
 
 Pushing to `main` builds the site and publishes it to GitHub Pages, but only
@@ -79,8 +98,11 @@ toward verdigris teal as mastery grows. Nobody has to explain what that means.
 
 **Adaptive, but not clever.** `src/game/mastery.js` tracks correctness, streak
 and speed per fact, aims for a ~75–85% success rate, and unlocks tables in a
-pedagogical order (2/5/10, then 3/4, then 6/8, 9, and 7 last). No ML, about 300
-readable lines. Progress persists to `localStorage`.
+pedagogical order (2/5/10, then 3/4, then 6/8, 9, and 7 last). A division fact
+shares the record of its multiplication sibling and only shows up once that
+sibling is known, so `12 ÷ 3` and `3 × 4` are one thing being learned, not two.
+Multipliers stop at 6 for now. No ML, a few hundred readable lines. Progress
+persists to `localStorage`.
 
 **Truthful counting.** Skip-counts shown while building are always real
 (`2 groups of 3 = 6`), never a count-by-ones dressed up as multiplication and
@@ -98,12 +120,14 @@ src/
   main.js              bootstrap: builds ctx, wires the wake gate, starts the hub
   hub.js               the game picker
   core/                shared shell — engine, ui, audio, speech, textures,
-                       timers, blocks, pointer, ease
-  game/                shared game pieces — mastery ledger, tilt input, Bolt
+                       timers, blocks, pointer, choices, storage, world feel,
+                       ease
+  game/                shared game pieces — mastery ledger, Bolts wallet,
+                       tilt input, Bolt
   games/
     blockBuilder.js
     shakeBatch.js
-    spotWrongun/       two tiers on one shared stage
+    spotWrongun/       tiered judge/imposter rounds on one shared stage
     README.md          ← the game-module contract; read this first
 ```
 
@@ -118,15 +142,25 @@ survives a reload. The games expose `window.__*` debug hooks for exactly this
 reason — a headless browser can't be tilted or shaken, and pixel-hunting a WebGL
 canvas isn't a test.
 
+Alongside it: `mastery.spec.js` exercises the ledger and its scheduler as pure
+logic against a fake clock (no browser needed), `spotWrongun.spec.js` covers the
+later tiers, and `parentDashboard.spec.js` checks the report's numbers against
+the ledger it claims to be reporting.
+
 ## Status
 
 A working prototype, not a product. Built for one child, shared in case it's
 useful to someone else.
 
-Not built: a cosmetics shop, a parent dashboard, spaced-repetition scheduling,
-and Spot the Wrong'un's later tiers (÷ facts, larger crews, drag-scrub).
-`InstancedMesh` is a noted future optimisation — block counts are small enough
-that it hasn't mattered.
+Newly added: a parent progress report, spaced-repetition scheduling in the
+ledger, and Spot the Wrong'un's later tiers (÷ facts, larger crews,
+drag-scrub).
+
+Not built: a cosmetics shop — Bolts pile up with nothing to spend them on — and
+the per-table "filling jars" for the child, so Bolt's oxidation is the only
+progress the child sees. `InstancedMesh` is a noted future optimisation; block
+counts are small enough that it hasn't mattered. Nothing has been tuned on a
+real tablet with a real child yet, which is the gap that matters most.
 
 See [PRD.md](PRD.md) for the full product thinking, including what's proven,
 what's faked, and what's unresolved.
