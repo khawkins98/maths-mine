@@ -8,8 +8,13 @@
 //
 //   • TIER 1 "JUDGE" (default) — one villager, one claim, ✓ True / ✗ False.
 //     See ./judge.js.
-//   • TIER 2 "IMPOSTER" (advanced) — three villagers, one fibbing sign, tap to
-//     eject it. Unlocks past IMPOSTER_THRESHOLD. See ./imposter.js.
+//   • TIER 2 "IMPOSTER" (advanced) — a crew of villagers, one fibbing sign, tap
+//     (or drag and release) to eject it. Unlocks past IMPOSTER_THRESHOLD, and
+//     the crew grows with mastery from there. See ./imposter.js.
+//
+// Both tiers can put a DIVISION claim on a sign ("42 ÷ 6 = 8"), but only for a
+// fact whose × sibling the ledger has already unlocked — the gate is the
+// ledger's, not ours; see ./facts.js.
 //
 // This file is the shell only: it builds the stage, picks a tier, routes input
 // and the Next button to whichever tier is active, and tears everything down.
@@ -46,16 +51,40 @@ export function createSpotWrongun(ctx) {
   // ---------- input ----------
   // Only the imposter tier is pickable in 3D; the judge tier answers through the
   // DOM True/False buttons, so pointer events are simply ignored there.
-  const onMove = (x, y) => {
-    if (tierName !== 'imposter' || stage.state.phase !== 'accusing') return;
-    tiers.imposter.setHover(tiers.imposter.pick(x, y));
-  };
+  //
+  // DRAG-SCRUB. The accusation moved from pointer-DOWN to pointer-UP so a child
+  // can hold a finger on the crew, slide along it reading each sign, and only
+  // commit where they lift. A tap is the degenerate case of exactly that — press
+  // and release on one villager — so tap-only play is unchanged and complete,
+  // and sliding off the crew before lifting is a free cancel.
+  let scrubbing = false;
+  let scrubSeat = -1;
+  const live = () => tierName === 'imposter' && stage.state.phase === 'accusing';
+
   const onDown = (x, y) => {
-    if (tierName !== 'imposter' || stage.state.phase !== 'accusing') return;
-    const i = tiers.imposter.pick(x, y);
-    if (i >= 0) tiers.imposter.accuse(i);
+    if (!live()) return;
+    scrubbing = true;
+    scrubSeat = tiers.imposter.pick(x, y);
+    tiers.imposter.inspect(scrubSeat);
   };
-  const input = createPointerInput(dom, { onDown, onMove });
+  const onMove = (x, y) => {
+    if (!live()) return;
+    const i = tiers.imposter.pick(x, y);
+    // A mouse with no button down still gets the cheap hover highlight; a held
+    // finger gets the full inspection.
+    if (scrubbing) { scrubSeat = i; tiers.imposter.inspect(i); }
+    else tiers.imposter.setHover(i);
+  };
+  const onUp = () => {
+    if (!scrubbing) return;
+    scrubbing = false;
+    const seat = scrubSeat;
+    scrubSeat = -1;
+    tiers.imposter.endInspect();
+    if (live() && seat >= 0) tiers.imposter.accuse(seat);
+  };
+  const input = createPointerInput(dom, { onDown, onMove, onUp });
+  const stopScrub = () => { scrubbing = false; scrubSeat = -1; };
 
   // ---------- buttons ----------
   const onConfirm = () => {
@@ -63,7 +92,7 @@ export function createSpotWrongun(ctx) {
     active().newRound();
   };
   const onRecenter = () => ui.showToast(
-    tierName === 'imposter' ? 'Just tap the wrong sign!' : 'Tap True or False!', 'good',
+    tierName === 'imposter' ? 'Tap the wrong sign — or drag to read them!' : 'Tap True or False!', 'good',
   );
 
   // ---------- per-frame ----------
@@ -82,6 +111,7 @@ export function createSpotWrongun(ctx) {
   // ---------- tier control ----------
   function switchTo(name) {
     if (name !== 'judge' && name !== 'imposter') return;
+    stopScrub(); // a finger held across a tier switch must not accuse into the new round
     for (const t of Object.values(tiers)) t.reset();
     stage.clearRound();
     stage.root.rotation.y = 0;
@@ -95,14 +125,24 @@ export function createSpotWrongun(ctx) {
       tier: tierName,
       phase: stage.state.phase,
       bolts: ctx.wallet.bolts,
+      scrubbing,
       ...active().debugState(),
     });
     window.__judge = (bool) => tiers.judge.judgeTap(!!bool);
     window.__accuse = (i) => tiers.imposter.accuse(i);
     window.__stwTier = (name) => { forcedTier = name; switchTo(name); };
+    // Crew size and operation are normally earned from the ledger; a test needs
+    // to reach a tier state without first playing its way there.
+    window.__stwCrew = (n) => { tiers.imposter.setSize(n); switchTo('imposter'); };
+    window.__stwOp = (op) => { for (const t of Object.values(tiers)) t.setOp(op); };
+    // Screen coordinates of a villager, so a headless browser can aim REAL
+    // pointer events at the crew instead of calling the tier directly — which
+    // is the only way drag-scrub gets tested at all.
+    window.__stwSeatXY = (i) => tiers.imposter.seatScreenPos(i);
   }
   function clearDebug() {
-    for (const k of ['__stw', '__judge', '__accuse', '__stwTier']) {
+    for (const k of ['__stw', '__judge', '__accuse', '__stwTier',
+      '__stwCrew', '__stwOp', '__stwSeatXY']) {
       try { delete window[k]; } catch (_) { window[k] = undefined; }
     }
   }
@@ -126,6 +166,7 @@ export function createSpotWrongun(ctx) {
 
   function teardown() {
     ctx.speech.reset(); // a child leaving must not hear the old round finish
+    stopScrub();        // …nor have a lifted finger accuse a torn-down crew
     input.detach();
     ui.els.btnConfirm.removeEventListener('click', onConfirm);
     ui.els.btnRecenter.removeEventListener('click', onRecenter);

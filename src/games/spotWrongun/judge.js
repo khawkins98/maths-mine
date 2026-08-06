@@ -9,6 +9,13 @@
 // is swapped to the confirmed true fact. There is no fail state: a wrong
 // judgment gets the identical gentle count-and-correct, and the framing is
 // always that the SIGN was fibbing, never the child.
+//
+// DIVISION rounds are the same round with a different claim: "42 ÷ 6 = 8", and
+// an array laid out as EQUAL SHARING — one row per group, exactly as Block
+// Builder shares a dividend out — so the proof the child counts answers the
+// question that was actually asked ("how many in each group?") rather than a
+// product they were never shown. The ledger decides whether a division round is
+// even available; see facts.js.
 
 import * as THREE from 'three';
 
@@ -24,13 +31,15 @@ const WALL_CX = 1.3;
 
 export function createJudgeTier(ctx, stage, facts) {
   const { camera, engine, audio, speech, ui, bolt, mastery } = ctx;
-  const speak = speech.speak, eqWords = speech.eqWords, pickPhrase = speech.pickPhrase;
+  const speak = speech.speak, eqWords = speech.eqWords, divWords = speech.divWords;
+  const pickPhrase = speech.pickPhrase;
   const nowT = engine.nowT;
   const { later, state } = stage;
 
-  let jr = null;   // the round: { a,b,claim,isTrue,answer,cols,rows,nugget,blocks,… }
+  let jr = null;   // the round: { op,a,b,claim,isTrue,answer,cols,rows,nugget,blocks,… }
   let judgeNo = 0;
   let trueRun = 0, falseRun = 0;
+  let forcedOp = null; // debug: pin × or ÷ across rounds
 
   const wallHalf = (cols) => (cols * CELL) / 2;
   const nugXFor = (cols) => WALL_CX - wallHalf(cols) - 2.0;
@@ -57,22 +66,38 @@ export function createJudgeTier(ctx, stage, facts) {
     jr = null;
     judgeNo++;
 
-    // Draw a fact (mastery already biases to shakier facts). Half true / half a
-    // plausible-neighbour fib — alternate so both appear predictably.
-    const q = mastery.nextQuestion({ op: 'mul' });
-    const a = q.a, b = q.b, answer = a * b;
+    // Draw a fact (mastery already biases to shakier facts). Division rounds
+    // alternate in as soon as the ledger has unlocked any — never sooner, and
+    // never by our own rule: facts.drawDiv() returns null unless the ÷ form has
+    // genuinely earned its place.
+    const wantDiv = forcedOp === 'div'
+      || (forcedOp !== 'mul' && judgeNo % 2 === 0 && facts.divisionReady());
+    const div = wantDiv ? facts.drawDiv() : null;
+    const q = div || mastery.nextQuestion({ op: 'mul' });
+
+    // `a,b` are the CANONICAL factors in every case — the pair record() scores —
+    // which for a share-out are not the two numbers printed on the sign.
+    const a = q.a, b = q.b;
+    const op = div ? 'div' : 'mul';
+    const answer = div ? div.quotient : a * b;
+
     // Not an alternation. It used to be `judgeNo % 2`, so round one of every
     // session was always True and the rest strictly alternated - a child who
     // noticed could score full marks without reading the sign. Random, but
     // nudged away from long runs of the same verdict.
     const isTrue = trueRun >= 2 ? false : (falseRun >= 2 ? true : Math.random() < 0.5);
     if (isTrue) { trueRun++; falseRun = 0; } else { falseRun++; trueRun = 0; }
-    const claim = isTrue ? answer : facts.plausibleWrong(a, b, judgeNo);
+    const claim = isTrue ? answer
+      : (div ? facts.plausibleWrongQuotient(div.quotient, judgeNo)
+        : facts.plausibleWrong(a, b, judgeNo));
 
-    // Normalise the wall to WIDE-and-SHORT (bigger factor across) so it stays
+    // × normalises the wall to WIDE-and-SHORT (bigger factor across) so it stays
     // readable and never towers over the Nugget; the array total is identical
     // either way and the skip-count still lands on the true product.
-    const cols = Math.max(a, b), rows = Math.min(a, b);
+    // ÷ has no such freedom: one ROW per group is the whole idea of sharing, so
+    // the row count is the divisor even when that makes a tall, narrow wall.
+    const cols = div ? div.quotient : Math.max(a, b);
+    const rows = div ? div.divisor : Math.min(a, b);
     const nugX = nugXFor(cols);
 
     // the villager stands beside the wall it is making a claim about
@@ -82,7 +107,13 @@ export function createJudgeTier(ctx, stage, facts) {
     stage.crewGroup.add(g);
 
     jr = {
-      a, b, answer, claim, isTrue, cols, rows,
+      op, a, b, answer, claim, isTrue, cols, rows,
+      dividend: div && div.dividend, divisor: div && div.divisor,
+      // what the sign says, in the child's reading order
+      claimText: div ? `${div.dividend} ÷ ${div.divisor} = ${claim}`
+        : `${a} × ${b} = ${claim}`,
+      truthText: div ? `${div.dividend} ÷ ${div.divisor} = ${answer}`
+        : `${a} × ${b} = ${answer}`,
       nugget: {
         group: g, joints: g.userData.joints,
         groupBaseY: BASE_Y,
@@ -103,12 +134,19 @@ export function createJudgeTier(ctx, stage, facts) {
     ui.hideBigTotal();
     ui.setTally('');
     ui.els.btnRecenter.style.display = 'none';
-    ui.setStatus('Watch the emeralds — is the villager telling the truth?');
+    ui.setStatus(div
+      ? 'Watch them share the emeralds out — is the villager telling the truth?'
+      : 'Watch the emeralds — is the villager telling the truth?');
     bolt.say('Is this villager telling the truth?', 'wow');
-    speak(pickPhrase([
-      `This villager says ${a} times ${b} is ${claim}. Let's count and check!`,
-      `Is ${a} times ${b} really ${claim}? Let's build it and see!`,
-    ]));
+    speak(div
+      ? pickPhrase([
+        `This villager says ${divWords(div.dividend, div.divisor)} is ${claim}. Let's share them out and check!`,
+        `Is ${divWords(div.dividend, div.divisor)} really ${claim}? Let's share and see!`,
+      ])
+      : pickPhrase([
+        `This villager says ${a} times ${b} is ${claim}. Let's count and check!`,
+        `Is ${a} times ${b} really ${claim}? Let's build it and see!`,
+      ]));
 
     state.phase = 'building';
     buildArray();
@@ -119,8 +157,13 @@ export function createJudgeTier(ctx, stage, facts) {
     let r = 0;
     const stepRow = () => {
       const { cols, rows } = jr;
-      // the row that WAS the top loses its grass as this new one lands on it
-      if (r > 0) for (let cc = 0; cc < cols; cc++) stage.setCapGrass(jr.blocks[(r - 1) * cols + cc], false);
+      // the row that WAS the top loses its grass as this new one lands on it.
+      // Not for a share-out: there every row is its own GROUP, and keeping the
+      // grassy lip on all of them is what makes the layers read as separate
+      // plots rather than one undivided wall.
+      if (r > 0 && jr.op !== 'div') {
+        for (let cc = 0; cc < cols; cc++) stage.setCapGrass(jr.blocks[(r - 1) * cols + cc], false);
+      }
       for (let c2 = 0; c2 < cols; c2++) {
         const blk = stage.makeBlock();
         const p = judgeCellPos(c2, r, cols);
@@ -133,12 +176,20 @@ export function createJudgeTier(ctx, stage, facts) {
         stage.blockPops.push(blk);
         stage.dustPuff(p.x, p.y - 0.3, 0.3);
       }
-      const running = (r + 1) * cols;
       audio.groupChime(r + 1);
-      // order-neutral running count while it builds (avoid printing a flipped
-      // "rows × cols" that contradicts the claim's "a × b" order on the sign)
-      ui.setTally(`… ${running}`);
-      speak(`${running}.`);
+      if (jr.op === 'div') {
+        // A share-out must NOT skip-count to the total: the total is the one
+        // number the child already has (it is on the sign), and the thing under
+        // question is the size of a group. So count groups filled, never blocks.
+        ui.setTally(`${r + 1} of ${rows} groups shared`);
+        speak(`${r + 1} group${r ? 's' : ''} shared.`);
+      } else {
+        const running = (r + 1) * cols;
+        // order-neutral running count while it builds (avoid printing a flipped
+        // "rows × cols" that contradicts the claim's "a × b" order on the sign)
+        ui.setTally(`… ${running}`);
+        speak(`${running}.`);
+      }
       r++;
       if (r < rows) later(stepRow, 560);
       else later(onBuilt, 640);
@@ -160,10 +211,10 @@ export function createJudgeTier(ctx, stage, facts) {
     ui.setTally('');
     // the CLAIM gets its big DOM home directly above the True/False buttons —
     // the biggest text on screen during the question.
-    ui.setClaim(`${jr.a} × ${jr.b} = ${jr.claim}`);
+    ui.setClaim(jr.claimText);
     // ONE copy of the question cue lives in the helper line; Bolt gets a
     // different idle line so "Is that right?" never appears twice.
-    ui.setStatus('Is that right?');
+    ui.setStatus(jr.op === 'div' ? 'How many in each group — is that right?' : 'Is that right?');
     bolt.say('You be the judge!', 'wow');
     speak(pickPhrase([
       `It says ${jr.claim}. Is that right? True, or false?`,
@@ -192,7 +243,9 @@ export function createJudgeTier(ctx, stage, facts) {
     later(() => ui.fadeChoices(), 600);
 
     if (correct) {
-      const reward = jr.answer;
+      // the emeralds on the stage, however they are arranged — so a share-out
+      // pays what it is worth rather than the (much smaller) group size
+      const reward = jr.cols * jr.rows;
       ctx.wallet.add(reward);
       ui.showToast(`+${reward} 🔩`, 'good');
     }
@@ -205,8 +258,30 @@ export function createJudgeTier(ctx, stage, facts) {
     countReveal(() => showVerdict(correct));
   }
 
+  // Prove a share-out by counting ONE group, block by block. Skip-counting the
+  // whole array would prove the dividend, which was never in doubt — the claim
+  // under test is how many each group got, so that is what gets counted.
+  function countGroupReveal(done) {
+    let c = 0;
+    const step = () => {
+      const blk = jr.blocks[c]; // row 0 is the bottom group
+      if (blk) { blk.userData.pop = 0; stage.blockPops.push(blk); }
+      c++;
+      audio.groupChime(c);
+      ui.setTally(`… ${c}`);
+      speak(`${c}.`);
+      if (c < jr.cols) later(step, 300);
+      else later(() => {
+        ui.setTally(`${jr.cols} in each group`);
+        done && done();
+      }, 460);
+    };
+    later(step, 250);
+  }
+
   // pulse the array row by row, re-skip-counting to the REAL total.
   function countReveal(done) {
+    if (jr.op === 'div') return countGroupReveal(done);
     let g = 0;
     const step = () => {
       g++;
@@ -228,11 +303,14 @@ export function createJudgeTier(ctx, stage, facts) {
   }
 
   function showVerdict(correct) {
-    const { a, b, answer, claim, isTrue } = jr;
+    const { a, b, answer, claim, isTrue, op, dividend, divisor } = jr;
     // THE HERO: the claim headline is rewritten to the confirmed TRUE fact and
     // pops, so a fib is visibly corrected in the place the child was reading.
-    ui.setClaim(`${a} × ${b} = ${answer}`);
+    ui.setClaim(jr.truthText);
     ui.popClaim();
+
+    // the fact said aloud, in the operation the child was actually asked about
+    const words = (ans) => (op === 'div' ? divWords(dividend, divisor, ans) : eqWords(a, b, ans));
 
     // status: personality only, NO equation.
     if (isTrue) {
@@ -242,14 +320,14 @@ export function createJudgeTier(ctx, stage, facts) {
       bolt.say(correct ? 'Nice eye — honest!' : `Tricky one — look, it’s ${answer}.`, 'happy');
       speak(pickPhrase([
         `Let's count… ${answer}! The sign was telling the truth!`,
-        `${eqWords(a, b, answer)}. That villager was honest!`,
+        `${words(answer)}. That villager was honest!`,
       ]));
     } else {
       ui.setStatus('Fixed it!');
       bolt.say(correct ? 'You spotted the fib!' : `Tricky one — look, it’s ${answer}.`, 'happy');
       speak(pickPhrase([
-        `Let's count… ${answer}! So ${a} times ${b} is ${answer}, not ${claim}. That sign was fibbing!`,
-        `${eqWords(a, b, answer)} — not ${claim}. We caught the fib!`,
+        `Let's count… ${answer}! So ${words()} is ${answer}, not ${claim}. That sign was fibbing!`,
+        `${words(answer)} — not ${claim}. We caught the fib!`,
       ]));
     }
 
@@ -286,12 +364,17 @@ export function createJudgeTier(ctx, stage, facts) {
   // what the headless smoke test reads
   function debugState() {
     return {
-      a: jr && jr.a, b: jr && jr.b,
-      claim: jr && jr.claim, isTrue: jr && jr.isTrue, answer: jr && jr.answer,
+      op: jr && jr.op, a: jr && jr.a, b: jr && jr.b,
+      dividend: jr && jr.dividend, divisor: jr && jr.divisor,
+      cols: jr && jr.cols, rows: jr && jr.rows,
+      claim: jr && jr.claim, claimText: jr && jr.claimText,
+      isTrue: jr && jr.isTrue, answer: jr && jr.answer,
+      blocks: jr ? jr.blocks.length : 0,
     };
   }
 
   function reset() { jr = null; }
+  function setOp(op) { forcedOp = (op === 'mul' || op === 'div') ? op : null; }
 
-  return { id: 'judge', newRound, update, judgeTap, debugState, reset };
+  return { id: 'judge', newRound, update, judgeTap, debugState, reset, setOp };
 }
