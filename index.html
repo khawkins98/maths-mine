@@ -448,6 +448,126 @@
       }
       #finger.tap { animation: fingerTap 0.4s ease; }
       @keyframes fingerTap { 0%,100%{ transform: translate(-50%,-50%) scale(1);} 45%{ transform: translate(-50%,-50%) scale(0.6);} }
+
+      /* ---- parent dashboard (src/game/parentDashboard.js) ----
+         Reached only by pressing and holding the hub title, so nothing here is
+         ever on a child's screen. It deliberately does NOT wear the voxel skin:
+         the wooden planks and pixel frames are the child's visual language and
+         they cost contrast, and the legibility audit was about exactly that.
+         This is a document, read by an adult on a tablet in bad light — so:
+         near-black ink on parchment, the system body face (not the display
+         faces), 17px minimum, and nothing whose meaning is carried by colour
+         alone (every level cell also prints its level as a digit). */
+      #parent-dash {
+        position: fixed; inset: 0; z-index: 60;
+        display: flex; align-items: center; justify-content: center;
+        padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+        background: rgba(8, 6, 3, 0.72);
+        font-family: var(--body);
+        /* the rest of the app forbids selection so a child cannot smear a
+           text cursor over the HUD; a parent reading a report may well want to
+           copy a number out of it. */
+        -webkit-user-select: text; user-select: text;
+      }
+      #parent-dash .pd-panel {
+        width: min(960px, 100%); max-height: 100%;
+        display: flex; flex-direction: column;
+        background: #fbf5e6; color: #1d160c;
+        border: 4px solid var(--wood-dark);
+        box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+        font-size: 17px; line-height: 1.5;
+      }
+      #parent-dash :focus-visible { outline: 3px solid #12429e; outline-offset: 2px; }
+      .pd-head {
+        display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+        padding: 14px 18px; border-bottom: 3px solid #d8ccae; background: #f2e6c9;
+      }
+      .pd-head h2 { margin: 0; font-size: 26px; letter-spacing: 0.2px; }
+      .pd-sub { margin: 2px 0 0; font-size: 15px; color: #5a4a30; }
+      .pd-scroll {
+        overflow-y: auto; overscroll-behavior: contain;
+        /* body sets touch-action:none for the 3D scene; without this the panel
+           cannot be scrolled by a finger at all, which on a tablet means the
+           bottom half of the report does not exist. */
+        touch-action: pan-y;
+        padding: 16px 18px 26px;
+      }
+      .pd-scrollx { overflow-x: auto; touch-action: pan-x pan-y; }
+      #parent-dash h3 {
+        margin: 26px 0 8px; font-size: 20px;
+        border-bottom: 2px solid #e0d4b6; padding-bottom: 4px;
+      }
+      #parent-dash p { margin: 8px 0; }
+      .pd-fine { font-size: 15px; color: #52422a; }
+      .pd-warn {
+        border-left: 6px solid #b3541e; background: #fdeedd;
+        padding: 10px 14px; font-size: 16px;
+      }
+      .pd-flash { border-left: 6px solid var(--good-dark); background: #e6f6e9; padding: 10px 14px; }
+      .pd-sr {
+        position: absolute; width: 1px; height: 1px; overflow: hidden;
+        clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+      }
+
+      /* headline numbers */
+      .pd-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 14px 0 4px; }
+      .pd-tile { border: 2px solid #ddd0b0; background: #fff; padding: 10px 12px; display: flex; flex-direction: column; }
+      .pd-tile .pd-tk { font-size: 14px; text-transform: uppercase; letter-spacing: 0.6px; color: #5a4a30; }
+      .pd-tile b { font-family: var(--num); font-size: 34px; line-height: 1.1; }
+      .pd-note { font-size: 14px; color: #52422a; }
+
+      /* per-fact grid */
+      table.pd-grid, table.pd-list { border-collapse: collapse; width: 100%; }
+      table.pd-grid th, table.pd-list th, table.pd-list td { text-align: left; padding: 6px 8px; }
+      table.pd-grid th, table.pd-list thead th { font-size: 15px; color: #3d3120; }
+      table.pd-list tbody th, table.pd-list td { border-top: 1px solid #e3d8bd; font-size: 16px; }
+      table.pd-list tbody th { font-family: var(--num); white-space: nowrap; }
+      .pd-thin { color: #8a3d13; font-size: 14px; }
+      .pd-cell, .pd-swatch {
+        position: relative;
+        font-family: var(--num); font-weight: 700; font-size: 17px;
+        text-align: center; color: #1d160c;
+        border: 2px solid #fbf5e6; min-width: 38px; padding: 8px 4px;
+      }
+      /* Colour is a fast scan aid, never the message: the digit in the cell is
+         the level, and the cell's aria-label spells the whole fact out. */
+      .pd-unseen { background: repeating-linear-gradient(45deg, #e6ddca 0 4px, #dcd2bb 4px 8px); color: #6a5c44; }
+      .pd-l0 { background: #f3b2a0; }
+      .pd-l1 { background: #f8cd97; }
+      .pd-l2 { background: #f3e394; }
+      .pd-l3 { background: #b6e2a1; }
+      .pd-l4 { background: #7fcb92; }
+      .pd-due::after {
+        content: ''; position: absolute; top: 3px; right: 3px;
+        width: 8px; height: 8px; border-radius: 50%;
+        background: #1d160c;
+      }
+      .pd-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 10px 0 0; padding: 0; font-size: 15px; }
+      .pd-legend li { display: flex; align-items: center; gap: 6px; }
+      .pd-swatch { display: inline-block; min-width: 30px; padding: 4px 2px; border-color: #cfc4a8; }
+
+      /* per-table jar meters */
+      /* the flex row lives in a wrapper, not on the cell: a display:flex <td>
+         drops out of the table's column sizing and drags the columns after it
+         out of alignment with their own headers. */
+      .pd-barcell { width: 34%; min-width: 170px; }
+      .pd-barwrap { display: flex; align-items: center; gap: 10px; }
+      .pd-bar { flex: 1; height: 16px; background: #e3d8bd; border: 1px solid #c9bd9c; display: block; }
+      .pd-bar::before { content: ''; display: block; height: 100%; width: var(--fill); background: var(--brand); }
+      .pd-barnum { font-family: var(--num); font-weight: 700; min-width: 46px; text-align: right; }
+
+      /* controls */
+      .pd-btn {
+        font-family: var(--body); font-size: 17px; font-weight: 700;
+        min-height: 48px; padding: 10px 18px; cursor: pointer;
+        color: #3a2200; border: 3px solid var(--wood-dark); border-radius: 0;
+        background: linear-gradient(180deg, #ffd35a, #f0ad2a);
+      }
+      .pd-btn:active { transform: translateY(2px); }
+      .pd-close { white-space: nowrap; }
+      .pd-danger { border: 3px solid #8f2f1c; background: #fdeae5; padding: 12px 14px; }
+      .pd-row { display: flex; flex-wrap: wrap; gap: 10px; }
+      .pd-btn-danger { background: #b3341c; color: #fff; border-color: #6d1e0f; }
     </style>
   </head>
   <body>
