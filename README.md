@@ -79,9 +79,25 @@ clears facts, levels and bolts together.
 
 ## Deploying
 
-Pushing to `main` builds the site and publishes it to GitHub Pages, but only
-after the smoke tests pass (`.github/workflows/ci.yml`). Enable it once, at
-**Settings → Pages → Build and deployment → Source: GitHub Actions**.
+Pushing to `main` builds the site and force-pushes it to the `gh-pages` branch,
+but only after the smoke tests pass (`.github/workflows/ci.yml`). Enable it
+once, at **Settings → Pages → Build and deployment → Source: Deploy from a
+branch → `gh-pages` / `(root)`**.
+
+`gh-pages` holds build output and nothing else. It's force-pushed every deploy,
+so never author anything on it.
+
+Publishing a branch rather than uploading an Actions artifact is deliberate:
+the artifact route ties publishing to a green Actions run, so when Actions is
+unavailable there's no way to ship at all. A branch can be pushed by hand from
+a laptop:
+
+```bash
+npm run build
+cd dist && touch .nojekyll
+git init -b gh-pages && git add -A && git commit -m "Publish"
+git push -f https://github.com/<user>/maths-mine.git gh-pages:gh-pages
+```
 
 Asset paths are relative (`base: './'` in `vite.config.js`), so the build works
 from a project subpath like `https://<user>.github.io/maths-mine/` as well as
