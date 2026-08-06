@@ -20,6 +20,48 @@ const TABLE_TIERS = [
 ];
 
 const LEVEL_MS = [Infinity, 9000, 6000, 4000, 3000]; // speed bar per mastery level
+
+// ---- spaced repetition ladder ----
+//
+// Leitner-style: every fact carries `interval` (how long it rests) and `due`
+// (when it wants asking again). A correct answer promotes it one rung; a wrong
+// answer drops it all the way back to the first rung.
+//
+// The rungs are picked for a ~7-year-old doing SHORT sessions (five or ten
+// minutes on a tablet, most days but not every day), which is a very different
+// shape from an adult's flashcard deck:
+//
+//   45s   — a couple of questions later in the same breath. A fact just missed
+//           should come back while the correction is still in mind, but not as
+//           the literal next question (anti-repeat via lastKey handles that).
+//   3min  — later in the SAME session. Long enough that it is recall, not echo.
+//   12min — the tail of a session, or the start of the next one if the session
+//           was short. This is the rung most facts live on for a while.
+//   1 day — the next session. The first rung that genuinely spans a night's
+//           sleep, which is where the consolidation actually happens.
+//   3 days / 7 days — maintenance. Beyond a week a fact this size is either
+//           known or has been re-met at school, so the ladder stops there
+//           rather than pretending to a month-scale schedule we cannot verify.
+//
+// Six rungs means a fact answered correctly every session is "put away" after
+// roughly five clean meetings, which matches how the level bar (0..4) moves.
+const LADDER = [
+  45 * 1000,
+  3 * 60 * 1000,
+  12 * 60 * 1000,
+  24 * 60 * 60 * 1000,
+  3 * 24 * 60 * 60 * 1000,
+  7 * 24 * 60 * 60 * 1000,
+];
+const FIRST_INTERVAL = LADDER[0];
+
+// Next rung up from whatever interval a record currently holds. Derived rather
+// than stored as an index, so a save carrying a hand-edited or legacy interval
+// still lands somewhere sane instead of on an out-of-range rung.
+function promoteInterval(interval) {
+  for (const rung of LADDER) if (rung > interval) return rung;
+  return LADDER[LADDER.length - 1];
+}
 const ASK_MAX = 6; // largest multiplier we ever ask in this slice (bounds ramp math too)
 const DIV_UNLOCK_LEVEL = 1; // a fact's ÷ variant unlocks once its × sibling reaches this level
 const OXIDATION_TARGET = 20; // correct answers for Bolt to fully oxidise (0..1 progress)
@@ -29,8 +71,13 @@ function factKey(a, b) {
   return a <= b ? `${a}x${b}` : `${b}x${a}`;
 }
 
-// Where a child's progress lives between sessions. Bumped if the record shape
-// ever changes, which discards the old save rather than half-reading it.
+// Where a child's progress lives between sessions.
+//
+// Deliberately NOT bumped when scheduling (`due`/`interval`) was added: a real
+// child has real progress under this key, and a bump throws it away. The new
+// fields are optional on read — a v1 record without them loads with every old
+// field intact and is simply treated as due now, which is the honest default
+// for a fact whose schedule we never knew.
 const SAVE_KEY = 'mastery.v1';
 
 export class MasteryStore {
@@ -38,7 +85,12 @@ export class MasteryStore {
   // (which is what the tests want, and what a browser with storage blocked
   // gives us anyway). Progress loads on construction and saves after every
   // recorded answer — a child closing the tab mid-session loses nothing.
-  constructor({ storage = localStore() } = {}) {
+  //
+  // `now` is the clock, injected the same way `storage` is: every time read in
+  // this file goes through it, so a test can drive days of scheduling in a
+  // millisecond and nothing here ever touches the wall clock directly.
+  constructor({ storage = localStore(), now = () => Date.now() } = {}) {
+    this._now = now;
     this.facts = new Map();
     this.unlockedTiers = 1; // start with 2/5/10 only
     this.recent = [];       // rolling window of last outcomes (bool)
@@ -70,6 +122,7 @@ export class MasteryStore {
       if (!d || !Array.isArray(d.facts)) return false;
 
       const num = (v, fallback = 0) => (Number.isFinite(v) ? v : fallback);
+      const now = this._now();
       const facts = new Map();
       for (const entry of d.facts) {
         if (!Array.isArray(entry) || entry.length !== 2) continue;
@@ -81,6 +134,12 @@ export class MasteryStore {
           correct: num(r.correct), attempts: num(r.attempts), streak: num(r.streak),
           level: Math.max(0, Math.min(4, num(r.level))),
           avgMs: num(r.avgMs), seen: num(r.seen),
+          // Scheduling is optional on read. A pre-scheduling save (or a
+          // corrupt/negative interval) becomes "due now, shortest rung":
+          // the fact gets asked, answered, and schedules itself properly from
+          // there. Never trust the stored numbers any more than the old ones.
+          due: num(r.due, now),
+          interval: Math.max(FIRST_INTERVAL, num(r.interval, FIRST_INTERVAL)),
         });
       }
 
@@ -112,6 +171,8 @@ export class MasteryStore {
       this.facts.set(k, {
         a: Math.min(a, b), b: Math.max(a, b),
         correct: 0, attempts: 0, streak: 0, level: 0, avgMs: 0, seen: 0,
+        // a fact first met is due immediately, on the shortest rung
+        due: this._now(), interval: FIRST_INTERVAL,
       });
     }
     return this.facts.get(k);
@@ -171,10 +232,25 @@ export class MasteryStore {
     return 20;
   }
 
+  // How much a record's schedule should push it forward in the draw.
+  //   overdue  -> 1..2.5, growing with how many intervals late it is
+  //   resting  -> 0.4, quiet but never silent (a rested fact is still fair game
+  //               when nothing else is due, which keeps the flow zone varied)
+  // Returns 1 for a fact with no record at all, so unseen facts keep exactly
+  // the weight the picker already gave them.
+  _dueWeight(r, now) {
+    if (!r) return 1;
+    const interval = r.interval > 0 ? r.interval : FIRST_INTERVAL;
+    const over = now - (Number.isFinite(r.due) ? r.due : now);
+    if (over < 0) return 0.4;
+    return 1 + Math.min(1.5, over / interval);
+  }
+
   _divisibleFacts() {
     const out = [];
     const cap = this._productCap();
     const tables = this.activeTables();
+    const now = this._now();
     const seen = new Set();
     for (const t of tables) {
       for (let m = 2; m <= ASK_MAX; m++) {
@@ -184,7 +260,14 @@ export class MasteryStore {
         if (r && r.level >= DIV_UNLOCK_LEVEL && r.a !== r.b && r.a * r.b <= cap) out.push(r); // skip squares (a/a is trivial)
       }
     }
-    return out;
+    // The ÷ path draws by deterministic rotation rather than by weight, so
+    // due-ness enters here as an ordering + filter instead: most overdue
+    // first, and if two or more facts are actually due, rotate through only
+    // those. The "two or more" guard stops a single overdue fact from being
+    // served every ÷ round in a row.
+    out.sort((x, y) => this._dueWeight(y, now) - this._dueWeight(x, now));
+    const due = out.filter((r) => now >= r.due);
+    return due.length >= 2 ? due : out;
   }
 
   // Pick a MULTIPLICATION fact via a weighted draw (weak/unseen favoured, a few
@@ -201,6 +284,7 @@ export class MasteryStore {
 
     const MIN_PRODUCT = 6; // never a trivial 4-block wall
 
+    const now = this._now();
     const candidates = [];
     for (const t of tables) {
       for (let m = 2; m <= maxMult; m++) {
@@ -212,6 +296,10 @@ export class MasteryStore {
         let w;
         if (!r) w = 6;
         else w = Math.max(1, 6 - r.level) + (r.streak === 0 ? 2 : 0);
+        // Scheduling multiplies the existing weakness weight rather than
+        // replacing it: a weak fact that is also overdue rises furthest, and a
+        // strong fact that has rested long enough can still surface.
+        w *= this._dueWeight(r, now);
         if (t === m) w *= 0.35; // squares flip into an identical shape — rarer
         candidates.push({ a: t, b: m, w });
       }
@@ -277,7 +365,11 @@ export class MasteryStore {
   // both a×b and (a·b)÷a, so division practice moves multiplication mastery too.
   record(a, b, correct, ms) {
     const r = this._rec(a, b);
+    const now = this._now();
     r.attempts++;
+    // Leitner: right promotes one rung, wrong falls all the way back.
+    r.interval = correct ? promoteInterval(r.interval) : FIRST_INTERVAL;
+    r.due = now + r.interval;
     if (correct) {
       r.correct++;
       r.streak++;
@@ -315,6 +407,76 @@ export class MasteryStore {
       score += Math.min(r.correct, 4) + r.level * 0.5; // practice + mastery bonus
     }
     return Math.min(1, score / 24); // ~a handful of practised facts fills it
+  }
+
+  // ---- read-only views (the parent dashboard) ----
+  //
+  // Both of these are PURE reads, in the same spirit as `levelOf`: a parent
+  // opening a dashboard must not create records for facts their child has
+  // never met, or the ledger would fill with phantom facts at level 0 and the
+  // picker would treat them as seen. Nothing below touches `_rec`.
+
+  // Every fact that HAS a record, weakest first. Weakest = lowest level, then
+  // worst accuracy, then most overdue — the order a parent wants to read.
+  factRows() {
+    const now = this._now();
+    const rows = [];
+    for (const [key, r] of this.facts) {
+      rows.push({
+        key,
+        a: r.a, b: r.b,
+        level: r.level,
+        correct: r.correct,
+        attempts: r.attempts,
+        streak: r.streak,
+        avgMs: r.avgMs,
+        seen: r.seen,
+        due: r.due,
+        interval: r.interval,
+        overdueMs: now - r.due, // negative while the fact is still resting
+      });
+    }
+    const acc = (row) => (row.attempts > 0 ? row.correct / row.attempts : 0);
+    rows.sort((x, y) => x.level - y.level
+      || acc(x) - acc(y)
+      || y.overdueMs - x.overdueMs
+      || (x.key < y.key ? -1 : x.key > y.key ? 1 : 0));
+    return rows;
+  }
+
+  // Headline numbers for the dashboard. `known` is level >= 3 (fast and
+  // repeatedly right), which is the threshold at which a fact stops needing
+  // regular practice.
+  summary() {
+    const now = this._now();
+    let attempts = 0, correct = 0, known = 0, dueNow = 0;
+    for (const r of this.facts.values()) {
+      attempts += r.attempts;
+      correct += r.correct;
+      if (r.level >= 3) known++;
+      if (now >= r.due) dueNow++;
+    }
+
+    const tables = [...new Set(TABLE_TIERS.flat())].sort((x, y) => x - y);
+    const byTable = tables.map((t) => {
+      let seen = 0, tKnown = 0;
+      for (let m = 2; m <= 10; m++) {
+        const r = this.facts.get(factKey(t, m));
+        if (!r) continue;
+        seen++;
+        if (r.level >= 3) tKnown++;
+      }
+      return { table: t, mastery: this.tableMastery(t), seen, known: tKnown };
+    });
+
+    return {
+      totalSeen: this.facts.size, // facts with a record, i.e. ever met
+      known,
+      dueNow,
+      accuracy: attempts > 0 ? correct / attempts : 0,
+      unlockedTiers: this.unlockedTiers,
+      byTable,
+    };
   }
 }
 

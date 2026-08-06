@@ -17,7 +17,7 @@ import { createTimers } from '../../core/timers.js';
 import { createBlockKit } from '../../core/blocks.js';
 import { easeOutBack } from '../../core/ease.js';
 import {
-  NUG_Z, VILLAGERS, SKIN, SKIN_DARK, HAIR, BROW, GOOD_GREEN, CONFETTI_COLS,
+  VILLAGERS, SKIN, SKIN_DARK, HAIR, BROW, GOOD_GREEN, CONFETTI_COLS,
 } from './constants.js';
 
 export function createStage(ctx) {
@@ -110,9 +110,12 @@ export function createStage(ctx) {
   // ---------- owned sign textures (created + disposed here; NOT ctx.textures) ----------
   const signTextures = [];
 
-  // Draw the wooden sign board + the fact. `opts.mark` optionally stamps a small
-  // green ✓ badge in the top-right (used on the reveal to confirm the true fact).
-  function makeSignTex(a, b, shown, opts = {}) {
+  // Draw the wooden sign board + the fact. `left` and `right` are the two terms
+  // as the child reads them — `a × b` for a product, `dividend ÷ divisor` for a
+  // share-out — and `opts.op` picks the operator between them. `opts.mark`
+  // optionally stamps a small green ✓ badge in the top-right (used on the
+  // reveal to confirm the true fact).
+  function makeSignTex(left, right, shown, opts = {}) {
     const W = 512, H = 300;
     const cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
@@ -142,7 +145,7 @@ export function createStage(ctx) {
     c.fillRect(20, 20, W - 40, 5); c.fillRect(20, 20, 5, H - 40);
 
     // ---- the fact, blocky + high-contrast (cream halo behind dark text) ----
-    const text = `${a} × ${b} = ${shown}`;
+    const text = `${left} ${opts.op === 'div' ? '÷' : '×'} ${right} = ${shown}`;
     c.textAlign = 'center'; c.textBaseline = 'middle';
     let px = 122;
     const maxW = W * 0.82;
@@ -389,6 +392,3 @@ export function createStage(ctx) {
     clearRound, dispose,
   };
 }
-
-// re-exported so tiers can position against the same seat arc
-export { NUG_Z };

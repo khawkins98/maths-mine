@@ -1,5 +1,6 @@
 import { blockIconDataURL, ICON_PALETTES } from './core/blockIcon.js';
 import { createTimers } from './core/timers.js';
+import { createParentDashboard } from './game/parentDashboard.js';
 
 // hub.js — the kid-friendly game picker. After the wake gate, main.js shows the
 // hub (instead of going straight into Block Builder). It renders one big card
@@ -37,6 +38,24 @@ export function createHub(ctx) {
 
   function list() { return Object.keys(ctx.games || {}); }
 
+  // ---- the grown-ups' progress report ----
+  //
+  // Lives on the hub rather than in a game because it reads the ledger, not a
+  // round, and because the hub title is the one press-and-hold target that can
+  // never be mistaken for a control a child wants. The gesture is armed once
+  // here and gated on the hub actually being visible, so a finger held on the
+  // screen during a round cannot summon it over live play.
+  const dash = createParentDashboard({
+    mastery: ctx.mastery,
+    wallet: ctx.wallet,
+    // Erasing progress must also un-weather Bolt: he is the visible face of
+    // overallProgress(), and a fully verdigris mascot on a blank ledger is the
+    // app contradicting itself in front of the next child.
+    onChange: () => { if (bolt.setOxidation) bolt.setOxidation(ctx.mastery.overallProgress()); },
+  });
+  const hubVisible = () => !!ui.els.hub && !ui.els.hub.classList.contains('hidden');
+  dash.armOpenGesture(ui.els.hub && ui.els.hub.querySelector('h1'), hubVisible);
+
   function renderCards() {
     const wrap = ui.els.hubCards;
     if (!wrap) return;
@@ -60,6 +79,7 @@ export function createHub(ctx) {
   // Launch a game by id; wire its exit (a back button / ctx.onExit) to the hub.
   function play(id, opts) {
     timers.clearAll(); // the greeting must not follow the child into the game
+    dash.close();      // never let the parent view survive into a round
     ui.hideHub();
     ui.showGameHud();
     ctx.onExit = () => open();
