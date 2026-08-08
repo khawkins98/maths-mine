@@ -20,11 +20,12 @@ import * as THREE from 'three';
 import { createTimers } from '../core/timers.js';
 import { createPointerInput } from '../core/pointer.js';
 import { buildChoiceSet } from '../core/choices.js';
-import { easeOutBack, easeOutBounce } from '../core/ease.js';
+import { easeOutBack, easeOutBounce, easeOutCubic } from '../core/ease.js';
 import { createBlockKit, CELL, BLOCK, CAP_H, BODY_H } from '../core/blocks.js';
 
 const DROP_INTERVAL = 0.16;    // seconds between poured blocks (full pour)
 const DROP_TIME = 0.25;        // seconds for the drop-and-bounce of a placed block
+const DIV_SPLIT_TIME = 0.55;   // seconds to separate the equal groups on reveal
 const COLS = [0xff6b6b, 0xffd24a, 0x58e08a, 0x6ad2ff, 0xb98bff, 0xff9f5a, 0x7ef0d0, 0xf78fb3]; // confetti
 
 
@@ -85,6 +86,7 @@ export function createBlockBuilder(ctx) {
   let forcedOp = null;   // test hook: force the next round's operation
   let flashT = 0, flashCol = null;
   let spinRAF = 0;    // the commutativity rotate's own animation frame
+  let divSplit = null; // the division reveal, advanced by update(dt)
 
 
   function sensorsLive() { return sensors.enabled && sensors.available; }
@@ -129,6 +131,7 @@ export function createBlockBuilder(ctx) {
     root.add(wall);
     falling.length = 0;
     landing.length = 0;
+    divSplit = null;
     moldGroup = null;
   }
 
@@ -468,11 +471,48 @@ export function createBlockBuilder(ctx) {
   }
 
   function goToDivReveal() {
-    phase = 'next';
+    phase = 'dividing';
     // fact family: divisor × quotient = dividend, so dividend ÷ divisor = quotient.
-    // The resolved askeq sign already states it — no floating number competes here.
+    // The resolved askeq sign already states it. Now separate the rows so the
+    // divisor is visible as that many physical, equal groups.
     bolt.say(`${round.divisor} groups of ${round.answer} make ${round.dividend}!`, 'wow');
     speak(`${round.divisor} groups of ${round.answer} make ${round.dividend}. So ${divWords(round.dividend, round.divisor, round.answer)}.`);
+    ui.setStatus(`${round.divisor} equal groups · ${round.answer} in each`);
+    ui.setTally(`${round.divisor} groups of ${round.answer} = ${round.dividend}`);
+
+    // A fixed gap clips large arrays, so cap the total added height while
+    // keeping two- and three-group examples especially easy to distinguish.
+    const gap = round.R > 1
+      ? Math.min(CELL * 0.42, (CELL * 1.8) / (round.R - 1))
+      : 0;
+    const blocksToMove = [];
+    for (let c = 0; c < round.C; c++) {
+      for (let r = 0; r < round.R; r++) {
+        const block = round.blocks[c][r];
+        if (!block) continue;
+        setCapGrass(block, true);
+        blocksToMove.push({
+          block,
+          fromY: block.position.y,
+          toY: cellPos(c, r, round.C, round.R).y + (r - (round.R - 1) / 2) * gap,
+        });
+      }
+    }
+    round.divisionGap = gap;
+    divSplit = { elapsed: 0, blocks: blocksToMove };
+  }
+
+  function updateDivSplit(dt) {
+    if (!divSplit || !round || phase !== 'dividing') return;
+    divSplit.elapsed += dt;
+    const k = Math.min(1, divSplit.elapsed / DIV_SPLIT_TIME);
+    const eased = easeOutCubic(k);
+    for (const { block, fromY, toY } of divSplit.blocks) {
+      block.position.y = fromY + (toY - fromY) * eased;
+    }
+    if (k < 1) return;
+    divSplit = null;
+    phase = 'next';
     ui.showConfirm('Next →');
   }
 
@@ -655,6 +695,7 @@ export function createBlockBuilder(ctx) {
     updateTiltPour(dt);
     demoUpdate(dt);
     updateMoldPulse();
+    updateDivSplit(dt);
     if (phase !== 'building') highlight.visible = false;
 
     for (let i = falling.length - 1; i >= 0; i--) {
@@ -721,6 +762,10 @@ export function createBlockBuilder(ctx) {
       placed: round?.placed, groupsDone: round?.groupsDone, phase,
       C: round?.C, R: round?.R, answer: round?.answer,
       op: round?.op, mode: round?.op,
+      divisionGap: round?.divisionGap || 0,
+      rowYs: round?.op === 'div' && round.blocks[0]
+        ? round.blocks[0].map((block) => block?.position.y)
+        : [],
       choices: ui.currentChoiceValues(),
       bolts: wallet.bolts,
     });
