@@ -83,7 +83,13 @@ export function createSpotWrongun(ctx) {
     tiers.imposter.endInspect();
     if (live() && seat >= 0) tiers.imposter.accuse(seat);
   };
-  const input = createPointerInput(dom, { onDown, onMove, onUp });
+  const onCancel = () => {
+    if (!scrubbing) return;
+    scrubbing = false;
+    scrubSeat = -1;
+    tiers.imposter.endInspect();
+  };
+  const input = createPointerInput(dom, { onDown, onMove, onUp, onCancel });
   const stopScrub = () => { scrubbing = false; scrubSeat = -1; };
 
   // ---------- buttons ----------
@@ -172,6 +178,7 @@ export function createSpotWrongun(ctx) {
     ui.els.btnRecenter.removeEventListener('click', onRecenter);
     clearDebug();
     for (const t of Object.values(tiers)) t.reset();
+    mastery.endQuestion();
     stage.dispose();
     ui.els.btnRecenter.style.display = '';
     engine.resetCamera();

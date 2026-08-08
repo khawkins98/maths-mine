@@ -95,8 +95,13 @@ export class MasteryStore {
     this.unlockedTiers = 1; // start with 2/5/10 only
     this.recent = [];       // rolling window of last outcomes (bool)
     this.lastKey = null;
+    this.referenceKey = null;
     this.totalCorrect = 0;  // lifetime correct answers (drives Bolt oxidation)
     this._opToggle = 0;     // alternates ×/÷ when both are eligible
+    this._questionKeys = new Set();
+    this._answeredKeys = new Set();
+    this._voided = new Set();
+    this._questionSnapshot = null;
     this._storage = storage;
     this.load();
   }
@@ -122,30 +127,34 @@ export class MasteryStore {
       if (!d || !Array.isArray(d.facts)) return false;
 
       const num = (v, fallback = 0) => (Number.isFinite(v) ? v : fallback);
+      const whole = (v, fallback = 0) => Math.max(0, Math.round(num(v, fallback)));
       const now = this._now();
       const facts = new Map();
       for (const entry of d.facts) {
         if (!Array.isArray(entry) || entry.length !== 2) continue;
         const [k, r] = entry;
         if (typeof k !== 'string' || !r || typeof r !== 'object') continue;
-        if (!Number.isFinite(r.a) || !Number.isFinite(r.b)) continue;
-        facts.set(k, {
-          a: r.a, b: r.b,
-          correct: num(r.correct), attempts: num(r.attempts), streak: num(r.streak),
-          level: Math.max(0, Math.min(4, num(r.level))),
-          avgMs: num(r.avgMs), seen: num(r.seen),
+        if (!Number.isInteger(r.a) || !Number.isInteger(r.b) || r.a <= 0 || r.b <= 0) continue;
+        const canonical = factKey(r.a, r.b);
+        if (k !== canonical) continue;
+        const attempts = whole(r.attempts);
+        facts.set(canonical, {
+          a: Math.min(r.a, r.b), b: Math.max(r.a, r.b),
+          correct: Math.min(attempts, whole(r.correct)), attempts, streak: whole(r.streak),
+          level: Math.max(0, Math.min(4, Math.round(num(r.level)))),
+          avgMs: Math.max(0, num(r.avgMs)), seen: whole(r.seen),
           // Scheduling is optional on read. A pre-scheduling save (or a
           // corrupt/negative interval) becomes "due now, shortest rung":
           // the fact gets asked, answered, and schedules itself properly from
           // there. Never trust the stored numbers any more than the old ones.
-          due: num(r.due, now),
+          due: Number.isFinite(r.due) && r.due >= 0 ? r.due : now,
           interval: Math.max(FIRST_INTERVAL, num(r.interval, FIRST_INTERVAL)),
         });
       }
 
       this.facts = facts;
       this.unlockedTiers = Math.max(1, Math.min(TABLE_TIERS.length, Math.round(num(d.unlockedTiers, 1))));
-      this.totalCorrect = Math.max(0, num(d.totalCorrect));
+      this.totalCorrect = whole(d.totalCorrect);
       this.recent = Array.isArray(d.recent) ? d.recent.slice(-8).map(Boolean) : [];
       return true;
     } catch (_) {
@@ -161,8 +170,68 @@ export class MasteryStore {
     this.unlockedTiers = 1;
     this.recent = [];
     this.lastKey = null;
+    this.referenceKey = null;
     this.totalCorrect = 0;
+    this._opToggle = 0;
+    this._draws = 0;
+    this._divToggle = 0;
+    this.endQuestion();
     this.save();
+  }
+
+  // Selection and presentation are separate operations. `nextQuestion()` may
+  // be called many times while a game assembles a distinct crew; only the facts
+  // that actually reach the screen belong in the ledger or in the tray's
+  // question-level voiding state.
+  beginQuestion(facts) {
+    this.endQuestion();
+    const list = Array.isArray(facts) ? facts : [facts];
+    const keys = [];
+    for (const f of list) {
+      if (!f || !Number.isInteger(f.a) || !Number.isInteger(f.b) || f.a <= 0 || f.b <= 0) continue;
+      const k = factKey(f.a, f.b);
+      if (this._questionKeys.has(k)) continue;
+      this._questionKeys.add(k);
+      keys.push(k);
+      this._rec(f.a, f.b).seen++;
+    }
+    this.lastKey = keys.length ? keys[keys.length - 1] : null;
+    // A crew of signs has no single non-revealing "live table". The reference
+    // tray falls back to its last page for those rounds.
+    this.referenceKey = keys.length === 1 ? keys[0] : null;
+    this._questionSnapshot = {
+      facts: new Map(keys.map((k) => [k, { ...this.facts.get(k) }])),
+      unlockedTiers: this.unlockedTiers,
+      totalCorrect: this.totalCorrect,
+      recent: this.recent.slice(),
+    };
+    this.save(); // persist the honest encounter even if no answer is recorded
+    return keys;
+  }
+
+  // Opening the reference during a live question voids the WHOLE question.
+  // Multi-step rounds can already have recorded a wrong accusation, so restore
+  // the post-presentation snapshot before ignoring all later writes.
+  voidCurrentQuestion() {
+    if (!this._questionKeys.size) return 0;
+    if (this._questionSnapshot) {
+      for (const [k, r] of this._questionSnapshot.facts) this.facts.set(k, { ...r });
+      this.unlockedTiers = this._questionSnapshot.unlockedTiers;
+      this.totalCorrect = this._questionSnapshot.totalCorrect;
+      this.recent = this._questionSnapshot.recent.slice();
+    }
+    this._voided = new Set(this._questionKeys);
+    this._answeredKeys.clear();
+    this.save();
+    return this._voided.size;
+  }
+
+  endQuestion() {
+    this._questionKeys.clear();
+    this._answeredKeys.clear();
+    this._voided.clear();
+    this._questionSnapshot = null;
+    this.referenceKey = null;
   }
 
   _rec(a, b) {
@@ -350,21 +419,26 @@ export class MasteryStore {
       const divisor = flip ? r.b : r.a;
       const quotient = flip ? r.a : r.b;
       const dividend = divisor * quotient;
-      this.lastKey = factKey(r.a, r.b);
-      this._rec(r.a, r.b).seen++;
       return { op: 'div', dividend, divisor, quotient, answer: quotient, a: r.a, b: r.b };
     }
 
     const chosen = this._pickMulFact();
-    this.lastKey = factKey(chosen.a, chosen.b);
-    this._rec(chosen.a, chosen.b).seen++;
     return { op: 'mul', a: chosen.a, b: chosen.b, answer: chosen.a * chosen.b };
   }
 
   // Record an outcome against the canonical fact (a,b) — the same record backs
   // both a×b and (a·b)÷a, so division practice moves multiplication mastery too.
   record(a, b, correct, ms) {
+    const k = factKey(a, b);
     const r = this._rec(a, b);
+    if (this._voided.has(k)) {
+      this.save();
+      if (this._questionKeys.has(k)) {
+        this._answeredKeys.add(k);
+        if (this._answeredKeys.size === this._questionKeys.size) this.endQuestion();
+      }
+      return r;
+    }
     const now = this._now();
     r.attempts++;
     // Leitner: right promotes one rung, wrong falls all the way back.
@@ -391,6 +465,10 @@ export class MasteryStore {
     if (this.recent.length > 8) this.recent.shift();
     this._maybeRampTables();
     this.save();
+    if (this._questionKeys.has(k)) {
+      this._answeredKeys.add(k);
+      if (this._answeredKeys.size === this._questionKeys.size) this.endQuestion();
+    }
     return r;
   }
 

@@ -99,6 +99,22 @@ test.describe('Block Builder', () => {
     const div = await state(page, '__bb');
     expect(div.op).toBe('div');
     expect(div.answer).toBe(div.C); // ÷ asks how many in each group = column count
+
+    await page.evaluate(({ C, R }) => {
+      for (let c = 0; c < C; c++) for (let r = 0; r < R; r++) window.__place(c, r);
+    }, div);
+    await waitForState(page, '__bb', "s.phase === 'asking'");
+    await expect(page.locator('#askeq')).toHaveText(
+      `${div.C * div.R} ÷ ${div.R} = ?`,
+    );
+
+    await answer(page, div.answer);
+    await waitForState(page, '__bb', "s.phase === 'next'");
+    const revealed = await state(page, '__bb');
+    expect(revealed.divisionGap).toBeGreaterThan(0);
+    for (let r = 1; r < revealed.rowYs.length; r++) {
+      expect(revealed.rowYs[r] - revealed.rowYs[r - 1]).toBeGreaterThan(1.15);
+    }
   });
 });
 

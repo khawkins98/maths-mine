@@ -83,6 +83,7 @@ export function createImposterTier(ctx, stage, facts) {
     // The shakiest of the drawn facts becomes the fibber, so the sign the child
     // must scrutinise is the one they most need the practice on.
     const drawn = makeClaims(size).slice();
+    mastery.beginQuestion(drawn);
     drawn.sort((f, g2) => facts.level(f.a, f.b) - facts.level(g2.a, g2.b));
     const impFact = drawn[0];
     const trueFacts = drawn.slice(1);
@@ -181,6 +182,7 @@ export function createImposterTier(ctx, stage, facts) {
       state.phase = 'ejecting';
       stage.ring.visible = false;
       mastery.record(n.a, n.b, true, ms);
+      mastery.endQuestion();
       bolt.setOxidation(mastery.overallProgress());
 
       ejectNugget(n);

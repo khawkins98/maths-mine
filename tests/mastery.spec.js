@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { MasteryStore, factKey } from '../src/game/mastery.js';
+import { createFactPicker } from '../src/games/spotWrongun/facts.js';
 
 // The mastery ledger is plain logic — no three.js, no DOM, no localStorage —
 // so it is tested by importing it straight into the Playwright runner's Node
@@ -69,6 +70,7 @@ test.describe('interval ladder', () => {
   test('a fact met for the first time is due immediately', () => {
     const { store, clock } = harness();
     const q = store.nextQuestion({ op: 'mul' });
+    store.beginQuestion(q);
     const r = rec(store, q.a, q.b);
     expect(r.due).toBe(clock.t);
     expect(r.interval).toBe(LADDER[0]);
@@ -141,10 +143,56 @@ test.describe('the picker favours overdue facts', () => {
       expect(q.a * q.b).toBeGreaterThanOrEqual(MIN_PRODUCT);
       expect(q.a * q.b).toBeLessThanOrEqual(60); // product cap, best case
       expect(q.answer).toBe(q.a * q.b);
+      store.beginQuestion(q);
       last = k;
     }
     // squares are de-weighted, never eliminated, but ÷ must skip them entirely
     for (const r of store._divisibleFacts()) expect(r.a).not.toBe(r.b);
+  });
+});
+
+test.describe('presented-question boundary', () => {
+  test('candidate draws are pure and only displayed facts become encounters', () => {
+    const { store } = harness();
+    const picker = createFactPicker(store);
+    const shown = picker.drawDistinct(4);
+
+    expect(store.facts.size).toBe(0);
+    expect(store.lastKey).toBeNull();
+
+    const keys = store.beginQuestion(shown);
+    expect(new Set(keys).size).toBe(4);
+    expect(store.facts.size).toBe(4);
+    expect(store.factRows().every((r) => r.seen === 1)).toBe(true);
+    expect(store.referenceKey).toBeNull(); // a crew must not leak one privileged fact
+  });
+
+  test('opening the reference rolls back a partial multi-step answer', () => {
+    const { store } = harness();
+    store.beginQuestion([{ a: 2, b: 3 }, { a: 2, b: 4 }]);
+    store.record(2, 3, false, 4_000);
+    expect(rec(store, 2, 3).attempts).toBe(1);
+
+    expect(store.voidCurrentQuestion()).toBe(2);
+    expect(rec(store, 2, 3).attempts).toBe(0);
+    expect(store.recent).toEqual([]);
+
+    store.record(2, 3, true, 1_000);
+    store.record(2, 4, true, 1_000);
+    expect(rec(store, 2, 3)).toMatchObject({ attempts: 0, correct: 0, seen: 1 });
+    expect(rec(store, 2, 4)).toMatchObject({ attempts: 0, correct: 0, seen: 1 });
+    expect(store.totalCorrect).toBe(0);
+  });
+
+  test('a completed single-fact answer is no longer live', () => {
+    const { store } = harness();
+    const q = store.nextQuestion({ op: 'mul' });
+    store.beginQuestion(q);
+    expect(store.referenceKey).toBe(factKey(q.a, q.b));
+    store.record(q.a, q.b, true, 1_000);
+
+    expect(store.voidCurrentQuestion()).toBe(0);
+    expect(rec(store, q.a, q.b).attempts).toBe(1);
   });
 });
 
@@ -217,6 +265,25 @@ test.describe('backward compatibility with mastery.v1', () => {
       expect(q.answer).toBe(q.a * q.b);
       expect(clock.t).toBe(7_777); // the fake clock is the only clock in play
     }
+  });
+
+  test('finite but invalid records are normalized or rejected', () => {
+    const { store } = harness({ seed: {
+      facts: [
+        ['2x3', { a: 3, b: 2, correct: 9, attempts: -3, streak: -2, level: 2.6, avgMs: -40, seen: -8, due: -1 }],
+        ['5x6', { a: 7, b: 8, correct: 1, attempts: 1, level: 1 }],
+      ],
+      unlockedTiers: 1,
+      totalCorrect: -20,
+      recent: [],
+    }, start: 9_000 });
+
+    expect(store.facts.size).toBe(1); // mismatched 5x6 key was rejected
+    expect(rec(store, 2, 3)).toMatchObject({
+      a: 2, b: 3, correct: 0, attempts: 0, streak: 0,
+      level: 3, avgMs: 0, seen: 0, due: 9_000,
+    });
+    expect(store.totalCorrect).toBe(0);
   });
 });
 

@@ -68,19 +68,31 @@ export function createUI() {
   function popAskEq() { els.askEq.classList.remove('pop'); void els.askEq.offsetWidth; els.askEq.classList.add('pop'); }
 
   // ---- Truth Check claim headline (the question's big DOM home) ----
+  let _claimFadeT = null;
+  let _choicesFadeT = null;
+  function cancelClaimFade() { clearTimeout(_claimFadeT); _claimFadeT = null; }
+  function cancelChoicesFade() { clearTimeout(_choicesFadeT); _choicesFadeT = null; }
+
   function setClaim(text) {
+    cancelClaimFade();
     if (text == null) { els.claimEq.classList.add('hidden'); return; }
     els.claimEq.textContent = text;
     els.claimEq.classList.remove('hidden', 'faded');
   }
-  function hideClaim() { els.claimEq.classList.add('hidden'); els.claimEq.classList.remove('faded'); }
+  function hideClaim() { cancelClaimFade(); els.claimEq.classList.add('hidden'); els.claimEq.classList.remove('faded'); }
   // brief scale-pop when the claim headline updates (e.g. each group landing).
   function popClaim() { els.claimEq.classList.remove('pop'); void els.claimEq.offsetWidth; els.claimEq.classList.add('pop'); }
   // fade the claim out during the reveal beat, then remove it from layout.
-  function fadeClaim() { els.claimEq.classList.add('faded'); setTimeout(() => els.claimEq.classList.add('hidden'), 420); }
+  function fadeClaim() {
+    cancelClaimFade();
+    els.claimEq.classList.add('faded');
+    _claimFadeT = setTimeout(() => { _claimFadeT = null; els.claimEq.classList.add('hidden'); }, 420);
+  }
 
   // Build the three big answer cards. `onPick(value, buttonEl)` fires on tap.
   function showChoices(values, onPick) {
+    cancelChoicesFade();
+    els.choices.classList.remove('fading');
     els.choices.innerHTML = '';
     for (const v of values) {
       const b = document.createElement('button');
@@ -91,12 +103,23 @@ export function createUI() {
     }
     els.choices.classList.remove('hidden');
   }
-  function hideChoices() { els.choices.classList.add('hidden'); els.choices.innerHTML = ''; }
+  function hideChoices() {
+    cancelChoicesFade();
+    els.choices.classList.add('hidden');
+    els.choices.classList.remove('fading');
+    els.choices.innerHTML = '';
+  }
   // fade the whole answer slab row out (~380ms) then remove it — used after the
   // green flash so no dead distractor button survives onto the reveal.
   function fadeChoices() {
+    cancelChoicesFade();
     els.choices.classList.add('fading');
-    setTimeout(() => { hideChoices(); els.choices.classList.remove('fading'); }, 380);
+    _choicesFadeT = setTimeout(() => {
+      _choicesFadeT = null;
+      els.choices.classList.add('hidden');
+      els.choices.classList.remove('fading');
+      els.choices.innerHTML = '';
+    }, 380);
   }
   function choiceButtons() { return [...els.choices.querySelectorAll('.choice')]; }
   function lockChoices() { choiceButtons().forEach((c) => (c.style.pointerEvents = 'none')); }

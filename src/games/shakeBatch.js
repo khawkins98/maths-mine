@@ -307,6 +307,7 @@ export function createShakeBatch(ctx) {
     speech.reset(); // a new round starts a new sentence, not a queue
     clearDice();
     const q = mastery.nextQuestion({ op: 'mul' }); // this game is pure ×
+    mastery.beginQuestion(q);
 
     // Block Builder's convention is "a x b == a groups of b", and this game must
     // agree with it or the child is taught two readings of one notation. So the
@@ -674,6 +675,7 @@ export function createShakeBatch(ctx) {
     window.removeEventListener('devicemotion', onMotion);
     clearDebug();
     clearTimers();
+    mastery.endQuestion();
     disposeTray();
     scene.remove(root);
     root.traverse((o) => {

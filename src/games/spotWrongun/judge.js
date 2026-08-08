@@ -74,6 +74,7 @@ export function createJudgeTier(ctx, stage, facts) {
       || (forcedOp !== 'mul' && judgeNo % 2 === 0 && facts.divisionReady());
     const div = wantDiv ? facts.drawDiv() : null;
     const q = div || mastery.nextQuestion({ op: 'mul' });
+    mastery.beginQuestion(q);
 
     // `a,b` are the CANONICAL factors in every case — the pair record() scores —
     // which for a share-out are not the two numbers printed on the sign.

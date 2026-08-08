@@ -85,7 +85,7 @@ had already grown their own copy.
 | `ctx.speech` | `speak, prime, setVoiceOn, isVoiceOn, eqWords(a,b,ans?), divWords(d,s,ans?), pickPhrase(arr)` |
 | `ctx.ui` | HUD helpers — see `core/ui.js`; raw elements at `ui.els` |
 | `ctx.bolt` | mascot — `say(text, mood)`, `react(mood)`, `setOxidation(0..1)`, `show(v)`, `group`, `headAnchor` (moods: `'happy'`, `'wow'`, `''`) |
-| `ctx.mastery` | shared ledger — `nextQuestion({op?})`, `record(a,b,correct,ms)`, `levelOf(a,b)`, `activeTables()`, `tableMastery(t)`, `overallProgress()`, `reset()` |
+| `ctx.mastery` | shared ledger — `nextQuestion({op?})`, `beginQuestion(facts)`, `record(a,b,correct,ms)`, `voidCurrentQuestion()`, `endQuestion()`, `levelOf(a,b)`, `activeTables()`, `tableMastery(t)`, `overallProgress()`, `reset()` |
 | `ctx.wallet` | the child's bolts, shared across games and sessions — `bolts`, `add(n)`, `reset()`. No on-screen readout by design |
 | `ctx.worldFeel` | the living island — `impulse(strength, x, z)` to punch the ground on a landing block or a thrown die |
 | `ctx.sensors` | `TiltInput`: `enabled, available, x, y, update(), recenter()` |
@@ -103,6 +103,9 @@ had already grown their own copy.
   factors of the fact — `record` shares one ledger for `a×b` and `(a·b)÷b`).
   The ledger **persists to localStorage** on every `record`, so never call it
   speculatively.
+- `nextQuestion()` only selects. Call `beginQuestion(q)` once the fact is really
+  on screen; multi-fact rounds pass the complete visible array. Call
+  `endQuestion()` when a multi-step round resolves or is abandoned.
 - Read a fact's strength with `ctx.mastery.levelOf(a, b)`. Do not reach into
   `mastery.facts` — that map is the store's own business.
 - After scoring, call `ctx.bolt.setOxidation(ctx.mastery.overallProgress())` so
