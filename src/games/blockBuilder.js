@@ -186,6 +186,7 @@ export function createBlockBuilder(ctx) {
   function newRound() {
     speech.reset(); // a new round starts a new sentence, not a queue
     const q = mastery.nextQuestion(forcedOp ? { op: forcedOp } : {});
+    mastery.beginQuestion(q);
     forcedOp = null;
     clearWall();
 
@@ -751,6 +752,7 @@ export function createBlockBuilder(ctx) {
     ui.els.btnRecenter.removeEventListener('click', onRecenter);
     clearDebug();
     timers.clearAll(); // no pending reveal/count-up may outlive the game
+    mastery.endQuestion();
     clearWall();
     scene.remove(root);
     root.traverse((o) => {

@@ -1,7 +1,6 @@
 # Times-table reference tray
 
-**Status:** design agreed in conversation, not yet confirmed against the written
-spec. No implementation has started.
+**Status:** confirmed. No implementation has started.
 
 A slide-out reference of the times tables, available from every screen, so a
 child can look up a fact while an activity is running. Consulting it is not
@@ -56,14 +55,19 @@ report, which claims mastery that is not there.
 So an answer given with the tray open is not recorded. The fact stays exactly as
 shaky as it was.
 
-This needs no change to any of the six `mastery.record()` call sites.
+Fact selection is deliberately side-effect-free. Once a game has assembled the
+fact or facts actually visible to the child, it calls `beginQuestion(facts)`.
+That is the point where `seen` increments and the complete visible set becomes
+the live question.
 
-- `nextQuestion()` already sets `lastKey` and bumps `seen`. It gains one line:
-  add the fact's key to an **armed** set.
-- Opening the tray moves everything armed into a **voided** set.
-- `record(a, b, ...)` checks that set first. If the fact is voided it clears the
-  key and returns the record untouched: no attempt, no streak, no interval
+- Opening the tray voids the complete live question.
+- `record(a, b, ...)` ignores a voided key: no attempt, no streak, no interval
   change, no `recent` push, no table ramping.
+- A multi-step round may have recorded an accusation before the tray opens. The
+  ledger restores its post-`beginQuestion()` snapshot, so opening the tray at
+  any point still voids the whole question.
+- `endQuestion()` commits a resolved or abandoned question and clears transient
+  question state.
 
 A set rather than a single boolean because Spot the Wrong'un's imposter rounds
 draw several facts and record several outcomes per round
@@ -74,8 +78,8 @@ Voiding is armed at the question level, not the answer level. Opening the tray
 at any point during a live question voids that question, even if the tray is
 closed again before answering. Peek-then-close is not a loophole.
 
-`seen` still increments, because the child did meet the fact. Nothing about
-voiding is persisted; it lives for the length of a question and dies.
+`seen` still increments and is persisted, because the child did meet the fact.
+The armed/voided state itself lives only for the question and is never saved.
 
 ### Accepted trade-off
 
@@ -92,9 +96,10 @@ A tap rather than an edge-swipe on purpose. iPadOS claims edge swipes for
 back-navigation, and Block Builder's no-sensor fallback is press-and-drag, which
 an edge swipe would fight.
 
-**Page on open:** the table named by `mastery.lastKey`, so `3 x 4` and `12 / 4`
-both land on the 3s. `lastKey` is canonical (smaller factor first), so no new
-mastery API is needed. Falls back to the last page viewed, then to the 2s.
+**Page on open:** for a single-fact question, the table named by
+`mastery.referenceKey`, so `3 x 4` and `12 / 4` both land on the 3s. A multi-sign
+round has no single live table, and choosing the fibber's table could reveal the
+answer, so it falls back to the last page viewed. The final fallback is the 2s.
 
 **Navigation:** a 1..12 number rail down the left edge of the tray switches
 pages in one tap.
@@ -108,25 +113,6 @@ individual blocks stop being countable. The array band is fixed-height with cell
 size derived from the table number: the 2s are genuinely countable, the 12s read
 as a growing rectangle. That is the right way for this to degrade, because the
 small tables are where counting actually helps.
-
-## 4. Voided-answer count in the parent report
-
-The report currently says "48 answers recorded". With the tray in play a child
-could do 60 questions and have 12 recorded, leaving the report quietly
-misleading about how much practice happened.
-
-So the ledger keeps a lifetime count of voided answers, surfaced as one line:
-
-> 31 answers were looked up in the reference and not counted.
-
-This is a fact a parent wants, and it turns the tray from a hole in the data
-into a signal about which facts a child does not trust themselves on.
-
-This is the only part that touches the save schema: one integer, defaulted to 0
-for existing saves. `SAVE_KEY` stays `mastery.v1`. Existing progress is not
-disturbed.
-
-Cuttable without affecting anything else in this design.
 
 ## Testing
 

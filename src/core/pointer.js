@@ -19,36 +19,56 @@
 
 const noop = () => {};
 
-export function createPointerInput(dom, { onDown = noop, onMove = noop, onUp = noop } = {}) {
-  const hPointerDown = (e) => onDown(e.clientX, e.clientY);
+export function createPointerInput(dom, {
+  onDown = noop, onMove = noop, onUp = noop, onCancel = onUp,
+} = {}) {
+  let down = false;
+  const begin = (x, y) => { down = true; onDown(x, y); };
+  const finish = (fn) => { if (!down) return; down = false; fn(); };
+  const hPointerDown = (e) => begin(e.clientX, e.clientY);
   const hPointerMove = (e) => onMove(e.clientX, e.clientY);
-  const hPointerUp = () => onUp();
-  const hTouchStart = (e) => { const t = e.touches[0]; if (t) onDown(t.clientX, t.clientY); };
+  const hPointerUp = () => finish(onUp);
+  const hPointerCancel = () => finish(onCancel);
+  const hTouchStart = (e) => { const t = e.touches[0]; if (t) begin(t.clientX, t.clientY); };
   const hTouchMove = (e) => { const t = e.touches[0]; if (t) onMove(t.clientX, t.clientY); };
-  const hTouchEnd = () => onUp();
+  const hTouchEnd = hPointerUp;
 
   let attached = false;
+  const pointerEvents = typeof window !== 'undefined' && typeof window.PointerEvent === 'function';
 
   function attach() {
     if (attached) return;
     attached = true;
-    dom.addEventListener('pointerdown', hPointerDown);
-    window.addEventListener('pointermove', hPointerMove);
-    window.addEventListener('pointerup', hPointerUp);
-    dom.addEventListener('touchstart', hTouchStart, { passive: true });
-    window.addEventListener('touchmove', hTouchMove, { passive: true });
-    window.addEventListener('touchend', hTouchEnd);
+    if (pointerEvents) {
+      dom.addEventListener('pointerdown', hPointerDown);
+      window.addEventListener('pointermove', hPointerMove);
+      window.addEventListener('pointerup', hPointerUp);
+      window.addEventListener('pointercancel', hPointerCancel);
+    } else {
+      dom.addEventListener('touchstart', hTouchStart, { passive: true });
+      window.addEventListener('touchmove', hTouchMove, { passive: true });
+      window.addEventListener('touchend', hTouchEnd);
+      window.addEventListener('touchcancel', hPointerCancel);
+    }
+    window.addEventListener('blur', hPointerCancel);
   }
 
   function detach() {
     if (!attached) return;
     attached = false;
-    dom.removeEventListener('pointerdown', hPointerDown);
-    window.removeEventListener('pointermove', hPointerMove);
-    window.removeEventListener('pointerup', hPointerUp);
-    dom.removeEventListener('touchstart', hTouchStart);
-    window.removeEventListener('touchmove', hTouchMove);
-    window.removeEventListener('touchend', hTouchEnd);
+    if (pointerEvents) {
+      dom.removeEventListener('pointerdown', hPointerDown);
+      window.removeEventListener('pointermove', hPointerMove);
+      window.removeEventListener('pointerup', hPointerUp);
+      window.removeEventListener('pointercancel', hPointerCancel);
+    } else {
+      dom.removeEventListener('touchstart', hTouchStart);
+      window.removeEventListener('touchmove', hTouchMove);
+      window.removeEventListener('touchend', hTouchEnd);
+      window.removeEventListener('touchcancel', hPointerCancel);
+    }
+    window.removeEventListener('blur', hPointerCancel);
+    down = false;
   }
 
   return { attach, detach };

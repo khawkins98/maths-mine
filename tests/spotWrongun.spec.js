@@ -261,6 +261,30 @@ test.describe("Spot the Wrong'un — drag-scrub", () => {
     await waitForState(page, '__stw', "s.phase === 'ejecting' || s.phase === 'done'", 40_000);
     expect(errors).toEqual([]);
   });
+
+  test('a cancelled pointer ends inspection without accusing', async ({ page }) => {
+    const errors = await bootWith(page, ledger(2, KEYS));
+    await pick(page, 'spot-the-wrongun', '__stw');
+    await page.evaluate(() => window.__stwCrew(4));
+    await waitForState(page, '__stw', "s.phase === 'accusing'");
+    const attemptsBefore = (await saved(page)).facts.reduce((n, [, fact]) => n + fact.attempts, 0);
+
+    await page.evaluate(() => {
+      const p = window.__stwSeatXY(0);
+      document.querySelector('canvas').dispatchEvent(
+        new PointerEvent('pointerdown', { clientX: p.x, clientY: p.y, bubbles: true }),
+      );
+      window.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true }));
+    });
+
+    const r = await state(page, '__stw');
+    expect(r.phase).toBe('accusing');
+    expect(r.scrubbing).toBe(false);
+    expect(r.inspecting).toBe(-1);
+    const attemptsAfter = (await saved(page)).facts.reduce((n, [, fact]) => n + fact.attempts, 0);
+    expect(attemptsAfter).toBe(attemptsBefore);
+    expect(errors).toEqual([]);
+  });
 });
 
 test.describe("Spot the Wrong'un — teardown", () => {
