@@ -290,34 +290,41 @@ async function tryLoadGLTF(filename) {
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
-export const MOB_TYPES = ['villager', 'zombie', 'ghast', 'enderman'];
+export const MOB_TYPES = ['villager', 'zombie', 'creeper', 'ghast', 'enderman', 'steve'];
 
 const FALLBACKS = {
   villager: buildVillagerFallback,
   zombie:   buildZombieFallback,
+  creeper:  buildZombieFallback,
   ghast:    buildGhastFallback,
   enderman: buildEndermanFallback,
+  steve:    buildVillagerFallback,
 };
 
 const FILENAMES = {
   villager: 'villager.glb',
   zombie:   'zombie.glb',
+  creeper:  'creeper.glb',
   ghast:    'ghast.glb',
   enderman: 'enderman.glb',
+  steve:    'steve.glb',
 };
 
 function bindMobJoints(model, type) {
-  const head = model.getObjectByName('Head_04') || model.getObjectByName('Head_03') || model.getObjectByName('Head_05') || model.getObjectByName('head') || model;
-  const spine = model.getObjectByName('Spine_02') || model.getObjectByName('Body_04') || model.getObjectByName('Body_01') || model;
-  const rArm = model.getObjectByName('RightArm_04') || model.getObjectByName('RightArm_08') || model.getObjectByName('Arm_03');
-  const lArm = model.getObjectByName('LeftArm_05') || model.getObjectByName('LeftArm_07') || model.getObjectByName('Arm_03');
-  const rLeg = model.getObjectByName('RightLeg_05') || model.getObjectByName('RightLeg_06') || model.getObjectByName('RightLeg_03') || model.getObjectByName('RightLeg_02');
-  const lLeg = model.getObjectByName('LeftLeg_06') || model.getObjectByName('LeftLeg_07') || model.getObjectByName('LeftLeg_02') || model.getObjectByName('LeftLeg_03');
+  const head = model.getObjectByName('Head_04') || model.getObjectByName('Head_03') || model.getObjectByName('Head_05') || model.getObjectByName('Head_01') || model.getObjectByName('head_02') || model.getObjectByName('head') || model;
+  const spine = model.getObjectByName('Spine_02') || model.getObjectByName('Body_04') || model.getObjectByName('Body_01') || model.getObjectByName('Body_02') || model.getObjectByName('body_01') || model;
+  const rArm = model.getObjectByName('RightArm_04') || model.getObjectByName('RightArm_08') || model.getObjectByName('armR_04') || model.getObjectByName('Arm_03');
+  const lArm = model.getObjectByName('LeftArm_05') || model.getObjectByName('LeftArm_07') || model.getObjectByName('armL_03') || model.getObjectByName('Arm_03');
+  const rLeg = model.getObjectByName('RightLeg_05') || model.getObjectByName('RightLeg_06') || model.getObjectByName('RightLeg_03') || model.getObjectByName('legR_06') || model.getObjectByName('LegFrontR_04') || model.getObjectByName('RightLeg_02');
+  const lLeg = model.getObjectByName('LeftLeg_06') || model.getObjectByName('LeftLeg_07') || model.getObjectByName('LeftLeg_02') || model.getObjectByName('legL_05') || model.getObjectByName('LegFrontL_03') || model.getObjectByName('LeftLeg_03');
+  const rBackLeg = model.getObjectByName('LegBackR_06');
+  const lBackLeg = model.getObjectByName('LegBackL_05');
 
   model.userData.joints = {
     neck: head,
     shoulders: { '-1': rArm || spine, '1': lArm || spine },
     hips: { '-1': rLeg || spine, '1': lLeg || spine },
+    backHips: { '-1': rBackLeg, '1': lBackLeg },
     body: spine,
     eyes: [],
   };

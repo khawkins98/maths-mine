@@ -239,27 +239,31 @@ async function switchModel(type) {
     currentModelGroup = buildArticulatedGolem();
     nameEl.innerHTML = '<strong>Iron Golem</strong>';
     statsEl.textContent = 'Height: ~2.4m | Articulated 128x128 UV Box Skeleton';
-    texImg.src = '/assets/mobs/iron_golem.png';
+    texImg.src = '/assets/mobs/iron_golem.png?v=2';
   } else if (type === 'steve') {
-    if (characterAssets) {
+    if (mobFactories && mobFactories.steve) {
+      currentModelGroup = mobFactories.steve();
+      currentModelGroup.scale.setScalar(1.2);
+    } else if (characterAssets) {
       currentModelGroup = characterAssets.create('steve');
       currentModelGroup.scale.setScalar(1.2);
     }
     nameEl.innerHTML = '<strong>Steve (Player Character)</strong>';
-    statsEl.textContent = 'Height: ~1.8m | Shared Block Character';
+    statsEl.textContent = 'Height: ~1.8m | Official Minecraft GLB Rig';
     texImg.src = '/assets/characters/Textures/texture-steve.png';
   } else if (mobFactories) {
     currentModelGroup = createMob(mobFactories, type);
     currentModelGroup.scale.setScalar(1.2);
     const titles = {
       villager: 'Villager (Honest Crew)',
-      zombie: 'Zombie (Imposter Mob)',
-      ghast: 'Ghast (Nether Mob)',
+      zombie:   'Zombie (Imposter Mob)',
+      creeper:  'Creeper (Explosive Mob)',
+      ghast:    'Ghast (Nether Mob)',
       enderman: 'Enderman (Ender Mob)',
     };
     nameEl.innerHTML = `<strong>${titles[type] || type}</strong>`;
-    statsEl.textContent = 'Articulated / Fallback Model with Animation Rig';
-    texImg.src = '/assets/mobs/iron_golem.png';
+    statsEl.textContent = 'Articulated 3D GLB Model with Bone Skeleton';
+    texImg.src = '/assets/mobs/iron_golem.png?v=2';
   }
 
   if (currentModelGroup) {
@@ -309,6 +313,9 @@ function animate() {
       if (j.shoulders && j.shoulders['1']) j.shoulders['1'].rotation.x = -walkPhase * 0.5;
       if (j.hips && j.hips['-1']) j.hips['-1'].rotation.x = -walkPhase * 0.4;
       if (j.hips && j.hips['1']) j.hips['1'].rotation.x = walkPhase * 0.4;
+      // Creeper 4-legged walking animation
+      if (j.backHips && j.backHips['-1']) j.backHips['-1'].rotation.x = walkPhase * 0.4;
+      if (j.backHips && j.backHips['1']) j.backHips['1'].rotation.x = -walkPhase * 0.4;
       if (j.neck) j.neck.rotation.y = Math.sin(t * 1.2) * 0.25;
     }
   }
