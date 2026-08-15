@@ -56,7 +56,7 @@ export function createImposterTier(ctx, stage, facts) {
     // of empty ground in front, at every aspect ratio. He stands off the same
     // proportion of the camera distance so a wider crew does not leave him
     // marooned in the foreground, dwarfing the villagers he is introducing.
-    bolt.placeAt(-2.0, layout.dist * 0.26, 0.62);
+    bolt.placeAt(-5.2, layout.dist * 0.23, 0.72);
   }
 
   // The claim as the child reads it, and as the ledger scores it. `a,b` stay
@@ -159,12 +159,12 @@ export function createImposterTier(ctx, stage, facts) {
     ui.hideBigTotal();
     ui.setTally('');
     ui.els.btnRecenter.style.display = 'none';
-    ui.setStatus('Tap the sign that’s wrong — or drag across to read them all.');
-    bolt.say('One sign is fibbing!', 'wow');
+    ui.setStatus('Tap the sign that’s wrong.');
+    bolt.say('One player is fibbing!', 'wow');
     speak(pickPhrase([
-      'One sign is fibbing! Tap the wrong one.',
-      'Uh oh — one of these is a wrong’un. Which sign is fibbing?',
-      'One sign is a mix-up! Tap the one that’s wrong.',
+      'One player is fibbing! Tap their sign.',
+      'Uh oh — one of these is a wrong’un. Which player is fibbing?',
+      'One player has a mix-up! Tap their sign.',
     ]));
   }
 
@@ -194,7 +194,7 @@ export function createImposterTier(ctx, stage, facts) {
       ui.showToast(`+${n.reward} 🔩`, 'good');
       // title card stays the mode name — never feedback.
       ui.setStatus(`That sign said ${n.claimText} — but it’s really ${n.answer}!`);
-      bolt.say('Gotcha! That one was fibbing!', 'happy');
+      bolt.say('Gotcha! That player was fibbing!', 'happy');
       speak(pickPhrase([
         `That’s right! ${words(n, n.answer)}, not ${n.shown}!`,
         `You spotted it! ${words(n)} is ${n.answer}, not ${n.shown}!`,

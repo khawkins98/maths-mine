@@ -15,6 +15,7 @@ import { createAudio } from './core/audio.js';
 import { createSpeech } from './core/speech.js';
 import { createUI } from './core/ui.js';
 import { createWorldFeel } from './core/worldFeel.js';
+import { loadCharacterAssets } from './core/characters.js';
 
 import { MasteryStore } from './game/mastery.js';
 import { Wallet } from './game/wallet.js';
@@ -28,6 +29,7 @@ import { createHub } from './hub.js';
 
 // ---------- shared services ----------
 const textures = createTextures();
+const characterAssets = await loadCharacterAssets();
 const engine = createEngine({ textures });
 const audio = createAudio();
 const speech = createSpeech();
@@ -35,7 +37,7 @@ const ui = createUI();
 const mastery = new MasteryStore();
 const wallet = new Wallet();
 const sensors = new TiltInput();
-const bolt = createBolt({ scene: engine.scene, camera: engine.camera, textures, nowT: engine.nowT, bubbleEl: ui.els.bubble });
+const bolt = createBolt({ scene: engine.scene, camera: engine.camera, textures, characterAssets, nowT: engine.nowT, bubbleEl: ui.els.bubble });
 // Parallax + a springy, touchable ground. Long-lived: it belongs to the world,
 // not to any one game, so it survives every game switch.
 const worldFeel = createWorldFeel({ engine, audio, textures });
@@ -52,6 +54,7 @@ const ctx = {
   camera: engine.camera,
   engine,        // frame/reset camera, worldToScreen, nowT, placeCamera, VIEW_DIR
   textures,      // shared CanvasTextures (do NOT dispose in teardown)
+  characterAssets, // shared Kenney model geometry + interchangeable skins
   audio,         // WebAudio SFX
   speech,        // TTS narration + phrase variety
   ui,            // HUD helpers

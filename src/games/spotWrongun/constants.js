@@ -49,26 +49,9 @@ export function crewLayout(n) {
   return { x, z, signScale: fit.sign, dist: fit.dist };
 }
 
-export const BASE_Y = 0.62;  // Nugget centre height (feet on the grass)
+export const BASE_Y = 0;     // authored character models have feet at zero
 export const SIGN_Y = 3.05;  // sign centre height, above the raised arms
 
-// Villager varieties, loosely after the Minecraft professions: a robe colour
-// and the apron/trim that goes over it. The crew is drawn from these so three
-// villagers standing together are told apart by what they wear, which is how
-// you tell them apart in Minecraft too.
-export const VILLAGERS = [
-  { robe: 0x8a6242, trim: 0xc2a06d },  // farmer: brown, straw apron
-  { robe: 0xe4e0d6, trim: 0xa33b32 },  // librarian: white, red band
-  { robe: 0x7a4a8f, trim: 0x593369 },  // cleric: purple
-  { robe: 0x474c55, trim: 0x2c3037 },  // toolsmith: dark grey
-  { robe: 0x5c8a4a, trim: 0x3d6631 },  // nitwit: green
-  { robe: 0xa4543f, trim: 0x76392a },  // mason: terracotta
-];
-
-export const SKIN = 0xc09372;      // villager skin
-export const SKIN_DARK = 0xa87c5e; // the nose, a shade deeper
-export const HAIR = 0x50331f;
-export const BROW = 0x3a2415;
 export const GOOD_GREEN = 0x43d17c;
 export const CONFETTI_COLS = [0xff6b6b, 0xffd24a, 0x58e08a, 0x6ad2ff, 0xb98bff, 0xff9f5a, 0x7ef0d0, 0xf78fb3];
 

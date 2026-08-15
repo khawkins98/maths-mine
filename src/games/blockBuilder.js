@@ -54,10 +54,9 @@ export function createBlockBuilder(ctx) {
   // Minecraft oak trees around the clearing edges for atmosphere.
   // Positions are behind/beside the play area so they never obstruct blocks.
   const treesGroup = plantTrees(scene, [
-    { x: -9, z: -6 }, { x: -7, z: -8 }, { x: 0, z: -9 },
-    { x: 6,  z: -7 }, { x: 10, z: -3 }, { x: 11, z: 3 },
-    { x: -10, z: 2 }, { x: -8, z: 5 },
-  ]);
+    { x: -13, z: -7 }, { x: -7, z: -10 },
+    { x: 7, z: -10 }, { x: 13, z: -7 },
+  ], textures);
 
   let wall = new THREE.Group();
   root.add(wall);

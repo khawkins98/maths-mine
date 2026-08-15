@@ -1,21 +1,21 @@
-// game/bolt.js — the 3D mascot: Minecraft Steve, a voxel blocky player character
+// game/bolt.js — the 3D mascot: a texture-mapped block adventurer
 // who reacts to the child (idle bob, blink, hop on correct, shake on "wow",
 // blob shadow). A speech bubble tracks his head in screen space.
 //
-// RIG: Steve has an ARTICULATED SKELETON of THREE.Object3D pivots
+// RIG: the miner has an ARTICULATED SKELETON of THREE.Object3D pivots
 // (the Minecraft-mob approach for rigid parts):
 //   root → torso → { neckPivot→head, shoulder→(arm→elbow→hand), hip→leg }
 // Every limb mesh hangs off a pivot placed at its real joint, so rotating a
 // pivot swings the limb from the shoulder/hip. All motion (idle breathing, arm
 // sway, wave, hop, wow, walk) is procedural joint rotation driven from update().
 //
-// EXPERIENCE-AS-PROGRESS: setOxidation(0..1) controls how "battle-worn" Steve
+// EXPERIENCE-AS-PROGRESS: setOxidation(0..1) controls how battle-worn the miner
 // looks — fresh and clean at 0, slightly weathered/darker at 1 as mastery grows.
 // The API is preserved so callers don't need to change.
 
 import * as THREE from 'three';
 
-// Steve stands ON the island rather than being pinned to the camera. Parented to
+// The miner stands ON the island rather than being pinned to the camera. Parented to
 // the camera he was really a 3D HUD element: he ignored the terrain, and when a
 // camera move took his fixed offset below the ground he sank into it, which is
 // exactly what the commutativity rotate used to do to him.
@@ -23,103 +23,25 @@ import * as THREE from 'three';
 // In the world he casts onto the same grass as the blocks, is occluded like
 // anything else, and moves with the parallax for free. The cost is that each
 // game must put him somewhere its own camera framing can see, via placeAt().
-const BOLT_SCALE = 1.25;
-const FOOT_DROP = 0.92 * BOLT_SCALE;  // model origin sits this far above his feet
-const BOLT_HOME = new THREE.Vector3(-4.6, FOOT_DROP, 4.2); // default: front-left
+const BOLT_SCALE = 0.92;
+const BOLT_HOME = new THREE.Vector3(-4.6, 0, 4.2); // default: front-left
 const EDGE = 0.74;  // how close to the frame edge he may stand, in NDC
 
-// Steve's colour palette — classic Minecraft Steve skin.
-// setOxidation(0..1) lerps toward a slightly more battle-worn darker version.
-const COL = {
-  skin:    { fresh: 0xc8a47a, worn: 0x9a7a55 }, // face / neck
-  hair:    { fresh: 0x3d2b1f, worn: 0x2a1e14 }, // hair cap + beard pixels
-  shirt:   { fresh: 0x6090b0, worn: 0x426a82 }, // iconic blue-grey tunic
-  shirtDk: { fresh: 0x4a7a98, worn: 0x315966 }, // tunic sides / darker areas
-  pants:   { fresh: 0x4a6a8a, worn: 0x304858 }, // blue jeans
-  boots:   { fresh: 0x2a2a2a, worn: 0x1a1a1a }, // dark boots
-};
-
-export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
+export function createBolt({ scene, camera, textures, characterAssets, nowT, bubbleEl }) {
   const bolt = new THREE.Group();
   const _camPos = new THREE.Vector3();
   const _ndc = new THREE.Vector3();
 
-  let boltEyes = [], boltShadow = null;
+  let boltShadow = null;
 
-  // current oxidation level (0 = fresh Steve, 1 = battle-worn)
-  let _oxLevel = 0;
+  // A distinct green adventurer rather than an imitation Steve skin.
+  const player = characterAssets.create('m');
 
-  // Coloured material that lerps between fresh and worn as mastery grows.
-  // Tagged with userData so setOxidation can walk the hierarchy and recolour.
-  const oxMat = (role, rough = 0.85) => {
-    const mat = new THREE.MeshStandardMaterial({ color: COL[role].fresh, roughness: rough, metalness: 0.0 });
-    mat.userData.oxFresh = new THREE.Color(COL[role].fresh);
-    mat.userData.oxWorn  = new THREE.Color(COL[role].worn);
-    return mat;
-  };
-  const flat = (c, rough = 0.85) => new THREE.MeshStandardMaterial({ color: c, roughness: rough, metalness: 0.0 });
-
-  // mesh helper — parents mat-skinned box under parent at a local position.
-  const node = (parent, geo, mat, x = 0, y = 0, z = 0) => {
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z);
-    parent.add(m); return m;
-  };
-  const boxGeo = (w, h, d) => new THREE.BoxGeometry(w, h, d);
-
-  // ---- joint hierarchy (pivots placed at real joint locations) ----
-  const torso = new THREE.Object3D();
+  const torso = new THREE.Group();
+  torso.add(player);
   bolt.add(torso);
 
-  const neckPivot = new THREE.Object3D();
-  neckPivot.position.set(0, 0.38, 0);
-  torso.add(neckPivot);
-
-  const shoulder = { '-1': null, '1': null };
-  const elbow    = { '-1': null, '1': null };
-  const hip      = { '-1': null, '1': null };
-
-  // ---- torso / body — Steve's classic blue-grey shirt ----
-  node(torso, boxGeo(0.50, 0.75, 0.25), oxMat('shirt'), 0, -0.05, 0);      // body front
-  node(torso, boxGeo(0.50, 0.75, 0.25), oxMat('shirtDk'), 0, -0.05, 0);    // reuse — same mesh, slightly darker sides handled by roughness/ambient
-  // waistband
-  node(torso, boxGeo(0.54, 0.10, 0.27), oxMat('pants'), 0, -0.43, 0);
-
-  // ---- legs (hip pivots) — blue jeans + dark boots ----
-  for (const s of [-1, 1]) {
-    const h = new THREE.Object3D(); h.position.set(s * 0.125, -0.43, 0); torso.add(h); hip[s] = h;
-    node(h, boxGeo(0.24, 0.50, 0.24), oxMat('pants'), 0, -0.25, 0);  // jeans
-    node(h, boxGeo(0.26, 0.18, 0.30), oxMat('boots'), 0, -0.54, 0.03); // boot
-  }
-
-  // ---- arms (shoulder pivot → upper arm → elbow pivot → hand) ----
-  for (const s of [-1, 1]) {
-    const sh = new THREE.Object3D(); sh.position.set(s * 0.37, 0.18, 0); torso.add(sh); shoulder[s] = sh;
-    node(sh, boxGeo(0.24, 0.62, 0.24), oxMat('shirt'), s * 0.01, -0.31, 0.01); // upper arm
-    const el = new THREE.Object3D(); el.position.set(s * 0.01, -0.50, 0.01); sh.add(el); elbow[s] = el;
-    node(el, boxGeo(0.24, 0.30, 0.24), oxMat('skin'), 0, -0.18, 0);  // hand (skin-coloured)
-  }
-
-  // ---- head (under neck pivot) ----
-  // Steve has a big square blocky head — the defining Minecraft silhouette
-  node(neckPivot, boxGeo(0.76, 0.76, 0.76), oxMat('skin'), 0, 0.40, 0);  // head
-  // hair cap on top + sides (dark brown, slightly oversized like the Minecraft helmet layer)
-  node(neckPivot, boxGeo(0.82, 0.24, 0.82), oxMat('hair'), 0, 0.74, 0);  // hair top
-  node(neckPivot, boxGeo(0.82, 0.30, 0.06), oxMat('hair'), 0, 0.30, -0.42); // hair back
-  // beard/jaw pixels — classic Steve dark chin stripe
-  node(neckPivot, boxGeo(0.34, 0.10, 0.06), flat(0x2a1e14), 0, 0.10, 0.40);
-
-  // eyes — small, white sclera with dark pupils (beady Minecraft look)
-  boltEyes = [];
-  for (const s of [-1, 1]) {
-    const eye = node(neckPivot, boxGeo(0.16, 0.12, 0.06), flat(0xf2f2f2, 0.5), s * 0.18, 0.42, 0.39);
-    const pupil = new THREE.Mesh(boxGeo(0.09, 0.09, 0.04), flat(0x1a1209, 0.5));
-    pupil.position.set(s * 0.03, 0, 0.02);
-    eye.add(pupil);
-    boltEyes.push(eye);
-  }
-  // nose bridge pixels (subtle, Steve has a slight nose indication)
-  node(neckPivot, boxGeo(0.10, 0.08, 0.05), flat(0xb08a5c, 0.9), 0, 0.28, 0.40);
+  const { neck: neckPivot, shoulders: shoulder, hips: hip } = player.userData.joints;
 
   // blob shadow: parented to the ROOT (not the torso) so it stays flat under the
   // feet and never inherits limb/breathing motion.
@@ -127,8 +49,8 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
     new THREE.PlaneGeometry(1.7, 0.9),
     new THREE.MeshBasicMaterial({ map: textures.puffTex, color: 0x203a2a, transparent: true, opacity: 0.3, depthWrite: false })
   );
-  boltShadow.rotation.x = -Math.PI / 2.4;
-  boltShadow.position.y = -0.92;
+  boltShadow.rotation.x = -Math.PI / 2;
+  boltShadow.position.y = 0.015;
   bolt.add(boltShadow);
 
   bolt.scale.setScalar(BOLT_SCALE);
@@ -155,23 +77,22 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
   function placeAt(x, z, scale = 1) {
     const sc = BOLT_SCALE * scale;
     bolt.userData.scale = sc;
-    home.set(x, 0.92 * sc, z);
+    home.set(x, 0, z);
   }
-  // speech-bubble anchor — parented to the head pivot so it tracks the now
-  // articulated head. (0.1,1.21,0) in neck-local == (0.1,1.55,0) in bolt-local.
-  const headAnchor = new THREE.Object3D(); headAnchor.position.set(0.1, 1.21, 0); neckPivot.add(headAnchor);
+  // Speech-bubble anchor above the texture-mapped head.
+  const headAnchor = new THREE.Object3D();
+  headAnchor.position.set(0, 2.85, 0);
+  torso.add(headAnchor);
 
   let oxidation = 0;
-  // setOxidation(0..1): at 0 Steve is clean and fresh, at 1 he's slightly
+  // setOxidation(0..1): at 0 the miner is clean and fresh, at 1 he's slightly
   // battle-worn (darker tones). Walks the hierarchy and recolours tagged mats.
   function setOxidation(level) {
     oxidation = Math.max(0, Math.min(1, level || 0));
-    bolt.traverse((o) => {
+    player.traverse((o) => {
       const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
       for (const m of mats) {
-        if (m.userData.oxFresh && m.userData.oxWorn) {
-          m.color.copy(m.userData.oxFresh).lerp(m.userData.oxWorn, oxidation);
-        }
+        if (m.userData.characterSkin) m.color.set(0xffffff).lerp(new THREE.Color(0xc4b49e), oxidation * 0.34);
       }
     });
     bolt.userData.oxidation = oxidation;
@@ -188,7 +109,6 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
   let actionT = 0;            // seconds since the action began
   const ACTION_DUR = { wave: 1.9, hop: 0.7, wow: 0.85 };
   let walkOn = false, walkT = 0;
-  let blinkIn = 3, blinkT = 0;
   let footTapT = 2.5;         // countdown to the next idle foot-tap
   let tapping = 0;            // remaining time of the current foot-tap
 
@@ -209,10 +129,9 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
   function resetPose() {
     torso.position.set(0, 0, 0); torso.rotation.set(0, 0, 0); torso.scale.set(1, 1, 1);
     neckPivot.rotation.set(0, 0, 0);
-    for (const s of [-1, 1]) {
-      shoulder[s].rotation.set(0, 0, 0);
-      elbow[s].rotation.set(0, 0, 0);
-      hip[s].rotation.set(0, 0, 0);
+    for (const side of [-1, 1]) {
+      shoulder[side].rotation.set(0, 0, 0);
+      hip[side].rotation.set(0, 0, 0);
     }
   }
 
@@ -275,7 +194,7 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
         const inOut = Math.sin(prog * Math.PI);           // ease in then out
         shoulder[1].rotation.z = lerp(0, 2.25, inOut);    // arm up-and-out
         shoulder[1].rotation.x = lerp(0, -0.2, inOut);
-        elbow[1].rotation.z = Math.sin(actionT * 13) * 0.6 * inOut; // wag
+        shoulder[1].rotation.y = Math.sin(actionT * 13) * 0.22 * inOut; // wag
         neckPivot.rotation.z = Math.sin(actionT * 13) * 0.05 * inOut;
       } else if (action === 'hop') {
         const k = 1 - prog;
@@ -336,19 +255,11 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
 
     // ---- blob shadow: shrinks/fades as he bobs higher ----
     const bob = rootY - home.y;
-    boltShadow.position.y = -0.92 - bob;
+    boltShadow.position.y = 0.015 - bob;
     const sh = Math.max(0.35, 1 - bob * 1.6);
     boltShadow.scale.set(sh, sh, 1);
     boltShadow.material.opacity = 0.28 * Math.max(0.4, sh);
 
-    // ---- blink (squash the eyes for 100ms every 3-5s) ----
-    blinkT -= dt;
-    if (blinkT <= 0) {
-      blinkIn -= dt;
-      if (blinkIn <= 0) { blinkT = 0.1; blinkIn = 3 + Math.random() * 2; }
-    }
-    const eyeS = blinkT > 0 ? 0.1 : 1;
-    for (const e of boltEyes) e.scale.y = eyeS;
   }
 
   const _proj = new THREE.Vector3();
@@ -382,11 +293,11 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
 
   function show(v = true) { bolt.visible = v; if (bubbleEl) bubbleEl.classList.toggle('hidden', !v); }
 
-  // dispose the whole joint hierarchy's geometries + materials (Steve normally
+  // dispose the whole joint hierarchy's geometries + materials (the miner normally
   // lives for the app's lifetime, but keep teardown correct/leak-free).
   function dispose() {
     bolt.traverse((o) => {
-      if (o.geometry) o.geometry.dispose?.();
+      if (o.geometry && !characterAssets.geometries.has(o.geometry)) o.geometry.dispose?.();
       const mm = o.material;
       if (Array.isArray(mm)) mm.forEach((m) => m.dispose?.());
       else if (mm) mm.dispose?.();

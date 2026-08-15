@@ -117,10 +117,9 @@ export function createShakeBatch(ctx) {
 
   // Minecraft oak trees around the clearing edges for atmosphere.
   const treesGroup = plantTrees(scene, [
-    { x: -9, z: -5 }, { x: -6, z: -8 }, { x: 2, z: -9 },
-    { x: 8,  z: -6 }, { x: 10, z: 1 },  { x: -10, z: 1 },
-    { x: -7, z: 5 },  { x: 4,  z: 7 },
-  ]);
+    { x: -13, z: -7 }, { x: -7, z: -10 },
+    { x: 7, z: -10 }, { x: 13, z: -7 },
+  ], ctx.textures);
   const trayGroup = new THREE.Group();
   const diceGroup = new THREE.Group();
   root.add(trayGroup, diceGroup);

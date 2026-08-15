@@ -8,25 +8,18 @@
 
 import * as THREE from 'three';
 
-const BLOCK = 0.9; // voxel size, matching the game's block scale
+const BLOCK = 0.72; // scenery scale: readable, but subordinate to the lesson
 
 // Shared geometries — one BoxGeometry per distinct size, reused across all
 // trees so we don't create hundreds of identical geometries.
 const _gLog  = new THREE.BoxGeometry(BLOCK, BLOCK, BLOCK);
 const _gLeaf = new THREE.BoxGeometry(BLOCK, BLOCK, BLOCK);
 
-// Oak log: brown bark
-const _mLog = new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 0.95, metalness: 0 });
-
-// Leaf colours — a few variations for visual interest; picked randomly per leaf
-const LEAF_COLS = [0x4a7a2a, 0x3d6622, 0x548c30, 0x416a24, 0x5c9432];
-const _mLeaves = LEAF_COLS.map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.95, metalness: 0 }));
-
 /**
  * Create a single oak tree group. Trunk base = y 0.
- * @param {{ trunkHeight?: number, seed?: number }} opts
+ * @param {{ trunkHeight?: number, seed?: number, materials: { log: THREE.Material, leaves: THREE.Material[] } }} opts
  */
-export function makeTree({ trunkHeight = 4, seed = 0 } = {}) {
+export function makeTree({ trunkHeight = 4, seed = 0, materials } = {}) {
   const g = new THREE.Group();
 
   // Simple seeded-ish random (deterministic per tree so the forest looks
@@ -34,49 +27,35 @@ export function makeTree({ trunkHeight = 4, seed = 0 } = {}) {
   let rng = seed * 9301 + 49297;
   const rand = () => { rng = (rng * 9301 + 49297) % 233280; return rng / 233280; };
 
-  // Trunk — stack of log blocks
+  // Trunk — stacked cubes retain the block rhythm without becoming a giant
+  // foreground wall when the camera uses a low frontal angle.
   for (let i = 0; i < trunkHeight; i++) {
-    const log = new THREE.Mesh(_gLog, _mLog);
+    const log = new THREE.Mesh(_gLog, materials.log);
     log.position.set(0, BLOCK * i + BLOCK / 2, 0);
+    log.castShadow = true;
     g.add(log);
   }
 
-  // Canopy — roughly spherical blob of leaf blocks around the top of the trunk.
-  // Minecraft oak canopy: a 5×4×5 blob (x/z ±2, y 0..3) with corners removed.
-  const cx = 0;
-  const cy = (trunkHeight - 1) * BLOCK; // canopy centre y
-  const cz = 0;
-  const CANOPY = [
-    // [dx, dy, dz] in block-grid units — corners of the 5×4×5 box are trimmed
-    ...(() => {
-      const cells = [];
-      for (let dx = -2; dx <= 2; dx++) {
-        for (let dy = 0; dy <= 3; dy++) {
-          for (let dz = -2; dz <= 2; dz++) {
-            // trim the four vertical corners of the bounding box
-            const cornerX = Math.abs(dx) === 2;
-            const cornerZ = Math.abs(dz) === 2;
-            if (cornerX && cornerZ) continue; // cut diagonal corners
-            // also trim the very top corners at dy=3
-            if (dy === 3 && (Math.abs(dx) >= 2 || Math.abs(dz) >= 2)) continue;
-            cells.push([dx, dy, dz]);
-          }
-        }
-      }
-      return cells;
-    })(),
-  ];
+  // A compact three-layer oak crown. The old 5×4×5 solid blob was over a
+  // hundred cubes per tree and filled the frame; this silhouette stays airy.
+  const CANOPY = [];
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      if (Math.abs(dx) + Math.abs(dz) < 2 || rand() > 0.34) CANOPY.push([dx, 0, dz]);
+      if (Math.abs(dx) + Math.abs(dz) < 2 || rand() > 0.58) CANOPY.push([dx, 1, dz]);
+    }
+  }
+  CANOPY.push([0, 2, 0], [-1, 2, 0], [1, 2, 0], [0, 2, -1], [0, 2, 1]);
 
   for (const [dx, dy, dz] of CANOPY) {
-    // Randomly skip a few leaves for a slightly ragged look (about 10%)
-    if (rand() < 0.10) continue;
-    const mat = _mLeaves[(rand() * _mLeaves.length) | 0];
+    const mat = materials.leaves[(rand() * materials.leaves.length) | 0];
     const leaf = new THREE.Mesh(_gLeaf, mat);
     leaf.position.set(
-      cx + dx * BLOCK,
-      cy + dy * BLOCK + BLOCK / 2,
-      cz + dz * BLOCK,
+      dx * BLOCK,
+      (trunkHeight - 1 + dy) * BLOCK + BLOCK / 2,
+      dz * BLOCK,
     );
+    leaf.castShadow = true;
     g.add(leaf);
   }
 
@@ -90,10 +69,16 @@ export function makeTree({ trunkHeight = 4, seed = 0 } = {}) {
  * @param {THREE.Scene} scene
  * @param {Array<{x: number, z: number, trunkHeight?: number}>} positions
  */
-export function plantTrees(scene, positions) {
+export function plantTrees(scene, positions, textures) {
   const group = new THREE.Group();
+  group.name = 'background-grove';
+  const log = new THREE.MeshStandardMaterial({ map: textures.logTex, color: 0xffffff, roughness: 1, metalness: 0 });
+  const leaves = [0xffffff, 0xd8f0cf, 0xb8dcae].map((color) => new THREE.MeshStandardMaterial({
+    map: textures.leafTex, color, roughness: 1, metalness: 0,
+  }));
+  group.userData.materials = [log, ...leaves];
   positions.forEach(({ x, z, trunkHeight }, i) => {
-    const tree = makeTree({ trunkHeight: trunkHeight ?? (4 + (i % 2)), seed: i * 137 });
+    const tree = makeTree({ trunkHeight: trunkHeight ?? (4 + (i % 2)), seed: i * 137, materials: { log, leaves } });
     tree.position.set(x, 0, z);
     group.add(tree);
   });
@@ -105,7 +90,6 @@ export function plantTrees(scene, positions) {
 export function disposeTrees(scene, group) {
   if (!group) return;
   scene.remove(group);
-  // Geometries and materials are shared — do NOT dispose them here.
-  // Just remove children references so GC can collect the group.
+  for (const material of group.userData.materials || []) material.dispose();
   while (group.children.length) group.remove(group.children[0]);
 }

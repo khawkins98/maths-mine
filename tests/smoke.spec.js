@@ -9,6 +9,25 @@ import { boot, pick, waitForState, state, answer } from './helpers.js';
 // pixel-hunting a WebGL canvas.
 
 test.describe('boot + hub', () => {
+  test('a synchronously available Firefox-style voice list does not block startup', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'speechSynthesis', {
+        configurable: true,
+        value: {
+          getVoices: () => [{ name: 'Test Voice', lang: 'en-GB', localService: true }],
+          addEventListener() {},
+          speak() {},
+          cancel() {},
+        },
+      });
+    });
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto('/');
+    await expect(page.locator('#btn-wake')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
   test('gate leads to a hub listing all three games', async ({ page }) => {
     const errors = await boot(page);
     const { games } = await page.evaluate(() => window.__hub());

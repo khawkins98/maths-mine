@@ -408,6 +408,10 @@
         60% { transform: translate(-50%, -115%) scale(1.05); }
         100% { transform: translate(-50%, -115%) scale(1); }
       }
+      /* A four-sign portrait layout has no spare horizontal lane for a speech
+         card. The same line is spoken aloud and repeated in the status footer,
+         so suppress the duplicate instead of covering a villager/sign. */
+      @media (orientation: portrait) { #bubble { display: none; } }
 
       /* ---- big surviving-total badge for commutativity ---- */
       #bigtotal {
