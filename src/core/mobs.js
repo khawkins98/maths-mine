@@ -15,6 +15,14 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
+import {
+  buildSteveModel,
+  buildZombieModel,
+  buildVillagerModel,
+  buildCreeperModel,
+  buildEndermanModel,
+  buildGhastModel,
+} from './minecraftMobRig.js';
 
 const BASE = `${import.meta.env.BASE_URL}assets/mobs/`;
 const loader = new GLTFLoader();
@@ -293,12 +301,12 @@ async function tryLoadGLTF(filename) {
 export const MOB_TYPES = ['villager', 'zombie', 'creeper', 'ghast', 'enderman', 'steve'];
 
 const FALLBACKS = {
-  villager: buildVillagerFallback,
-  zombie:   buildZombieFallback,
-  creeper:  buildZombieFallback,
-  ghast:    buildGhastFallback,
-  enderman: buildEndermanFallback,
-  steve:    buildVillagerFallback,
+  villager: () => buildVillagerModel(0.055),
+  zombie:   () => buildZombieModel(0.055),
+  creeper:  () => buildCreeperModel(0.055),
+  ghast:    () => buildGhastModel(0.055),
+  enderman: () => buildEndermanModel(0.055),
+  steve:    () => buildSteveModel(0.055),
 };
 
 const FILENAMES = {
@@ -310,6 +318,39 @@ const FILENAMES = {
   steve:    'steve.glb',
 };
 
+const TARGET_HEIGHTS = {
+  villager: 1.95,
+  zombie:   1.95,
+  creeper:  1.7,
+  ghast:    2.5,
+  enderman: 2.8,
+  steve:    1.8,
+};
+
+function normalizeAndScaleModel(model, targetHeight = 1.8, isFloating = false) {
+  model.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(model);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+
+  if (size.y > 0.001) {
+    const scaleFactor = targetHeight / size.y;
+    model.scale.setScalar(scaleFactor);
+    model.updateMatrixWorld(true);
+  }
+
+  const scaledBox = new THREE.Box3().setFromObject(model);
+  const center = new THREE.Vector3();
+  scaledBox.getCenter(center);
+  model.position.x -= center.x;
+  model.position.z -= center.z;
+  if (!isFloating) {
+    model.position.y -= scaledBox.min.y;
+  } else {
+    model.position.y = 0.5;
+  }
+}
+
 function bindMobJoints(model, type) {
   const head = model.getObjectByName('Head_04') || model.getObjectByName('Head_03') || model.getObjectByName('Head_05') || model.getObjectByName('Head_01') || model.getObjectByName('head_02') || model.getObjectByName('head') || model;
   const spine = model.getObjectByName('Spine_02') || model.getObjectByName('Body_04') || model.getObjectByName('Body_01') || model.getObjectByName('Body_02') || model.getObjectByName('body_01') || model;
@@ -319,6 +360,13 @@ function bindMobJoints(model, type) {
   const lLeg = model.getObjectByName('LeftLeg_06') || model.getObjectByName('LeftLeg_07') || model.getObjectByName('LeftLeg_02') || model.getObjectByName('legL_05') || model.getObjectByName('LegFrontL_03') || model.getObjectByName('LeftLeg_03');
   const rBackLeg = model.getObjectByName('LegBackR_06');
   const lBackLeg = model.getObjectByName('LegBackL_05');
+
+  // Cache rest rotations on all bones for clean relative delta animations
+  model.traverse((n) => {
+    if (n.isBone) {
+      n.userData.restRotation = n.rotation.clone();
+    }
+  });
 
   model.userData.joints = {
     neck: head,
@@ -331,7 +379,7 @@ function bindMobJoints(model, type) {
 }
 
 /**
- * Load all mobs. Returns a map { villager, zombie, ghast, enderman }
+ * Load all mobs. Returns a map { villager, zombie, creeper, ghast, enderman, steve }
  * where each value is a factory function: `() => THREE.Group`
  */
 export async function loadMobs() {
@@ -344,7 +392,8 @@ export async function loadMobs() {
   MOB_TYPES.forEach((type, i) => {
     const gltfScene = results[i];
     if (gltfScene) {
-      // GLB loaded — clone with SkeletonUtils so skinned meshes and bone weights clone properly
+      // Normalize root GLB scene
+      normalizeAndScaleModel(gltfScene, TARGET_HEIGHTS[type] || 1.8, type === 'ghast');
       factories[type] = () => {
         const clone = cloneSkeleton(gltfScene);
         clone.name = `${type}-gltf`;

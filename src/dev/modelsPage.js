@@ -1,9 +1,16 @@
-// src/dev/modelsPage.js — Live 3D Models & Mobs Dev Sandbox
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { loadMobs, createMob, MOB_TYPES } from '../core/mobs.js';
 import { loadCharacterAssets } from '../core/characters.js';
 import { createTextures } from '../core/textures.js';
+import {
+  buildSteveModel,
+  buildZombieModel,
+  buildVillagerModel,
+  buildCreeperModel,
+  buildEndermanModel,
+  buildGhastModel,
+} from '../core/minecraftMobRig.js';
 
 const container = document.getElementById('canvas-container');
 
@@ -13,7 +20,7 @@ scene.background = new THREE.Color(0x1a1b24);
 scene.fog = new THREE.Fog(0x1a1b24, 25, 60);
 
 const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
-camera.position.set(0, 2.5, 6.5);
+camera.position.set(1.5, 1.8, 4.8);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(container.clientWidth, container.clientHeight);
@@ -68,7 +75,7 @@ let characterAssets = null;
 const textures = createTextures();
 
 let animateEnabled = true;
-let autoRotate = true;
+let autoRotate = false;
 let animSpeed = 1.0;
 let modelScale = 1.0;
 let wireframe = false;
@@ -235,35 +242,27 @@ async function switchModel(type) {
   const statsEl = document.getElementById('model-stats');
   const texImg = document.getElementById('tex-preview');
 
+  const titles = {
+    golem:    { name: 'Iron Golem', stats: 'Height: ~2.4m | Articulated 128x128 UV Box Guardian', tex: '/assets/mobs/iron_golem.png?v=2' },
+    steve:    { name: 'Steve (Player Character)', stats: 'Height: ~1.8m | Official Minecraft Character Model', tex: '/assets/characters/Textures/texture-steve.png' },
+    villager: { name: 'Villager (Honest Crew)', stats: 'Height: ~1.9m | Authentic Robes, Snout & Folded Arms', tex: '/assets/mobs/villager.png?v=2' },
+    zombie:   { name: 'Zombie (Imposter Mob)', stats: 'Height: ~1.9m | Outstretched Arms Imposter Model', tex: '/assets/mobs/zombie.png?v=2' },
+    creeper:  { name: 'Creeper (Explosive Mob)', stats: 'Height: ~1.7m | 4-Legged Quadruped Model', tex: '/assets/mobs/creeper.png?v=2' },
+    ghast:    { name: 'Ghast (Nether Mob)', stats: 'Height: ~2.5m | 9-Tentacle Floating Model', tex: '/assets/mobs/ghast.png?v=2' },
+    enderman: { name: 'Enderman (Ender Mob)', stats: 'Height: ~2.8m | Slender Long-Limbed Ender Model', tex: '/assets/mobs/enderman.png?v=2' },
+  };
+
+  const meta = titles[type] || titles.golem;
+  nameEl.innerHTML = `<strong>${meta.name}</strong>`;
+  statsEl.textContent = meta.stats;
+  texImg.src = meta.tex;
+
   if (type === 'golem') {
     currentModelGroup = buildArticulatedGolem();
-    nameEl.innerHTML = '<strong>Iron Golem</strong>';
-    statsEl.textContent = 'Height: ~2.4m | Articulated 128x128 UV Box Skeleton';
-    texImg.src = '/assets/mobs/iron_golem.png?v=2';
-  } else if (type === 'steve') {
-    if (mobFactories && mobFactories.steve) {
-      currentModelGroup = mobFactories.steve();
-      currentModelGroup.scale.setScalar(1.2);
-    } else if (characterAssets) {
-      currentModelGroup = characterAssets.create('steve');
-      currentModelGroup.scale.setScalar(1.2);
-    }
-    nameEl.innerHTML = '<strong>Steve (Player Character)</strong>';
-    statsEl.textContent = 'Height: ~1.8m | Official Minecraft GLB Rig';
-    texImg.src = '/assets/characters/Textures/texture-steve.png';
-  } else if (mobFactories) {
-    currentModelGroup = createMob(mobFactories, type);
-    currentModelGroup.scale.setScalar(1.2);
-    const titles = {
-      villager: 'Villager (Honest Crew)',
-      zombie:   'Zombie (Imposter Mob)',
-      creeper:  'Creeper (Explosive Mob)',
-      ghast:    'Ghast (Nether Mob)',
-      enderman: 'Enderman (Ender Mob)',
-    };
-    nameEl.innerHTML = `<strong>${titles[type] || type}</strong>`;
-    statsEl.textContent = 'Articulated 3D GLB Model with Bone Skeleton';
-    texImg.src = '/assets/mobs/iron_golem.png?v=2';
+  } else if (mobFactories && mobFactories[type]) {
+    currentModelGroup = mobFactories[type]();
+  } else if (type === 'steve' && characterAssets) {
+    currentModelGroup = characterAssets.create('steve');
   }
 
   if (currentModelGroup) {
@@ -306,17 +305,39 @@ function animate() {
       headPivot.rotation.y = Math.sin(t * 1.1) * 0.3;
       torsoGroup.rotation.z = Math.sin(t * 3.4) * 0.03;
     } else if (currentModelGroup.userData.joints) {
-      // Standard joints animation
+      // Standard joints animation respecting rest bind pose
       const j = currentModelGroup.userData.joints;
       const walkPhase = Math.sin(t * 3.2);
-      if (j.shoulders && j.shoulders['-1']) j.shoulders['-1'].rotation.x = walkPhase * 0.5;
-      if (j.shoulders && j.shoulders['1']) j.shoulders['1'].rotation.x = -walkPhase * 0.5;
-      if (j.hips && j.hips['-1']) j.hips['-1'].rotation.x = -walkPhase * 0.4;
-      if (j.hips && j.hips['1']) j.hips['1'].rotation.x = walkPhase * 0.4;
+
+      if (j.shoulders && j.shoulders['-1']) {
+        const r0 = j.shoulders['-1'].userData.restRotation;
+        j.shoulders['-1'].rotation.x = (r0 ? r0.x : 0) + walkPhase * 0.45;
+      }
+      if (j.shoulders && j.shoulders['1']) {
+        const r0 = j.shoulders['1'].userData.restRotation;
+        j.shoulders['1'].rotation.x = (r0 ? r0.x : 0) - walkPhase * 0.45;
+      }
+      if (j.hips && j.hips['-1']) {
+        const r0 = j.hips['-1'].userData.restRotation;
+        j.hips['-1'].rotation.x = (r0 ? r0.x : 0) - walkPhase * 0.4;
+      }
+      if (j.hips && j.hips['1']) {
+        const r0 = j.hips['1'].userData.restRotation;
+        j.hips['1'].rotation.x = (r0 ? r0.x : 0) + walkPhase * 0.4;
+      }
       // Creeper 4-legged walking animation
-      if (j.backHips && j.backHips['-1']) j.backHips['-1'].rotation.x = walkPhase * 0.4;
-      if (j.backHips && j.backHips['1']) j.backHips['1'].rotation.x = -walkPhase * 0.4;
-      if (j.neck) j.neck.rotation.y = Math.sin(t * 1.2) * 0.25;
+      if (j.backHips && j.backHips['-1']) {
+        const r0 = j.backHips['-1'].userData.restRotation;
+        j.backHips['-1'].rotation.x = (r0 ? r0.x : 0) + walkPhase * 0.4;
+      }
+      if (j.backHips && j.backHips['1']) {
+        const r0 = j.backHips['1'].userData.restRotation;
+        j.backHips['1'].rotation.x = (r0 ? r0.x : 0) - walkPhase * 0.4;
+      }
+      if (j.neck) {
+        const r0 = j.neck.userData.restRotation;
+        j.neck.rotation.y = (r0 ? r0.y : 0) + Math.sin(t * 1.2) * 0.25;
+      }
     }
   }
 
