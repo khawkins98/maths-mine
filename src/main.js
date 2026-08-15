@@ -26,6 +26,7 @@ import { BIOME_ORDER } from './core/biomes.js';
 
 import { createBlockBuilder } from './games/blockBuilder.js';
 import { createSpotWrongun } from './games/spotWrongun/index.js';
+import { createNightDefense } from './games/nightDefense/index.js';
 import { createHub } from './hub.js';
 
 // ---------- shared services ----------
@@ -78,9 +79,11 @@ window.__engine = () => engine;
 // title is read off the factory function by the hub for card labels
 createBlockBuilder.title = 'Block Builder';
 createSpotWrongun.title = 'Spot the Wrong’un';
+createNightDefense.title = 'Night Defence';
 const GAMES = {
   'block-builder': createBlockBuilder,
   'spot-the-wrongun': createSpotWrongun,
+  'night-defense': createNightDefense,
 };
 let current = null;
 function startGame(id, opts) {

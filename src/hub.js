@@ -17,6 +17,7 @@ import { createParentDashboard } from './game/parentDashboard.js';
 const META = {
   'block-builder': { icon: 'dirt', desc: 'Build number-walls out of blocks. × and ÷.' },
   'spot-the-wrongun': { icon: 'emerald', desc: 'Find the player who’s fibbing!' },
+  'night-defense': { icon: 'obsidian', desc: 'Defend your cottage against nighttime mobs!' },
 };
 
 export function createHub(ctx) {
@@ -73,8 +74,8 @@ export function createHub(ctx) {
     const btn = ui.els.btnBuildHouse;
     if (btn) {
       if (stage >= 4) {
-        btn.textContent = '🛡️ Iron Golem Guarding House!';
-        btn.classList.add('disabled');
+        btn.textContent = '🌙 Start Night Defence!';
+        btn.classList.remove('disabled');
       } else {
         btn.innerHTML = `🔨 Build House (Stage ${stage}/4) · ${cost} 🔩`;
         if (wallet && wallet.bolts >= cost) {
@@ -91,6 +92,16 @@ export function createHub(ctx) {
       const house = ctx.engine && ctx.engine.house;
       const wallet = ctx.wallet;
       if (!house || !wallet) return;
+
+      const stage = house.getStage();
+      if (stage >= 4) {
+        // Start Night Defence directly
+        if (ctx.startGame) {
+          close();
+          ctx.startGame('night-defense');
+        }
+        return;
+      }
 
       const res = house.upgrade(wallet);
       if (res.success) {

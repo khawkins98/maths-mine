@@ -10,6 +10,7 @@ import {
   buildCreeperModel,
   buildEndermanModel,
   buildGhastModel,
+  buildArticulatedGolem,
 } from '../core/minecraftMobRig.js';
 
 const container = document.getElementById('canvas-container');
@@ -127,108 +128,6 @@ function getGolemTexture() {
   golemTex.generateMipmaps = false;
   golemTex.needsUpdate = true;
   return golemTex;
-}
-
-export function buildArticulatedGolem() {
-  const g = new THREE.Group();
-  g.name = 'iron-golem';
-
-  const tex = getGolemTexture();
-  const mat = new THREE.MeshStandardMaterial({
-    map: tex,
-    roughness: 0.85,
-    metalness: 0.1,
-    wireframe: wireframe,
-  });
-
-  const P = 0.055; // pixel unit -> height ~2.4m
-
-  // Legs (h=16, w=6, d=5)
-  const legH = 16 * P;
-  const rLegGeo = makeMinecraftBox(6, 16, 5, 37, 0, P);
-  const lLegGeo = makeMinecraftBox(6, 16, 5, 60, 0, P);
-
-  const rLegPivot = new THREE.Group();
-  rLegPivot.position.set(4.5 * P, legH, 0);
-  const rLegMesh = new THREE.Mesh(rLegGeo, mat);
-  rLegMesh.position.set(0, -legH / 2, 0);
-  rLegMesh.castShadow = true;
-  rLegPivot.add(rLegMesh);
-
-  const lLegPivot = new THREE.Group();
-  lLegPivot.position.set(-4.5 * P, legH, 0);
-  const lLegMesh = new THREE.Mesh(lLegGeo, mat);
-  lLegMesh.position.set(0, -legH / 2, 0);
-  lLegMesh.castShadow = true;
-  lLegPivot.add(lLegMesh);
-
-  g.add(rLegPivot, lLegPivot);
-
-  // Torso / Waist & Upper Chest
-  const torsoGroup = new THREE.Group();
-  torsoGroup.position.set(0, legH, 0);
-
-  const waistGeo = makeMinecraftBox(9, 5, 6, 0, 70, P);
-  const waistMesh = new THREE.Mesh(waistGeo, mat);
-  waistMesh.position.set(0, 2.5 * P, 0);
-  waistMesh.castShadow = true;
-  torsoGroup.add(waistMesh);
-
-  const chestH = 12 * P;
-  const chestGeo = makeMinecraftBox(18, 12, 11, 0, 40, P);
-  const chestMesh = new THREE.Mesh(chestGeo, mat);
-  chestMesh.position.set(0, 5 * P + chestH / 2, 0);
-  chestMesh.castShadow = true;
-  torsoGroup.add(chestMesh);
-
-  // Head + Nose
-  const headPivot = new THREE.Group();
-  headPivot.position.set(0, (5 + 12) * P, -2 * P);
-
-  const headGeo = makeMinecraftBox(8, 10, 8, 0, 0, P);
-  const headMesh = new THREE.Mesh(headGeo, mat);
-  headMesh.position.set(0, 5 * P, 0);
-  headMesh.castShadow = true;
-  headPivot.add(headMesh);
-
-  const noseGeo = makeMinecraftBox(2, 4, 2, 24, 0, P);
-  const noseMesh = new THREE.Mesh(noseGeo, mat);
-  noseMesh.position.set(0, 3 * P, 5 * P);
-  noseMesh.castShadow = true;
-  headPivot.add(noseMesh);
-
-  torsoGroup.add(headPivot);
-
-  // Arms (w=4, h=30, d=6)
-  const armH = 30 * P;
-  const shoulderY = (5 + 12 - 2) * P;
-  const shoulderX = 11 * P;
-
-  const rArmGeo = makeMinecraftBox(4, 30, 6, 60, 21, P);
-  const rArmPivot = new THREE.Group();
-  rArmPivot.position.set(shoulderX, shoulderY, 0);
-  const rArmMesh = new THREE.Mesh(rArmGeo, mat);
-  rArmMesh.position.set(0, -armH / 2, 0);
-  rArmMesh.castShadow = true;
-  rArmPivot.add(rArmMesh);
-
-  const lArmGeo = makeMinecraftBox(4, 30, 6, 60, 58, P);
-  const lArmPivot = new THREE.Group();
-  lArmPivot.position.set(-shoulderX, shoulderY, 0);
-  const lArmMesh = new THREE.Mesh(lArmGeo, mat);
-  lArmMesh.position.set(0, -armH / 2, 0);
-  lArmMesh.castShadow = true;
-  lArmPivot.add(lArmMesh);
-
-  torsoGroup.add(rArmPivot, lArmPivot);
-  g.add(torsoGroup);
-
-  g.userData.anim = {
-    lLegPivot, rLegPivot, lArmPivot, rArmPivot, headPivot, torsoGroup,
-    legH,
-  };
-
-  return g;
 }
 
 // ── Model Switcher ──

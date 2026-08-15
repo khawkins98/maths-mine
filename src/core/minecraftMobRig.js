@@ -420,3 +420,134 @@ export function buildGhastModel(scale = 0.055) {
   };
   return g;
 }
+
+// ── 7. ARTICULATED IRON GOLEM BUILDER ──
+export function buildArticulatedGolem(scale = 0.055) {
+  const g = new THREE.Group();
+  g.name = 'iron-golem';
+
+  const mat = loadPixelMaterial('/assets/mobs/iron_golem.png?v=2', 0.85, 0.1);
+  const P = scale; // 128x128 texture mapping
+
+  function makeMinecraftBox128(w, h, d, u0, v0, p = P) {
+    const geo = new THREE.BoxGeometry(w * p, h * p, d * p);
+    const uvs = geo.attributes.uv;
+    const texW = 128, texH = 128;
+
+    function setUV(faceIdx, uLeft, uRight, vTop, vBottom) {
+      const x0 = uLeft / texW;
+      const x1 = uRight / texW;
+      const y0 = 1.0 - (vTop / texH);
+      const y1 = 1.0 - (vBottom / texH);
+      const base = faceIdx * 4;
+      uvs.setXY(base + 0, x0, y0);
+      uvs.setXY(base + 1, x1, y0);
+      uvs.setXY(base + 2, x0, y1);
+      uvs.setXY(base + 3, x1, y1);
+    }
+
+    // 0: +X, 1: -X, 2: +Y, 3: -Y, 4: +Z, 5: -Z
+    setUV(0, u0, u0 + d, v0 + d, v0 + d + h);
+    setUV(1, u0 + d + w + d, u0 + d + w, v0 + d, v0 + d + h);
+    setUV(2, u0 + d, u0 + d + w, v0, v0 + d);
+    setUV(3, u0 + d + w, u0 + d + w + w, v0, v0 + d);
+    setUV(4, u0 + d, u0 + d + w, v0 + d, v0 + d + h);
+    setUV(5, u0 + d + w + d + w, u0 + d + w + d, v0 + d, v0 + d + h);
+    uvs.needsUpdate = true;
+    return geo;
+  }
+
+  // Legs (h=16, w=6, d=5)
+  const legH = 16 * P;
+  const rLegGeo = makeMinecraftBox128(6, 16, 5, 37, 0, P);
+  const lLegGeo = makeMinecraftBox128(6, 16, 5, 60, 0, P);
+
+  const rLegPivot = new THREE.Group();
+  rLegPivot.position.set(4.5 * P, legH, 0);
+  const rLegMesh = new THREE.Mesh(rLegGeo, mat);
+  rLegMesh.position.set(0, -legH / 2, 0);
+  rLegMesh.castShadow = true;
+  rLegPivot.add(rLegMesh);
+
+  const lLegPivot = new THREE.Group();
+  lLegPivot.position.set(-4.5 * P, legH, 0);
+  const lLegMesh = new THREE.Mesh(lLegGeo, mat);
+  lLegMesh.position.set(0, -legH / 2, 0);
+  lLegMesh.castShadow = true;
+  lLegPivot.add(lLegMesh);
+
+  g.add(rLegPivot, lLegPivot);
+
+  // Torso / Waist & Upper Chest
+  const torsoGroup = new THREE.Group();
+  torsoGroup.position.set(0, legH, 0);
+
+  const waistGeo = makeMinecraftBox128(9, 5, 6, 0, 70, P);
+  const waistMesh = new THREE.Mesh(waistGeo, mat);
+  waistMesh.position.set(0, 2.5 * P, 0);
+  waistMesh.castShadow = true;
+  torsoGroup.add(waistMesh);
+
+  const chestH = 12 * P;
+  const chestGeo = makeMinecraftBox128(18, 12, 11, 0, 40, P);
+  const chestMesh = new THREE.Mesh(chestGeo, mat);
+  chestMesh.position.set(0, 5 * P + chestH / 2, 0);
+  chestMesh.castShadow = true;
+  torsoGroup.add(chestMesh);
+
+  // Head + Nose
+  const headPivot = new THREE.Group();
+  headPivot.position.set(0, (5 + 12) * P, -2 * P);
+
+  const headGeo = makeMinecraftBox128(8, 10, 8, 0, 0, P);
+  const headMesh = new THREE.Mesh(headGeo, mat);
+  headMesh.position.set(0, 5 * P, 0);
+  headMesh.castShadow = true;
+  headPivot.add(headMesh);
+
+  const noseGeo = makeMinecraftBox128(2, 4, 2, 24, 0, P);
+  const noseMesh = new THREE.Mesh(noseGeo, mat);
+  noseMesh.position.set(0, 3 * P, 5 * P);
+  noseMesh.castShadow = true;
+  headPivot.add(noseMesh);
+
+  torsoGroup.add(headPivot);
+
+  // Arms (w=4, h=30, d=6)
+  const armH = 30 * P;
+  const shoulderY = (5 + 12 - 2) * P;
+  const shoulderX = 11 * P;
+
+  const rArmGeo = makeMinecraftBox128(4, 30, 6, 60, 21, P);
+  const rArmPivot = new THREE.Group();
+  rArmPivot.position.set(shoulderX, shoulderY, 0);
+  const rArmMesh = new THREE.Mesh(rArmGeo, mat);
+  rArmMesh.position.set(0, -armH / 2, 0);
+  rArmMesh.castShadow = true;
+  rArmPivot.add(rArmMesh);
+
+  const lArmGeo = makeMinecraftBox128(4, 30, 6, 60, 58, P);
+  const lArmPivot = new THREE.Group();
+  lArmPivot.position.set(-shoulderX, shoulderY, 0);
+  const lArmMesh = new THREE.Mesh(lArmGeo, mat);
+  lArmMesh.position.set(0, -armH / 2, 0);
+  lArmMesh.castShadow = true;
+  lArmPivot.add(lArmMesh);
+
+  torsoGroup.add(rArmPivot, lArmPivot);
+  g.add(torsoGroup);
+
+  g.userData.anim = {
+    lLegPivot, rLegPivot, lArmPivot, rArmPivot, headPivot, torsoGroup,
+    legH,
+  };
+  g.userData.joints = {
+    neck: headPivot,
+    shoulders: { '-1': lArmPivot, '1': rArmPivot },
+    hips: { '-1': lLegPivot, '1': rLegPivot },
+    body: torsoGroup,
+  };
+
+  return g;
+}
+
