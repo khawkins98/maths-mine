@@ -3,7 +3,6 @@
 // animated 2.7m tall Iron Golem with heavy patrol strides, swinging arms, and glowing eyes!
 
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { localStore, readJSON, writeJSON } from './storage.js';
 
 const SAVE_KEY = 'house_stage.v1';
@@ -163,149 +162,182 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
 
     // Stage 4: Animated Iron Golem Guardian!
     if (stage >= 4) {
-      // Place procedural placeholder immediately while GLB loads
-      golemGroup = buildIronGolemProcedural();
+      golemGroup = buildArticulatedIronGolem(textures);
       group.add(golemGroup);
-
-      const GLB_URL = `${import.meta.env.BASE_URL}assets/mobs/iron-golem.glb`;
-      new GLTFLoader().loadAsync(GLB_URL).then((gltf) => {
-        if (!group.parent || currentStage < 4) return;
-
-        const glbGolem = gltf.scene;
-        glbGolem.name = 'iron-golem';
-
-        // ── 1. Nearest-pixel textures (Minecraft style) ──
-        glbGolem.traverse((n) => {
-          if (n.isMesh) {
-            n.castShadow = true;
-            n.receiveShadow = true;
-            if (n.material && n.material.map) {
-              n.material.map.magFilter = THREE.NearestFilter;
-              n.material.map.minFilter = THREE.NearestFilter;
-              n.material.map.generateMipmaps = false;
-            }
-          }
-        });
-
-        // ── 2. Auto-scale: measure bounding box, fit to target height (2.0 world units) ──
-        const TARGET_HEIGHT = 2.0; // ~2.7 Minecraft blocks × BLOCK_SIZE
-        const box = new THREE.Box3().setFromObject(glbGolem);
-        const size = new THREE.Vector3();
-        box.getSize(size);
-        const modelHeight = size.y || 1;
-        const autoScale = TARGET_HEIGHT / modelHeight;
-        glbGolem.scale.setScalar(autoScale);
-
-        // ── 3. Sit on the ground: lift so bottom of bbox touches y = 0 ──
-        const box2 = new THREE.Box3().setFromObject(glbGolem);
-        glbGolem.position.copy(golemGroup.position);
-        glbGolem.position.y = -box2.min.y;
-
-        // ── 4. Find skeleton bones by common names for manual animation ──
-        const bones = {};
-        const BONE_MAP = {
-          head:   ['head', 'Head', 'HEAD'],
-          torso:  ['body', 'Body', 'torso', 'Torso', 'chest', 'Chest', 'spine', 'Spine'],
-          lArm:   ['arm_l', 'LeftArm', 'left_arm', 'ArmL', 'armLeft', 'arm.l'],
-          rArm:   ['arm_r', 'RightArm', 'right_arm', 'ArmR', 'armRight', 'arm.r'],
-          lLeg:   ['leg_l', 'LeftLeg', 'left_leg', 'LegL', 'legLeft', 'leg.l'],
-          rLeg:   ['leg_r', 'RightLeg', 'right_leg', 'LegR', 'legRight', 'leg.r'],
-        };
-        glbGolem.traverse((n) => {
-          if (!n.isBone && n.type !== 'Object3D') return;
-          for (const [key, names] of Object.entries(BONE_MAP)) {
-            if (!bones[key] && names.some(nm => n.name.toLowerCase().includes(nm.toLowerCase()))) {
-              bones[key] = n;
-            }
-          }
-        });
-        // Log what we found for debugging
-        console.log('[house] GLB bones found:', Object.fromEntries(Object.entries(bones).map(([k, v]) => [k, v ? v.name : null])));
-
-        glbGolem.userData.anim = { glb: true, bones };
-
-        group.remove(golemGroup);
-        group.add(glbGolem);
-        golemGroup = glbGolem;
-        console.log(`[house] ✅ Iron Golem GLB loaded (scale=${autoScale.toFixed(4)})`);
-      }).catch((e) => {
-        console.log('[house] ⚠️ iron-golem.glb not found — using procedural fallback', e);
-      });
     }
   }
 
-  function buildIronGolemProcedural() {
+  // Helper to build Minecraft BoxGeometry with exact UV mapping into the 128x128 texture atlas
+  function makeMinecraftBox(w, h, d, u0, v0, p, texW = 128, texH = 128) {
+    const geo = new THREE.BoxGeometry(w * p, h * p, d * p);
+    const uvs = geo.attributes.uv;
+
+    function setUV(faceIdx, uLeft, uRight, vTop, vBottom) {
+      const x0 = uLeft / texW;
+      const x1 = uRight / texW;
+      const y0 = 1.0 - (vTop / texH);
+      const y1 = 1.0 - (vBottom / texH);
+
+      const base = faceIdx * 4;
+      uvs.setXY(base + 0, x0, y0);
+      uvs.setXY(base + 1, x1, y0);
+      uvs.setXY(base + 2, x0, y1);
+      uvs.setXY(base + 3, x1, y1);
+    }
+
+    // 0: +X (Right)
+    setUV(0, u0, u0 + d, v0 + d, v0 + d + h);
+    // 1: -X (Left)
+    setUV(1, u0 + d + w + d, u0 + d + w, v0 + d, v0 + d + h);
+    // 2: +Y (Top)
+    setUV(2, u0 + d, u0 + d + w, v0, v0 + d);
+    // 3: -Y (Bottom)
+    setUV(3, u0 + d + w, u0 + d + w + w, v0 + d, v0);
+    // 4: +Z (Front)
+    setUV(4, u0 + d, u0 + d + w, v0 + d, v0 + d + h);
+    // 5: -Z (Back)
+    setUV(5, u0 + d + w + d, u0 + d + w + d + w, v0 + d, v0 + d + h);
+
+    uvs.needsUpdate = true;
+    return geo;
+  }
+
+  // Cached Iron Golem material with authentic 128x128 texture
+  let golemMaterial = null;
+  function getGolemMaterial(textures) {
+    if (golemMaterial) return golemMaterial;
+    const texLoader = new THREE.TextureLoader();
+    const golemTex = texLoader.load(`${import.meta.env.BASE_URL}assets/mobs/iron_golem.png`);
+    golemTex.colorSpace = THREE.SRGBColorSpace;
+    golemTex.magFilter = THREE.NearestFilter;
+    golemTex.minFilter = THREE.NearestFilter;
+    golemTex.generateMipmaps = false;
+    golemTex.needsUpdate = true;
+
+    golemMaterial = new THREE.MeshStandardMaterial({
+      map: golemTex,
+      roughness: 0.85,
+      metalness: 0.15,
+    });
+    return golemMaterial;
+  }
+
+  function buildArticulatedIronGolem(textures) {
     const golem = new THREE.Group();
     golem.name = 'iron-golem';
-    golem.position.set(2.5 * BLOCK_SIZE, 0, (3 + 1) * BLOCK_SIZE);
+    golem.position.set(2.5 * BLOCK_SIZE, 0, (3 + 1.2) * BLOCK_SIZE);
 
-    // Scaling: 2.7m tall Minecraft Iron Golem
-    const SCALE = 1.35;
+    const mat = getGolemMaterial(textures);
+    // Pixel scale: 1 px = 0.055 units -> total height ~2.4 units (2.7m tall Minecraft Guardian)
+    const P = 0.055;
 
-    // Torso
-    const torsoMat = ironMat;
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(1.2 * SCALE, 1.2 * SCALE, 0.65 * SCALE), torsoMat);
-    torso.position.y = 1.5 * SCALE;
-    torso.castShadow = true;
-    golem.add(torso);
+    // ── 1. Left & Right Legs (Hinged at hips) ──
+    // Leg size: w=6, h=16, d=5. UVs: Right leg (37, 0), Left leg (60, 0)
+    const legH = 16 * P;
+    const legW = 6 * P;
+    const legD = 5 * P;
 
-    // Head with Villager Snout/Nose & Glowing Eyes
-    const headGroup = new THREE.Group();
-    headGroup.position.set(0, 2.3 * SCALE, 0);
-
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.55 * SCALE, 0.65 * SCALE, 0.55 * SCALE), pumpkinMat);
-    head.castShadow = true;
-    headGroup.add(head);
-
-    // 3D Villager Snout
-    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.18 * SCALE, 0.32 * SCALE, 0.22 * SCALE), ironMat);
-    nose.position.set(0, -0.1 * SCALE, 0.34 * SCALE);
-    nose.castShadow = true;
-    headGroup.add(nose);
-
-    // Eye glow light
-    const eyeLight = new THREE.PointLight(0xffaa00, 1.8, 8);
-    eyeLight.position.set(0, 0.1, 0.35 * SCALE);
-    headGroup.add(eyeLight);
-
-    golem.add(headGroup);
-
-    // Jointed Arms (pivoted from shoulder)
-    const lArmPivot = new THREE.Group();
-    lArmPivot.position.set(-0.75 * SCALE, 1.9 * SCALE, 0);
-    const lArm = new THREE.Mesh(new THREE.BoxGeometry(0.35 * SCALE, 1.6 * SCALE, 0.35 * SCALE), ironMat);
-    lArm.position.set(0, -0.7 * SCALE, 0);
-    lArm.castShadow = true;
-    lArmPivot.add(lArm);
-
-    const rArmPivot = new THREE.Group();
-    rArmPivot.position.set(0.75 * SCALE, 1.9 * SCALE, 0);
-    const rArm = new THREE.Mesh(new THREE.BoxGeometry(0.35 * SCALE, 1.6 * SCALE, 0.35 * SCALE), ironMat);
-    rArm.position.set(0, -0.7 * SCALE, 0);
-    rArm.castShadow = true;
-    rArmPivot.add(rArm);
-
-    golem.add(lArmPivot, rArmPivot);
-
-    // Jointed Legs (pivoted from hips)
-    const lLegPivot = new THREE.Group();
-    lLegPivot.position.set(-0.35 * SCALE, 0.8 * SCALE, 0);
-    const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.38 * SCALE, 0.8 * SCALE, 0.38 * SCALE), ironMat);
-    lLeg.position.set(0, -0.4 * SCALE, 0);
-    lLeg.castShadow = true;
-    lLegPivot.add(lLeg);
+    const rLegGeo = makeMinecraftBox(6, 16, 5, 37, 0, P);
+    const lLegGeo = makeMinecraftBox(6, 16, 5, 60, 0, P);
 
     const rLegPivot = new THREE.Group();
-    rLegPivot.position.set(0.35 * SCALE, 0.8 * SCALE, 0);
-    const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.38 * SCALE, 0.8 * SCALE, 0.38 * SCALE), ironMat);
-    rLeg.position.set(0, -0.4 * SCALE, 0);
-    rLeg.castShadow = true;
-    rLegPivot.add(rLeg);
+    rLegPivot.position.set(4.5 * P, legH, 0);
+    const rLegMesh = new THREE.Mesh(rLegGeo, mat);
+    rLegMesh.position.set(0, -legH / 2, 0);
+    rLegMesh.castShadow = true;
+    rLegMesh.receiveShadow = true;
+    rLegPivot.add(rLegMesh);
 
-    golem.add(lLegPivot, rLegPivot);
+    const lLegPivot = new THREE.Group();
+    lLegPivot.position.set(-4.5 * P, legH, 0);
+    const lLegMesh = new THREE.Mesh(lLegGeo, mat);
+    lLegMesh.position.set(0, -legH / 2, 0);
+    lLegMesh.castShadow = true;
+    lLegMesh.receiveShadow = true;
+    lLegPivot.add(lLegMesh);
+
+    golem.add(rLegPivot, lLegPivot);
+
+    // ── 2. Torso / Waist & Upper Body (Heaves & sways during walk) ──
+    const torsoGroup = new THREE.Group();
+    torsoGroup.position.set(0, legH, 0);
+
+    // Lower Waist: w=9, h=5, d=6. UV: (0, 70)
+    const waistGeo = makeMinecraftBox(9, 5, 6, 0, 70, P);
+    const waistMesh = new THREE.Mesh(waistGeo, mat);
+    waistMesh.position.set(0, (5 / 2) * P, 0);
+    waistMesh.castShadow = true;
+    torsoGroup.add(waistMesh);
+
+    // Massive Upper Chest: w=18, h=12, d=11. UV: (0, 40)
+    const chestH = 12 * P;
+    const chestGeo = makeMinecraftBox(18, 12, 11, 0, 40, P);
+    const chestMesh = new THREE.Mesh(chestGeo, mat);
+    chestMesh.position.set(0, 5 * P + chestH / 2, 0);
+    chestMesh.castShadow = true;
+    chestMesh.receiveShadow = true;
+    torsoGroup.add(chestMesh);
+
+    // ── 3. Head & Snout (Pivoted on top of chest, looks around) ──
+    // Head size: w=8, h=10, d=8. UV: (0, 0). Snout: w=2, h=4, d=2. UV: (24, 0)
+    const headPivot = new THREE.Group();
+    headPivot.position.set(0, (5 + 12) * P, -2 * P);
+
+    const headGeo = makeMinecraftBox(8, 10, 8, 0, 0, P);
+    const headMesh = new THREE.Mesh(headGeo, mat);
+    headMesh.position.set(0, 5 * P, 0);
+    headMesh.castShadow = true;
+    headMesh.receiveShadow = true;
+    headPivot.add(headMesh);
+
+    // 3D Villager Snout
+    const noseGeo = makeMinecraftBox(2, 4, 2, 24, 0, P);
+    const noseMesh = new THREE.Mesh(noseGeo, mat);
+    noseMesh.position.set(0, 3 * P, (4 + 1) * P);
+    noseMesh.castShadow = true;
+    headPivot.add(noseMesh);
+
+    // Glowing Eyes Light
+    const eyeLight = new THREE.PointLight(0xff6600, 1.2, 5);
+    eyeLight.position.set(0, 5 * P, 5 * P);
+    headPivot.add(eyeLight);
+
+    torsoGroup.add(headPivot);
+
+    // ── 4. Long Heavy Arms (Hinged at massive shoulders) ──
+    // Arm size: w=4, h=30, d=6. UVs: Right Arm (60, 21), Left Arm (60, 58)
+    const armH = 30 * P;
+    const shoulderY = (5 + 12 - 2) * P;
+    const shoulderX = (9 + 2) * P;
+
+    const rArmGeo = makeMinecraftBox(4, 30, 6, 60, 21, P);
+    const rArmPivot = new THREE.Group();
+    rArmPivot.position.set(shoulderX, shoulderY, 0);
+    const rArmMesh = new THREE.Mesh(rArmGeo, mat);
+    rArmMesh.position.set(0, -armH / 2, 0);
+    rArmMesh.castShadow = true;
+    rArmMesh.receiveShadow = true;
+    rArmPivot.add(rArmMesh);
+
+    const lArmGeo = makeMinecraftBox(4, 30, 6, 60, 58, P);
+    const lArmPivot = new THREE.Group();
+    lArmPivot.position.set(-shoulderX, shoulderY, 0);
+    const lArmMesh = new THREE.Mesh(lArmGeo, mat);
+    lArmMesh.position.set(0, -armH / 2, 0);
+    lArmMesh.castShadow = true;
+    lArmMesh.receiveShadow = true;
+    lArmPivot.add(lArmMesh);
+
+    torsoGroup.add(rArmPivot, lArmPivot);
+    golem.add(torsoGroup);
 
     golem.userData.anim = {
-      headGroup, lArmPivot, rArmPivot, lLegPivot, rLegPivot, torso,
+      lLegPivot,
+      rLegPivot,
+      lArmPivot,
+      rArmPivot,
+      headPivot,
+      torsoGroup,
     };
 
     return golem;
@@ -316,49 +348,44 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
 
   function update(dt, nowT) {
     if (!golemGroup || !golemGroup.userData.anim) return;
-    const anim = golemGroup.userData.anim;
+    const { lLegPivot, rLegPivot, lArmPivot, rArmPivot, headPivot, torsoGroup } = golemGroup.userData.anim;
 
-    // Patrol position/rotation — applies to both GLB and procedural models
-    const speed = 0.6;
+    // Heavy Iron Golem Patrol Walking Animation
+    const speed = 0.65;
     const cycle = (nowT * speed) % 4;
-    const walkPhase = Math.sin(nowT * 3.2);
+    const walkPhase = Math.sin(nowT * 3.4);
+
+    // Stomping patrol pacing
+    const baseX = 2.0 * BLOCK_SIZE;
+    const patrolDist = 3.6 * BLOCK_SIZE;
 
     if (cycle < 2) {
-      golemGroup.position.x = 2.0 * BLOCK_SIZE + (cycle / 2) * (3.5 * BLOCK_SIZE);
+      // Forward patrol
+      golemGroup.position.x = baseX + (cycle / 2) * patrolDist;
       golemGroup.rotation.y = Math.PI / 2;
+
+      // Heavy swing gait
+      lArmPivot.rotation.x = walkPhase * 0.65;
+      rArmPivot.rotation.x = -walkPhase * 0.65;
+      lLegPivot.rotation.x = -walkPhase * 0.5;
+      rLegPivot.rotation.x = walkPhase * 0.5;
     } else {
-      golemGroup.position.x = 5.5 * BLOCK_SIZE - ((cycle - 2) / 2) * (3.5 * BLOCK_SIZE);
+      // Return patrol
+      golemGroup.position.x = (baseX + patrolDist) - ((cycle - 2) / 2) * patrolDist;
       golemGroup.rotation.y = -Math.PI / 2;
+
+      lArmPivot.rotation.x = -walkPhase * 0.65;
+      rArmPivot.rotation.x = walkPhase * 0.65;
+      lLegPivot.rotation.x = walkPhase * 0.5;
+      rLegPivot.rotation.x = -walkPhase * 0.5;
     }
 
-    // Joint animation — procedural pivot groups OR discovered GLB bones
-    if (!anim.glb) {
-      // Procedural voxel rig
-      const { headGroup, lArmPivot, rArmPivot, lLegPivot, rLegPivot, torso } = anim;
-      if (cycle < 2) {
-        lArmPivot.rotation.x = walkPhase * 0.45;
-        rArmPivot.rotation.x = -walkPhase * 0.45;
-        lLegPivot.rotation.x = -walkPhase * 0.35;
-        rLegPivot.rotation.x = walkPhase * 0.35;
-      } else {
-        lArmPivot.rotation.x = -walkPhase * 0.45;
-        rArmPivot.rotation.x = walkPhase * 0.45;
-        lLegPivot.rotation.x = walkPhase * 0.35;
-        rLegPivot.rotation.x = -walkPhase * 0.35;
-      }
-      headGroup.rotation.y = Math.sin(nowT * 1.1) * 0.3;
-      torso.position.y = (1.5 * 1.35) + Math.sin(nowT * 2.0) * 0.04;
-    } else {
-      // GLB rig — drive discovered bones directly
-      const { bones } = anim;
-      const dir = cycle < 2 ? 1 : -1;
-      if (bones.lArm) bones.lArm.rotation.x = dir * walkPhase * 0.5;
-      if (bones.rArm) bones.rArm.rotation.x = -dir * walkPhase * 0.5;
-      if (bones.lLeg) bones.lLeg.rotation.x = -dir * walkPhase * 0.4;
-      if (bones.rLeg) bones.rLeg.rotation.x = dir * walkPhase * 0.4;
-      if (bones.head) bones.head.rotation.y = Math.sin(nowT * 1.1) * 0.25;
-      if (bones.torso) bones.torso.rotation.z = Math.sin(nowT * 2.0) * 0.02;
-    }
+    // Heavy vertical step bounce
+    golemGroup.position.y = Math.abs(Math.sin(nowT * 3.4)) * 0.05;
+
+    // Head searching and body sway
+    headPivot.rotation.y = Math.sin(nowT * 1.1) * 0.3;
+    torsoGroup.rotation.z = Math.sin(nowT * 3.4) * 0.03;
   }
 
   function getStage() { return currentStage; }
