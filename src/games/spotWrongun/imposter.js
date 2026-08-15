@@ -121,15 +121,16 @@ export function createImposterTier(ctx, stage, facts) {
       const cellSpacing = Math.min(0.48, 2.4 / Math.max(cols, 1));
       const blockScale = cellSpacing / 1.0;
 
+      const rowGap = isDiv ? cellSpacing * 0.45 : 0;
       for (let r = 0; r < rows; r++) {
         for (let cCol = 0; cCol < cols; cCol++) {
           const blk = stage.makeBlock();
           const bx = (cCol - (cols - 1) / 2) * cellSpacing;
-          const by = (r + 0.5) * cellSpacing;
+          const by = (r + 0.5) * cellSpacing + r * rowGap;
           const bz = 0;
           blk.position.set(bx, by, bz);
           blk.scale.setScalar(blockScale);
-          stage.setCapGrass(blk, r === rows - 1 || isDiv);
+          stage.setCapGrass(blk, isDiv || r === rows - 1);
           gridGroup.add(blk);
           blockList.push(blk);
         }
@@ -256,13 +257,26 @@ export function createImposterTier(ctx, stage, facts) {
 
   function ejectNugget(n) {
     n.ejecting = true;
-    const dir = crew.length > 1 ? (n.seat / (crew.length - 1)) * 2 - 1 : 0;
-    n.ev.set(dir * 2.2 + (Math.random() - 0.5), 12.5, -2.5 - Math.random());
-    n.espin = 8 + Math.random() * 4;
     n.hit.userData.index = -1;
-    stage.dustPuff(n.group.position.x, BASE_Y - 0.4, n.group.position.z);
-    // launching a villager off the island should be felt through your feet
-    ctx.worldFeel.impulse(0.75, n.group.position.x, n.group.position.z);
+
+    // Flash red first (Minecraft hit flash)
+    n.group.traverse((child) => {
+      if (child.isMesh && child.material && child.material.color) {
+        if (!child.userData.origColor) {
+          child.userData.origColor = child.material.color.getHex();
+        }
+        child.material.color.setHex(0xff2222);
+      }
+    });
+    stage.damageSfx();
+
+    // After red flash, GO POOF and SMOKE!
+    later(() => {
+      n.group.visible = false;
+      stage.poofPuff(n.group.position.x, BASE_Y + 0.8, n.group.position.z);
+      stage.poofSfx();
+      ctx.worldFeel.impulse(0.75, n.group.position.x, n.group.position.z);
+    }, 350);
   }
 
   function shatterSign(n) {
@@ -434,20 +448,16 @@ export function createImposterTier(ctx, stage, facts) {
       }
     }
 
-    // the ejected villager tumbles off, limbs flailing
+    // the ejected fibbing villager leans left and falls sideways during red flash before going poof
     for (const n of crew) {
       if (!n.ejecting) continue;
-      n.ev.y -= 26 * dt;
-      n.group.position.addScaledVector(n.ev, dt);
-      n.group.rotation.z += n.espin * dt;
-      n.group.rotation.x += n.espin * 0.6 * dt;
-      const j = n.joints;
-      if (j) {
-        j.shoulders[-1].rotation.z = Math.sin(t * 22) * 1.4;
-        j.shoulders[1].rotation.z = Math.sin(t * 22 + 1.7) * 1.4;
-        j.hips[-1].rotation.x = Math.sin(t * 26) * 0.9;
-        j.hips[1].rotation.x = Math.sin(t * 26 + Math.PI) * 0.9;
-        j.neck.rotation.z = Math.sin(t * 30) * 0.4;
+      if (n.group.visible) {
+        if (n.ejectT == null) n.ejectT = 0;
+        n.ejectT += dt;
+        const progress = Math.min(1, n.ejectT / 0.35);
+        n.group.rotation.z = -0.55 * progress; // lean left ~30 degrees
+        n.group.position.y = BASE_Y - 0.22 * progress; // fall down slightly
+        n.group.position.x = layout.x[n.seat] - 0.12 * progress + (Math.random() - 0.5) * 0.04;
       }
     }
   }

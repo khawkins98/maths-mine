@@ -50,11 +50,6 @@ export function createStage(ctx) {
   const root = new THREE.Group();
   scene.add(root);
 
-  // Minecraft oak trees around the clearing edges for atmosphere.
-  const treesGroup = plantTrees(scene, [
-    { x: -13, z: -7 }, { x: -7, z: -10 },
-    { x: 7, z: -10 }, { x: 13, z: -7 },
-  ], textures);
   const crewGroup = new THREE.Group();  // Nugget(s)
   const signGroup = new THREE.Group();  // billboarded signs
   const arrayGroup = new THREE.Group(); // JUDGE tier: the dirt/grass block array
@@ -188,6 +183,32 @@ export function createStage(ctx) {
     audio.noiseBurst(0.12, 0.05, 1600);
   }
 
+  function damageSfx() {
+    audio.beepEnv(220, 140, 0.12, 'sawtooth', 0.08);
+  }
+
+  function poofSfx() {
+    audio.noiseBurst(0.18, 0.08, 900);
+    audio.beepEnv(380, 110, 0.14, 'triangle', 0.06);
+  }
+
+  function poofPuff(cx = 0, cy = 0.8, cz = 0) {
+    const geo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
+    for (let i = 0; i < 20; i++) {
+      const smokeMat = new THREE.MeshBasicMaterial({ color: 0xdddddd, transparent: true, opacity: 0.9 });
+      const m = new THREE.Mesh(geo, smokeMat);
+      m.position.set(cx + (Math.random() - 0.5) * 0.5, cy + (Math.random() - 0.5) * 0.8, cz + (Math.random() - 0.5) * 0.5);
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1.5 + Math.random() * 2.5;
+      fxGroup.add(m);
+      dust.push({
+        mesh: m,
+        v: new THREE.Vector3(Math.cos(angle) * speed, 1.2 + Math.random() * 2.0, Math.sin(angle) * speed),
+        life: 0.45,
+      });
+    }
+  }
+
   function celebrate(cx = 0, cy = 4, cz = 0) {
     for (let i = 0; i < 54; i++) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.14), new THREE.MeshBasicMaterial({ color: CONFETTI_COLS[i % CONFETTI_COLS.length] }));
@@ -293,7 +314,6 @@ export function createStage(ctx) {
     for (const g of Object.values(geo)) g.dispose();
     blocks.dispose();
     for (const m of sharedMats) m.dispose();
-    disposeTrees(scene, treesGroup);
   }
 
   return {
@@ -305,7 +325,7 @@ export function createStage(ctx) {
     // pools a tier pushes into
     shards, proofDots, blockPops,
     // juice
-    dustPuff, celebrate, ejectSfx, updateFx,
+    dustPuff, poofPuff, celebrate, ejectSfx, damageSfx, poofSfx, updateFx,
     // scheduling + shared state
     later, timers, state,
     // lifecycle

@@ -401,6 +401,7 @@ export function createBlockBuilder(ctx) {
 
     mastery.record(round.a, round.b, correct, ms);
     bolt.setOxidation(mastery.overallProgress()); // weather Bolt as mastery grows
+    if (ctx.engine.updateBiomeFromProgress) ctx.engine.updateBiomeFromProgress(mastery.overallProgress());
 
     const eqStr = round.op === 'div'
       ? `${round.dividend} ÷ ${round.divisor} = ${round.answer}`

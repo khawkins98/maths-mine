@@ -50,7 +50,10 @@ export function createHub(ctx) {
     // Erasing progress must also un-weather Bolt: he is the visible face of
     // overallProgress(), and a fully verdigris mascot on a blank ledger is the
     // app contradicting itself in front of the next child.
-    onChange: () => { if (bolt.setOxidation) bolt.setOxidation(ctx.mastery.overallProgress()); },
+    onChange: () => {
+      if (bolt.setOxidation) bolt.setOxidation(ctx.mastery.overallProgress());
+      if (ctx.engine.updateBiomeFromProgress) ctx.engine.updateBiomeFromProgress(ctx.mastery.overallProgress());
+    },
   });
   const hubVisible = () => !!ui.els.hub && !ui.els.hub.classList.contains('hidden');
   dash.armOpenGesture(ui.els.hub && ui.els.hub.querySelector('h1'), hubVisible);
@@ -91,6 +94,7 @@ export function createHub(ctx) {
   function open() {
     speech.reset(); // the menu greeting should not queue behind a dead round
     if (ctx.stopGame) ctx.stopGame();
+    if (ctx.engine.updateBiomeFromProgress) ctx.engine.updateBiomeFromProgress(ctx.mastery.overallProgress());
     ui.hideBack();
     ui.hideChoices();
     ui.hideConfirm();

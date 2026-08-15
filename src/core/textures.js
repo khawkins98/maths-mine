@@ -124,15 +124,30 @@ export function createTextures() {
   // skin so bark and leaves read as authored assets rather than flat colours.
   const logTex = pixelTex('#6f4324', ['#543019', '#87552e', '#9b6235', '#422514'], { size: 16, cell: 2, bias: 0.58 });
   const leafTex = pixelTex('#3f7c2d', ['#2d6121', '#4f9237', '#65a744', '#244f1b'], { size: 16, cell: 2, bias: 0.5 });
+  const cactusTex = pixelTex('#2e7a32', ['#236326', '#3b943f', '#1b4d1e'], { size: 16, cell: 2 });
+  const netherStemTex = pixelTex('#471523', ['#360e1a', '#5c1c2e', '#2b0910'], { size: 16, cell: 2 });
+  const netherCapTex = pixelTex('#9e1b1b', ['#801414', '#b82323', '#660e0e'], { size: 16, cell: 2 });
 
   // ---- voxel build-plot textures (NOT the shared 1-block dirt/grass above) ----
   // Separate, RepeatWrapping-enabled instances so the platform can tile its faces
   // without mutating the game blocks' textures (which keep repeat 1,1). Chunky
   // pixels via NearestFilter, same texel style as the game blocks.
   const platGrassTex = fleckTex('#5FBF4A', ['#4EA83C', '#78D060', '#57B742', '#69C853'], 120);
-  platGrassTex.wrapS = platGrassTex.wrapT = THREE.RepeatWrapping;
   const platDirtTex = fleckTex('#8B5A2B', ['#7A4A22', '#9C6B38', '#6B4226', '#5C3A1F'], 120);
-  platDirtTex.wrapS = platDirtTex.wrapT = THREE.RepeatWrapping;
+  const platSandTex = fleckTex('#d8c582', ['#cdaf6c', '#e6d899', '#c4a462'], 120);
+  const platSandstoneTex = fleckTex('#c9b072', ['#b99f60', '#d8be80', '#ab9154'], 120);
+  const platSnowTex = fleckTex('#f0f6fa', ['#e1ecf5', '#ffffff', '#d4e4f2'], 100);
+  const platNetherrackTex = fleckTex('#6b1d1d', ['#541515', '#7d2626', '#3f0f0f'], 140);
+  const platEndstoneTex = fleckTex('#dcd89c', ['#ceca8c', '#ece8ac', '#b8b47a'], 120);
+  const platObsidianTex = fleckTex('#1a162b', ['#120f20', '#251f3b', '#0c0917'], 100);
 
-  return { dirtTex, grassTex, stoneTex, emeraldTex, emeraldTopTex, groundTex, puffTex, slotTex, skyTex, woodTex, logTex, leafTex, platGrassTex, platDirtTex };
+  [platGrassTex, platDirtTex, platSandTex, platSandstoneTex, platSnowTex, platNetherrackTex, platEndstoneTex, platObsidianTex].forEach((t) => {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  });
+
+  return {
+    dirtTex, grassTex, stoneTex, emeraldTex, emeraldTopTex, groundTex, puffTex, slotTex, skyTex, woodTex,
+    logTex, leafTex, cactusTex, netherStemTex, netherCapTex,
+    platGrassTex, platDirtTex, platSandTex, platSandstoneTex, platSnowTex, platNetherrackTex, platEndstoneTex, platObsidianTex,
+  };
 }

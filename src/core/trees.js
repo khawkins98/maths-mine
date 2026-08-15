@@ -1,34 +1,18 @@
-// core/trees.js — Minecraft-style oak tree scene dressing.
-//
-// makeTree() builds a single voxel oak tree (trunk + leaf canopy) as a
-// THREE.Group centred so the trunk base sits at y = 0.
-//
-// plantTrees(scene, positions) places trees at the given world XZ coords,
-// returns the group so the caller can remove + dispose it on teardown.
+// core/trees.js — Biome scenery generation (oak trees, cacti, snow spruce, nether fungi, end pillars).
 
 import * as THREE from 'three';
 
 const BLOCK = 0.72; // scenery scale: readable, but subordinate to the lesson
 
-// Shared geometries — one BoxGeometry per distinct size, reused across all
-// trees so we don't create hundreds of identical geometries.
-const _gLog  = new THREE.BoxGeometry(BLOCK, BLOCK, BLOCK);
+const _gLog = new THREE.BoxGeometry(BLOCK, BLOCK, BLOCK);
 const _gLeaf = new THREE.BoxGeometry(BLOCK, BLOCK, BLOCK);
 
-/**
- * Create a single oak tree group. Trunk base = y 0.
- * @param {{ trunkHeight?: number, seed?: number, materials: { log: THREE.Material, leaves: THREE.Material[] } }} opts
- */
 export function makeTree({ trunkHeight = 4, seed = 0, materials } = {}) {
   const g = new THREE.Group();
 
-  // Simple seeded-ish random (deterministic per tree so the forest looks
-  // consistent across frames — no new geometry on re-renders)
   let rng = seed * 9301 + 49297;
   const rand = () => { rng = (rng * 9301 + 49297) % 233280; return rng / 233280; };
 
-  // Trunk — stacked cubes retain the block rhythm without becoming a giant
-  // foreground wall when the camera uses a low frontal angle.
   for (let i = 0; i < trunkHeight; i++) {
     const log = new THREE.Mesh(_gLog, materials.log);
     log.position.set(0, BLOCK * i + BLOCK / 2, 0);
@@ -36,8 +20,6 @@ export function makeTree({ trunkHeight = 4, seed = 0, materials } = {}) {
     g.add(log);
   }
 
-  // A compact three-layer oak crown. The old 5×4×5 solid blob was over a
-  // hundred cubes per tree and filled the frame; this silhouette stays airy.
   const CANOPY = [];
   for (let dx = -1; dx <= 1; dx++) {
     for (let dz = -1; dz <= 1; dz++) {
@@ -62,31 +44,145 @@ export function makeTree({ trunkHeight = 4, seed = 0, materials } = {}) {
   return g;
 }
 
-/**
- * Plant trees at the given XZ positions in the scene.
- * Returns a THREE.Group — add it to the scene, remove + dispose on teardown.
- *
- * @param {THREE.Scene} scene
- * @param {Array<{x: number, z: number, trunkHeight?: number}>} positions
- */
-export function plantTrees(scene, positions, textures) {
+export function makeCactus({ height = 4, materials }) {
+  const g = new THREE.Group();
+  for (let i = 0; i < height; i++) {
+    const b = new THREE.Mesh(_gLog, materials.cactus);
+    b.position.set(0, BLOCK * i + BLOCK / 2, 0);
+    b.castShadow = true;
+    g.add(b);
+  }
+  // Side arms
+  const arm1 = new THREE.Mesh(_gLog, materials.cactus);
+  arm1.position.set(BLOCK, BLOCK * 2 + BLOCK / 2, 0);
+  g.add(arm1);
+  const arm2 = new THREE.Mesh(_gLog, materials.cactus);
+  arm2.position.set(-BLOCK, BLOCK * 1 + BLOCK / 2, 0);
+  g.add(arm2);
+  return g;
+}
+
+export function makeSpruceTree({ height = 5, materials }) {
+  const g = new THREE.Group();
+  for (let i = 0; i < height; i++) {
+    const log = new THREE.Mesh(_gLog, materials.log);
+    log.position.set(0, BLOCK * i + BLOCK / 2, 0);
+    log.castShadow = true;
+    g.add(log);
+  }
+  // Conical leaf rings
+  const layers = [
+    { y: 2, radius: 2, mat: materials.leaves[0] },
+    { y: 3, radius: 1, mat: materials.snowLeaves || materials.leaves[0] },
+    { y: 4, radius: 1, mat: materials.snowCap || materials.leaves[0] },
+    { y: 5, radius: 0, mat: materials.snowCap || materials.leaves[0] },
+  ];
+  for (const { y, radius, mat } of layers) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dz = -radius; dz <= radius; dz++) {
+        if (Math.abs(dx) + Math.abs(dz) <= radius + 0.5) {
+          const leaf = new THREE.Mesh(_gLeaf, mat);
+          leaf.position.set(dx * BLOCK, y * BLOCK + BLOCK / 2, dz * BLOCK);
+          leaf.castShadow = true;
+          g.add(leaf);
+        }
+      }
+    }
+  }
+  return g;
+}
+
+export function makeNetherFungus({ height = 4, materials }) {
+  const g = new THREE.Group();
+  for (let i = 0; i < height; i++) {
+    const stem = new THREE.Mesh(_gLog, materials.stem);
+    stem.position.set(0, BLOCK * i + BLOCK / 2, 0);
+    stem.castShadow = true;
+    g.add(stem);
+  }
+  // Crimson cap
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      const cap = new THREE.Mesh(_gLeaf, materials.cap);
+      cap.position.set(dx * BLOCK, height * BLOCK + BLOCK / 2, dz * BLOCK);
+      cap.castShadow = true;
+      g.add(cap);
+    }
+  }
+  return g;
+}
+
+export function makeEndPillar({ height = 5, materials }) {
+  const g = new THREE.Group();
+  for (let i = 0; i < height; i++) {
+    const col = new THREE.Mesh(_gLog, materials.obsidian);
+    col.position.set(0, BLOCK * i + BLOCK / 2, 0);
+    col.castShadow = true;
+    g.add(col);
+  }
+  // Floating End Crystal on top
+  const crystal = new THREE.Mesh(
+    new THREE.OctahedronGeometry(BLOCK * 0.6),
+    materials.crystal,
+  );
+  crystal.position.set(0, (height + 0.8) * BLOCK, 0);
+  g.add(crystal);
+  return g;
+}
+
+export function plantTrees(scene, positions, textures, treeType = 'oak') {
+  if (treeType === 'none') return null;
+
   const group = new THREE.Group();
   group.name = 'background-grove';
-  const log = new THREE.MeshStandardMaterial({ map: textures.logTex, color: 0xffffff, roughness: 1, metalness: 0 });
-  const leaves = [0xffffff, 0xd8f0cf, 0xb8dcae].map((color) => new THREE.MeshStandardMaterial({
+
+  const logMat = new THREE.MeshStandardMaterial({ map: textures.logTex, roughness: 1, metalness: 0 });
+  const leafMats = [0xffffff, 0xd8f0cf, 0xb8dcae].map((color) => new THREE.MeshStandardMaterial({
     map: textures.leafTex, color, roughness: 1, metalness: 0,
   }));
-  group.userData.materials = [log, ...leaves];
+  const cactusMat = new THREE.MeshStandardMaterial({ map: textures.cactusTex, roughness: 1, metalness: 0 });
+  const snowCapMat = new THREE.MeshStandardMaterial({ map: textures.platSnowTex, roughness: 1, metalness: 0 });
+  const stemMat = new THREE.MeshStandardMaterial({ map: textures.netherStemTex, roughness: 1, metalness: 0 });
+  const capMat = new THREE.MeshStandardMaterial({ map: textures.netherCapTex, roughness: 1, metalness: 0 });
+  const obsidianMat = new THREE.MeshStandardMaterial({ map: textures.platObsidianTex, roughness: 1, metalness: 0 });
+  const crystalMat = new THREE.MeshStandardMaterial({
+    color: 0xaa77ff, emissive: 0x7733cc, roughness: 0.2, metalness: 0.8,
+  });
+
+  const materials = {
+    log: logMat,
+    leaves: leafMats,
+    cactus: cactusMat,
+    snowLeaves: leafMats[1],
+    snowCap: snowCapMat,
+    stem: stemMat,
+    cap: capMat,
+    obsidian: obsidianMat,
+    crystal: crystalMat,
+  };
+  group.userData.materials = [logMat, ...leafMats, cactusMat, snowCapMat, stemMat, capMat, obsidianMat, crystalMat];
+
   positions.forEach(({ x, z, trunkHeight }, i) => {
-    const tree = makeTree({ trunkHeight: trunkHeight ?? (4 + (i % 2)), seed: i * 137, materials: { log, leaves } });
+    let tree;
+    if (treeType === 'cactus') {
+      tree = makeCactus({ height: 3 + (i % 2), materials });
+    } else if (treeType === 'snow_spruce') {
+      tree = makeSpruceTree({ height: 4 + (i % 2), materials });
+    } else if (treeType === 'nether_fungi') {
+      tree = makeNetherFungus({ height: 3 + (i % 2), materials });
+    } else if (treeType === 'end_pillar') {
+      tree = makeEndPillar({ height: 4 + (i % 2), materials });
+    } else {
+      tree = makeTree({ trunkHeight: trunkHeight ?? (4 + (i % 2)), seed: i * 137, materials });
+    }
     tree.position.set(x, 0, z);
     group.add(tree);
   });
+
   scene.add(group);
   return group;
 }
 
-/** Dispose a tree group returned by plantTrees. */
 export function disposeTrees(scene, group) {
   if (!group) return;
   scene.remove(group);

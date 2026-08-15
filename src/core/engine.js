@@ -1,23 +1,17 @@
 // core/engine.js — the shared rendering shell: renderer, scene, camera, lights,
-// ground, sky, the animation clock, the render loop, and resize handling.
-// Everything here is game-agnostic and long-lived. Games receive it via the
-// shared context and add/remove their own objects to the scene.
-//
-// Camera framing helpers live here too: the isometric 3/4 view direction and a
-// placeCamera(centerY, dist) that positions the camera along that direction,
-// plus resetCamera() to return to a neutral pose on teardown.
+// ground, sky, biome management, animation clock, render loop, and resize handling.
 
 import * as THREE from 'three';
+import { BIOMES, biomeForProgress } from './biomes.js';
+import { plantTrees, disposeTrees } from './trees.js';
 
-// 3/4 isometric-ish view direction (front, elevated, slightly to the side) so
-// we see block tops and fronts — blocks read as 3D, not flat squares.
 export const VIEW_DIR = new THREE.Vector3(0.42, 0.5, 1).normalize();
 
 export function createEngine({ textures }) {
   const app = document.getElementById('app');
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); // perf: cap at 2
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
@@ -25,32 +19,27 @@ export function createEngine({ textures }) {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   app.appendChild(renderer.domElement);
 
-  const SKY = 0x8cc5ef; // flat Minecraft daytime blue
+  const SKY = 0x8cc5ef;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(SKY); // flat, not a gradient
-  // Very light fog, matched to the sky, pushed far out: the platform is finite so
-  // there is no green-to-blue horizon smear — this only softens the far clouds.
+  scene.background = new THREE.Color(SKY);
   scene.fog = new THREE.Fog(SKY, 70, 150);
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 220);
   camera.position.set(0, 3.2, 15);
 
-  // The camera hangs off a rig rather than off the scene directly. Games own
-  // `camera.position` outright — Block Builder animates it every frame during
-  // the commutativity rotate — so the parallax must never write to it. Turning
-  // the RIG instead orbits the camera a couple of degrees around the origin,
-  // which layers on top of whatever a game is doing and cannot fight it.
   const camRig = new THREE.Group();
   camRig.name = 'camera-rig';
   scene.add(camRig);
-  camRig.add(camera); // camera must be in the scene graph for its children (Bolt) to draw
+  camRig.add(camera);
 
-  // ---- hard Minecraft lighting: strong even fill + one short-shadow sun ----
-  // Strong hemisphere + ambient lift shadows out of the murk so nothing looks
-  // smudgy; exactly ONE directional light casts a crisp, short contact shadow.
-  scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x6f9257, 1.1));
-  scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+  // ---- hard Minecraft lighting ----
+  const hemiLight = new THREE.HemisphereLight(0xcfe8ff, 0x6f9257, 1.1);
+  scene.add(hemiLight);
+
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.35);
+  scene.add(ambientLight);
+
   const key = new THREE.DirectionalLight(0xfff4e0, 1.7);
   key.position.set(7, 15, 9);
   key.target.position.set(0, 2.5, 0);
@@ -60,28 +49,71 @@ export function createEngine({ textures }) {
   key.shadow.camera.top = 18; key.shadow.camera.bottom = -6;
   key.shadow.camera.near = 1; key.shadow.camera.far = 60;
   key.shadow.bias = -0.0004;
-  key.shadow.radius = 1; // crisp, not blobby
+  key.shadow.radius = 1;
   scene.add(key);
   scene.add(key.target);
-  // low, shadowless cool fill so back faces aren't dead flat — no gloss
+
   const fill = new THREE.DirectionalLight(0xbcd4ff, 0.28);
   fill.position.set(-8, 5, -4);
   scene.add(fill);
 
-  // ---- voxel build-plot: a finite, thick, stepped floating island ----
-  // Top surface sits at y=0 so every game's objects rest ON it (unchanged).
-  // Grass-capped top with dirt depth on the sides; NearestFilter keeps it crisp.
-  const { platform, ground } = buildPlatform(textures);
+  // ---- voxel build-plot floating island ----
+  const { platform, ground, updatePlatformTextures } = buildPlatform(textures);
   scene.add(platform);
 
-  // ---- cubic drifting clouds (flat, unlit white voxel slabs) ----
+  // ---- cubic drifting clouds ----
   const clouds = buildClouds();
   scene.add(clouds.group);
+
+  // ---- dynamic biome management ----
+  let activeBiome = BIOMES.flat;
+  let groveGroup = null;
+  const grovePositions = [
+    { x: -11, z: -8 }, { x: 11, z: -8 },
+    { x: -12, z: 2 },  { x: 12, z: 2 },
+  ];
+
+  function setBiome(target) {
+    const biome = typeof target === 'string' ? (BIOMES[target] || BIOMES.flat) : target;
+    activeBiome = biome;
+
+    // 1. Sky & fog
+    scene.background.setHex(biome.skyColor);
+    scene.fog.color.setHex(biome.fogColor);
+    scene.fog.near = biome.fogNear;
+    scene.fog.far = biome.fogFar;
+
+    // 2. Lighting
+    hemiLight.color.setHex(biome.hemiSky);
+    hemiLight.groundColor.setHex(biome.hemiGround);
+    key.color.setHex(biome.sunColor);
+    key.intensity = biome.sunIntensity;
+    ambientLight.color.setHex(biome.ambientColor);
+    ambientLight.intensity = biome.ambientIntensity;
+
+    // 3. Ground platform textures
+    const topTex = textures[biome.topTexKey] || textures.platGrassTex;
+    const sideTex = textures[biome.sideTexKey] || textures.platDirtTex;
+    updatePlatformTextures(topTex, sideTex);
+
+    // 4. Scenery trees/cacti/fungi/pillars
+    if (groveGroup) disposeTrees(scene, groveGroup);
+    groveGroup = plantTrees(scene, grovePositions, textures, biome.treeType);
+  }
+
+  function updateBiomeFromProgress(progress) {
+    const b = biomeForProgress(progress);
+    if (b.id !== activeBiome.id) {
+      setBiome(b);
+    }
+  }
+
+  // Debug hook
+  window.__biome = (id) => setBiome(id);
 
   const clock = new THREE.Clock();
   const nowT = () => clock.getElapsedTime();
 
-  // project a world (x,y,0) point to screen pixels (used for HUD/demo/tests)
   const _proj = new THREE.Vector3();
   function worldToScreen(x, y) {
     _proj.set(x, y, 0).project(camera);
@@ -92,8 +124,6 @@ export function createEngine({ textures }) {
     return { x: (_proj.x * 0.5 + 0.5) * window.innerWidth, y: (-_proj.y * 0.5 + 0.5) * window.innerHeight };
   }
 
-  // place the camera along the iso view direction, framing a target centred at
-  // (0, centerY, 0) from `dist` away.
   function placeCamera(centerY, dist, viewDir = VIEW_DIR) {
     camera.position.copy(viewDir).multiplyScalar(dist);
     camera.position.y += centerY;
@@ -104,7 +134,6 @@ export function createEngine({ textures }) {
     camera.lookAt(0, 3.2, 0);
   }
 
-  // per-frame callbacks; games/bolt register here. dt is clamped elsewhere.
   const frameCbs = [];
   function onFrame(cb) { frameCbs.push(cb); return () => { const i = frameCbs.indexOf(cb); if (i >= 0) frameCbs.splice(i, 1); }; }
 
@@ -131,25 +160,18 @@ export function createEngine({ textures }) {
     VIEW_DIR,
     nowT, worldToScreen, projectToScreen,
     placeCamera, resetCamera,
+    setBiome, updateBiomeFromProgress, currentBiome: () => activeBiome,
     onFrame, start, resize,
   };
 }
 
-// ---------------------------------------------------------------------------
-// Voxel build-plot. A finite, thick, stepped floating island whose TOP is at
-// y=0 (so games keep resting objects on the y=0 plane). Efficient: a handful of
-// boxes with per-face NearestFilter textures + one instanced border rim.
-// Footprint is wide/deep enough for the biggest layouts (a ~10-block wall, the
-// dice tray, the Nugget crew) and reads as stacked cubes from every framing.
 function buildPlatform(textures) {
   const platform = new THREE.Group();
   platform.name = 'voxel-island';
 
-  const W = 30, D = 24; // top footprint (x, z)
+  const W = 30, D = 24;
+  const TEXEL = 2;
 
-  // per-face texture helper: clone the shared repeatable tex so each face can
-  // tile independently WITHOUT touching the game blocks' textures.
-  const TEXEL = 2; // world units per texture tile — matched across all faces
   function face(tex, ru, rv) {
     const t = tex.clone();
     t.needsUpdate = true;
@@ -157,43 +179,38 @@ function buildPlatform(textures) {
     t.repeat.set(ru, rv);
     return new THREE.MeshStandardMaterial({ map: t, roughness: 1, metalness: 0 });
   }
-  // BoxGeometry material order: +x, -x, +y(top), -y(bottom), +z, -z
-  function slab(w, h, d, topGrass) {
-    const side = () => face(textures.platDirtTex, 1, 1); // repeat set below per-face
+
+  function slab(w, h, d, topTex, sideTex) {
+    const side = () => face(sideTex, 1, 1);
     const mats = [side(), side(), null, side(), side(), side()];
-    // horizontal repeats follow the face's width, vertical follows height
-    mats[0].map.repeat.set(d / TEXEL, h / TEXEL); // +x face spans z × y
-    mats[1].map.repeat.set(d / TEXEL, h / TEXEL); // -x
-    mats[4].map.repeat.set(w / TEXEL, h / TEXEL); // +z spans x × y
-    mats[5].map.repeat.set(w / TEXEL, h / TEXEL); // -z
-    mats[3].map.repeat.set(w / TEXEL, d / TEXEL); // bottom (dirt)
-    mats[2] = topGrass
-      ? face(textures.platGrassTex, w / TEXEL, d / TEXEL)
-      : face(textures.platDirtTex, w / TEXEL, d / TEXEL);
-    const geo = new THREE.BoxGeometry(w, h, d); // hard edges (no bevel)
+    mats[0].map.repeat.set(d / TEXEL, h / TEXEL);
+    mats[1].map.repeat.set(d / TEXEL, h / TEXEL);
+    mats[4].map.repeat.set(w / TEXEL, h / TEXEL);
+    mats[5].map.repeat.set(w / TEXEL, h / TEXEL);
+    mats[3].map.repeat.set(w / TEXEL, d / TEXEL);
+    mats[2] = face(topTex, w / TEXEL, d / TEXEL);
+    const geo = new THREE.BoxGeometry(w, h, d);
     return new THREE.Mesh(geo, mats);
   }
 
-  // Tier 1 — grass-capped top slab (the play surface; top at y=0)
-  const t1 = slab(W, 1.2, D, true);
+  const t1 = slab(W, 1.2, D, textures.platGrassTex, textures.platDirtTex);
   t1.position.y = -0.6;
   t1.receiveShadow = true;
   platform.add(t1);
 
-  // Tiers 2 & 3 — progressively inset dirt, giving a tapered island silhouette
-  const t2 = slab(W - 4, 1.8, D - 4, false);
+  const t2 = slab(W - 4, 1.8, D - 4, textures.platDirtTex, textures.platDirtTex);
   t2.position.y = -1.2 - 0.9;
   platform.add(t2);
-  const t3 = slab(W - 11, 3.0, D - 10, false);
+
+  const t3 = slab(W - 11, 3.0, D - 10, textures.platDirtTex, textures.platDirtTex);
   t3.position.y = -3.0 - 1.5;
   platform.add(t3);
 
-  // Blocky raised border rim (instanced grass cubes) so the top silhouette
-  // reads as stacked cubes. Sits at the outer edge, clear of the play area.
   const rimGeo = new THREE.BoxGeometry(1, 1, 1);
-  const rimTex = textures.platGrassTex.clone();
-  rimTex.needsUpdate = true; rimTex.repeat.set(1, 1);
-  const rimMat = new THREE.MeshStandardMaterial({ map: rimTex, roughness: 1, metalness: 0 });
+  const rimMat = new THREE.MeshStandardMaterial({ map: textures.platGrassTex.clone(), roughness: 1, metalness: 0 });
+  rimMat.map.needsUpdate = true;
+  rimMat.map.repeat.set(1, 1);
+
   const hx = W / 2 - 0.5, hz = D / 2 - 0.5;
   const cells = [];
   for (let x = -hx; x <= hx; x += 1) { cells.push([x, hz]); cells.push([x, -hz]); }
@@ -202,20 +219,39 @@ function buildPlatform(textures) {
   rim.receiveShadow = true;
   const m4 = new THREE.Matrix4();
   cells.forEach(([x, z], i) => {
-    // slight alternating lift for a chunky, hand-stacked silhouette
     const lift = 0.35 + ((x + z) & 1 ? 0.14 : 0);
-    m4.makeTranslation(x, lift - 0.5, z); // cube top at ~y=0.35–0.49
+    m4.makeTranslation(x, lift - 0.5, z);
     rim.setMatrixAt(i, m4);
   });
   rim.instanceMatrix.needsUpdate = true;
   platform.add(rim);
 
-  return { platform, ground: t1 };
+  function updatePlatformTextures(topTex, sideTex) {
+    // t1 top (material index 2) & sides (index 0,1,3,4,5)
+    t1.material[2].map.image = topTex.image; t1.material[2].map.needsUpdate = true;
+    [0, 1, 3, 4, 5].forEach((i) => {
+      t1.material[i].map.image = sideTex.image;
+      t1.material[i].map.needsUpdate = true;
+    });
+
+    // t2 & t3
+    [t2, t3].forEach((t) => {
+      t.material.forEach((mat) => {
+        if (mat && mat.map) {
+          mat.map.image = sideTex.image;
+          mat.map.needsUpdate = true;
+        }
+      });
+    });
+
+    // rim
+    rimMat.map.image = topTex.image;
+    rimMat.map.needsUpdate = true;
+  }
+
+  return { platform, ground: t1, updatePlatformTextures };
 }
 
-// A few flat white voxel cloud clusters that drift and wrap. Unlit (MeshBasic)
-// so they read as flat Minecraft slabs, kept high and far so they never occlude
-// the play area centred on the origin.
 function buildClouds() {
   const group = new THREE.Group();
   group.name = 'clouds';
@@ -232,8 +268,6 @@ function buildClouds() {
       box.position.set(rnd(-5, 5), rnd(-0.6, 0.6), rnd(-4, 4));
       c.add(box);
     }
-    // low over a distant horizon (far behind the play area) so they read in the
-    // sky band without ever occluding the objects centred on the origin.
     c.position.set(rnd(X_MIN, X_MAX), rnd(9, 20), rnd(-70, -34));
     c.userData.speed = rnd(0.5, 1.3);
     group.add(c);
@@ -242,7 +276,7 @@ function buildClouds() {
   function update(dt) {
     for (const c of cloudMeshes) {
       c.position.x += c.userData.speed * dt;
-      if (c.position.x > X_MAX) c.position.x -= SPAN; // wrap
+      if (c.position.x > X_MAX) c.position.x -= SPAN;
     }
   }
   return { group, update };
