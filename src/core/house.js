@@ -3,6 +3,7 @@
 // animated 2.7m tall Iron Golem with heavy patrol strides, swinging arms, and glowing eyes!
 
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { localStore, readJSON, writeJSON } from './storage.js';
 
 const SAVE_KEY = 'house_stage.v1';
@@ -162,12 +163,51 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
 
     // Stage 4: Animated Iron Golem Guardian!
     if (stage >= 4) {
-      golemGroup = buildIronGolem();
+      // Start async GLB load — places a procedural golem immediately as placeholder,
+      // then swaps it for the real model when it arrives.
+      golemGroup = buildIronGolemProcedural();
       group.add(golemGroup);
+
+      const GLB_URL = `${import.meta.env.BASE_URL}assets/mobs/iron-golem.glb`;
+      new GLTFLoader().loadAsync(GLB_URL).then((gltf) => {
+        // Only swap in if Stage 4 is still active
+        if (!group.parent || currentStage < 4) return;
+
+        gltf.scene.traverse((n) => {
+          if (n.isMesh) {
+            n.castShadow = true;
+            n.receiveShadow = true;
+            if (n.material && n.material.map) {
+              n.material.map.magFilter = THREE.NearestFilter;
+              n.material.map.minFilter = THREE.NearestFilter;
+              n.material.map.generateMipmaps = false;
+            }
+          }
+        });
+
+        const glbGolem = gltf.scene;
+        glbGolem.name = 'iron-golem';
+        // Scale to match the scene — the Sketchfab model is in Minecraft block units
+        glbGolem.scale.setScalar(0.7);
+        glbGolem.position.copy(golemGroup.position);
+        glbGolem.rotation.copy(golemGroup.rotation);
+
+        // Copy patrol animation data from procedural placeholder
+        // But the anim nodes need to live on the GLB now for patrol to work
+        // For the real model use the root group for position/rotation only
+        glbGolem.userData.anim = { glb: true, root: glbGolem };
+
+        group.remove(golemGroup);
+        group.add(glbGolem);
+        golemGroup = glbGolem;
+        console.log('[house] ✅ Iron Golem GLB loaded');
+      }).catch(() => {
+        console.log('[house] ⚠️ iron-golem.glb not found — using procedural fallback');
+      });
     }
   }
 
-  function buildIronGolem() {
+  function buildIronGolemProcedural() {
     const golem = new THREE.Group();
     golem.name = 'iron-golem';
     golem.position.set(2.5 * BLOCK_SIZE, 0, (3 + 1) * BLOCK_SIZE);
@@ -249,36 +289,38 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
 
   function update(dt, nowT) {
     if (!golemGroup || !golemGroup.userData.anim) return;
-    const { headGroup, lArmPivot, rArmPivot, lLegPivot, rLegPivot, torso } = golemGroup.userData.anim;
+    const anim = golemGroup.userData.anim;
 
-    // Heavy Iron Golem Patrol Walking Animation
+    // Patrol position/rotation — applies to both GLB and procedural models
     const speed = 0.6;
     const cycle = (nowT * speed) % 4;
     const walkPhase = Math.sin(nowT * 3.2);
 
     if (cycle < 2) {
-      // Patrol forward
       golemGroup.position.x = 2.0 * BLOCK_SIZE + (cycle / 2) * (3.5 * BLOCK_SIZE);
       golemGroup.rotation.y = Math.PI / 2;
-
-      lArmPivot.rotation.x = walkPhase * 0.45;
-      rArmPivot.rotation.x = -walkPhase * 0.45;
-      lLegPivot.rotation.x = -walkPhase * 0.35;
-      rLegPivot.rotation.x = walkPhase * 0.35;
     } else {
-      // Patrol backward
       golemGroup.position.x = 5.5 * BLOCK_SIZE - ((cycle - 2) / 2) * (3.5 * BLOCK_SIZE);
       golemGroup.rotation.y = -Math.PI / 2;
-
-      lArmPivot.rotation.x = -walkPhase * 0.45;
-      rArmPivot.rotation.x = walkPhase * 0.45;
-      lLegPivot.rotation.x = walkPhase * 0.35;
-      rLegPivot.rotation.x = -walkPhase * 0.35;
     }
 
-    // Head turning & torso heavy breathing
-    headGroup.rotation.y = Math.sin(nowT * 1.1) * 0.3;
-    torso.position.y = (1.5 * 1.35) + Math.sin(nowT * 2.0) * 0.04;
+    // Joint animation — only for the procedural voxel fallback (GLB uses its own rig)
+    if (!anim.glb) {
+      const { headGroup, lArmPivot, rArmPivot, lLegPivot, rLegPivot, torso } = anim;
+      if (cycle < 2) {
+        lArmPivot.rotation.x = walkPhase * 0.45;
+        rArmPivot.rotation.x = -walkPhase * 0.45;
+        lLegPivot.rotation.x = -walkPhase * 0.35;
+        rLegPivot.rotation.x = walkPhase * 0.35;
+      } else {
+        lArmPivot.rotation.x = -walkPhase * 0.45;
+        rArmPivot.rotation.x = walkPhase * 0.45;
+        lLegPivot.rotation.x = walkPhase * 0.35;
+        rLegPivot.rotation.x = -walkPhase * 0.35;
+      }
+      headGroup.rotation.y = Math.sin(nowT * 1.1) * 0.3;
+      torso.position.y = (1.5 * 1.35) + Math.sin(nowT * 2.0) * 0.04;
+    }
   }
 
   function getStage() { return currentStage; }

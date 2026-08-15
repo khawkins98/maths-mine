@@ -86,8 +86,14 @@ function buildVillagerFallback() {
 
   g.traverse((n) => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
 
-  // Expose head joint for animations
-  g.userData.joints = { neck: head, shoulders: {}, hips: {}, body, eyes: [] };
+  // Expose joints matching the Kenney rig interface used by judge.js / imposter.js
+  g.userData.joints = {
+    neck: head,
+    shoulders: { '-1': rArm, '1': lArm },
+    hips: { '-1': rLeg, '1': lLeg },
+    body,
+    eyes: [],
+  };
   return g;
 }
 
@@ -137,7 +143,13 @@ function buildZombieFallback() {
   g.add(rLeg);
 
   g.traverse((n) => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
-  g.userData.joints = { neck: head, shoulders: {}, hips: {}, body, eyes: [] };
+  g.userData.joints = {
+    neck: head,
+    shoulders: { '-1': rArm, '1': lArm },
+    hips: { '-1': rLeg, '1': lLeg },
+    body,
+    eyes: [],
+  };
   return g;
 }
 
@@ -158,24 +170,37 @@ function buildGhastFallback() {
   g.add(body);
 
   // 3 red squinting eyes
-  [[-0.5, 0.2], [0, 0.25], [0.5, 0.2]].forEach(([x, y], i) => {
+  [[-0.5, 0.2], [0, 0.25], [0.5, 0.2]].forEach(([x, y]) => {
     const eye = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.05), eyeMat);
     eye.position.set(x, B * 2.8 + y, B * 1.41);
     g.add(eye);
   });
 
-  // 9 dangling tentacles
+  // 9 dangling tentacles — use Two as stand-ins for arm/leg joints
+  const tentacles = [];
   for (let col = 0; col < 3; col++) {
     for (let row = 0; row < 3; row++) {
       const len = 0.6 + Math.random() * 0.6;
       const tent = new THREE.Mesh(new THREE.BoxGeometry(0.15, len, 0.15), tentMat);
       tent.position.set((col - 1) * 0.55, B * 2.8 - B * 1.4 - len / 2, (row - 1) * 0.55);
       g.add(tent);
+      tentacles.push(tent);
     }
   }
 
   g.traverse((n) => { if (n.isMesh) { n.castShadow = true; } });
-  g.userData.joints = { neck: body, shoulders: {}, hips: {}, body, eyes: [] };
+  // Ghast has no arms/legs — use tentacle stubs so the animation read doesn't crash
+  const t0 = tentacles[0] || body;
+  const t1 = tentacles[1] || body;
+  const t2 = tentacles[2] || body;
+  const t3 = tentacles[3] || body;
+  g.userData.joints = {
+    neck: body,
+    shoulders: { '-1': t0, '1': t1 },
+    hips: { '-1': t2, '1': t3 },
+    body,
+    eyes: [],
+  };
   return g;
 }
 
@@ -229,7 +254,13 @@ function buildEndermanFallback() {
   g.add(rLeg);
 
   g.traverse((n) => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
-  g.userData.joints = { neck: head, shoulders: {}, hips: {}, body, eyes: [] };
+  g.userData.joints = {
+    neck: head,
+    shoulders: { '-1': rArm, '1': lArm },
+    hips: { '-1': rLeg, '1': lLeg },
+    body,
+    eyes: [],
+  };
   return g;
 }
 
