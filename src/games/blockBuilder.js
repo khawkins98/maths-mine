@@ -42,7 +42,10 @@ export function createBlockBuilder(ctx) {
   const VIEW_DIR = engine.VIEW_DIR;
 
   // ---- shared block geometry (rounded dirt body + grass "lip" cap) ----
-  const blocks = createBlockKit(ctx.textures);
+  const activeBiome = engine.currentBiome ? engine.currentBiome() : null;
+  const bodyTex = activeBiome && activeBiome.blockBodyKey ? textures[activeBiome.blockBodyKey] : textures.dirtTex;
+  const capTex = activeBiome && activeBiome.blockCapKey ? textures[activeBiome.blockCapKey] : textures.grassTex;
+  const blocks = createBlockKit(ctx.textures, { body: bodyTex, cap: capTex });
   const { makeBlock, setCapGrass } = blocks;
   const slotGeo = new THREE.PlaneGeometry(CELL * 0.94, CELL * 0.94);
   const sharedGeos = new Set([...blocks.sharedGeos, slotGeo]);

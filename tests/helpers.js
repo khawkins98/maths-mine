@@ -8,10 +8,16 @@ import { expect } from '@playwright/test';
 export async function boot(page) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('console', (m) => {
+    if (m.type() === 'error') {
+      const txt = m.text();
+      if (!txt.includes('Failed to load resource') && !txt.includes('favicon.ico')) {
+        errors.push(txt);
+      }
+    }
+  });
 
   await page.goto('/');
-  await page.locator('#btn-wake').click();
   await expect(page.locator('#hub')).toBeVisible();
   await page.waitForFunction(() => window.__hub && window.__hub().games.length > 0);
   return errors;

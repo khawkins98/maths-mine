@@ -83,7 +83,7 @@ export function createSpeech() {
 
   function utter(part, myEpoch) {
     const u = new SpeechSynthesisUtterance(part.text);
-    if (chosenVoice) u.voice = chosenVoice;
+    try { if (chosenVoice) u.voice = chosenVoice; } catch (_) {}
     u.rate = 0.92; u.pitch = 1.12; u.volume = 1; // friendly, unhurried
 
     // Held in `current` rather than left to the garbage collector: a collected

@@ -63,7 +63,7 @@ export function pixelTex(base, palette, { size = 64, cell = 8, bias = 0.6, edge 
 export function createTextures() {
   // --- game blocks: chunky, high-contrast, hard-pixel (match platform texel) ---
   const dirtTex = pixelTex('#7a4622', ['#623718', '#8a5730', '#4f2c13', '#96633a'], { cell: 8, bias: 0.55, edge: 0.42 });
-  const grassTex = pixelTex('#57ab3b', ['#4a962f', '#69c24a', '#3f8a2a', '#7ad257'], { cell: 8, bias: 0.55, edge: 0.3 });
+  const grassTex = pixelTex('#42a12b', ['#358a20', '#4eb535', '#2a7217', '#5ac93f'], { cell: 8, bias: 0.55, edge: 0.3 });
   // stone blocks: plain stone texture with rim treatment so each one
   // reads as a separate cube in a grid.
   const stoneTex = pixelTex('#9d9d9a', ['#8d8d8a', '#adadaa', '#7f7f7c', '#b6b6b3'], { cell: 8, bias: 0.6, edge: 0.34 });
@@ -72,7 +72,7 @@ export function createTextures() {
   const emeraldTex = pixelTex('#2fbf6d', ['#27a95e', '#41d47f', '#1e9152', '#59e493'], { cell: 8, bias: 0.55, edge: 0.4 });
   const emeraldTopTex = pixelTex('#41d47f', ['#35c471', '#5ae596', '#2bb267', '#77f0ad'], { cell: 8, bias: 0.55, edge: 0.32 });
   // subtle ground texture (soft-filtered so it doesn't shimmer at distance)
-  const groundTex = fleckTex('#7CC860', ['#74C158', '#84D06A', '#6FBE52'], 60, { nearest: false, repeat: 42 });
+  const groundTex = fleckTex('#4ea830', ['#3e8d24', '#59bc38', '#32771d'], 60, { nearest: false, repeat: 42 });
   // soft round puff, used for dust sprites + Bolt's blob shadow
   const puffTex = makeCanvasTex(64, (ctx) => {
     const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
@@ -123,6 +123,7 @@ export function createTextures() {
   // textures, but follow the same 16px resource-pack discipline as the player
   // skin so bark and leaves read as authored assets rather than flat colours.
   const logTex = pixelTex('#6f4324', ['#543019', '#87552e', '#9b6235', '#422514'], { size: 16, cell: 2, bias: 0.58 });
+  const birchLogTex = pixelTex('#d8d6cd', ['#bab8af', '#e8e6dc', '#383632', '#282622'], { size: 16, cell: 2, bias: 0.7 });
   const leafTex = pixelTex('#3f7c2d', ['#2d6121', '#4f9237', '#65a744', '#244f1b'], { size: 16, cell: 2, bias: 0.5 });
   const cactusTex = pixelTex('#2e7a32', ['#236326', '#3b943f', '#1b4d1e'], { size: 16, cell: 2 });
   const netherStemTex = pixelTex('#471523', ['#360e1a', '#5c1c2e', '#2b0910'], { size: 16, cell: 2 });
@@ -132,7 +133,8 @@ export function createTextures() {
   // Separate, RepeatWrapping-enabled instances so the platform can tile its faces
   // without mutating the game blocks' textures (which keep repeat 1,1). Chunky
   // pixels via NearestFilter, same texel style as the game blocks.
-  const platGrassTex = fleckTex('#5FBF4A', ['#4EA83C', '#78D060', '#57B742', '#69C853'], 120);
+  const platGrassTex = fleckTex('#47ad2f', ['#3a9423', '#57bd3d', '#2e7b1a', '#54be3b', '#3fa627'], 120);
+  const platForestGrassTex = fleckTex('#297a1d', ['#1e6114', '#348e27', '#164f0e', '#3ea22e', '#246b1a'], 130);
   const platDirtTex = fleckTex('#8B5A2B', ['#7A4A22', '#9C6B38', '#6B4226', '#5C3A1F'], 120);
   const platSandTex = fleckTex('#d8c582', ['#cdaf6c', '#e6d899', '#c4a462'], 120);
   const platSandstoneTex = fleckTex('#c9b072', ['#b99f60', '#d8be80', '#ab9154'], 120);
@@ -141,13 +143,13 @@ export function createTextures() {
   const platEndstoneTex = fleckTex('#dcd89c', ['#ceca8c', '#ece8ac', '#b8b47a'], 120);
   const platObsidianTex = fleckTex('#1a162b', ['#120f20', '#251f3b', '#0c0917'], 100);
 
-  [platGrassTex, platDirtTex, platSandTex, platSandstoneTex, platSnowTex, platNetherrackTex, platEndstoneTex, platObsidianTex].forEach((t) => {
+  [platGrassTex, platForestGrassTex, platDirtTex, platSandTex, platSandstoneTex, platSnowTex, platNetherrackTex, platEndstoneTex, platObsidianTex].forEach((t) => {
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
   });
 
   return {
     dirtTex, grassTex, stoneTex, emeraldTex, emeraldTopTex, groundTex, puffTex, slotTex, skyTex, woodTex,
-    logTex, leafTex, cactusTex, netherStemTex, netherCapTex,
-    platGrassTex, platDirtTex, platSandTex, platSandstoneTex, platSnowTex, platNetherrackTex, platEndstoneTex, platObsidianTex,
+    logTex, birchLogTex, leafTex, cactusTex, netherStemTex, netherCapTex,
+    platGrassTex, platForestGrassTex, platDirtTex, platSandTex, platSandstoneTex, platSnowTex, platNetherrackTex, platEndstoneTex, platObsidianTex,
   };
 }

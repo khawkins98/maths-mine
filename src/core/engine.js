@@ -4,8 +4,9 @@
 import * as THREE from 'three';
 import { BIOMES, biomeForProgress } from './biomes.js';
 import { plantTrees, disposeTrees } from './trees.js';
+import { createBackgroundTerrain } from './terrain.js';
 
-export const VIEW_DIR = new THREE.Vector3(0.42, 0.5, 1).normalize();
+export const VIEW_DIR = new THREE.Vector3(0.42, 0.55, 1).normalize();
 
 export function createEngine({ textures }) {
   const app = document.getElementById('app');
@@ -26,7 +27,8 @@ export function createEngine({ textures }) {
   scene.fog = new THREE.Fog(SKY, 70, 150);
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 220);
-  camera.position.set(0, 3.2, 15);
+  camera.position.set(0, 5.6, 15.5);
+  camera.lookAt(0, 2.0, 0);
 
   const camRig = new THREE.Group();
   camRig.name = 'camera-rig';
@@ -61,6 +63,9 @@ export function createEngine({ textures }) {
   const { platform, ground, updatePlatformTextures } = buildPlatform(textures);
   scene.add(platform);
 
+  // ---- procedural background terrain & mountains ----
+  const backgroundTerrain = createBackgroundTerrain({ scene, textures });
+
   // ---- cubic drifting clouds ----
   const clouds = buildClouds();
   scene.add(clouds.group);
@@ -68,9 +73,17 @@ export function createEngine({ textures }) {
   // ---- dynamic biome management ----
   let activeBiome = BIOMES.flat;
   let groveGroup = null;
-  const grovePositions = [
+
+  const defaultGrovePositions = [
     { x: -11, z: -8 }, { x: 11, z: -8 },
     { x: -12, z: 2 },  { x: 12, z: 2 },
+  ];
+
+  const forestGrovePositions = [
+    { x: -12, z: -9 }, { x: -6, z: -10 }, { x: 0, z: -10 }, { x: 6, z: -10 }, { x: 12, z: -9 },
+    { x: -14, z: -3 }, { x: 14, z: -3 },
+    { x: -14, z: 3 },  { x: 14, z: 3 },
+    { x: -11, z: 7 },  { x: 11, z: 7 },  { x: 0, z: 8 },
   ];
 
   function setBiome(target) {
@@ -98,8 +111,15 @@ export function createEngine({ textures }) {
 
     // 4. Scenery trees/cacti/fungi/pillars
     if (groveGroup) disposeTrees(scene, groveGroup);
-    groveGroup = plantTrees(scene, grovePositions, textures, biome.treeType);
+    const positions = biome.treeType === 'dense_oak' ? forestGrovePositions : defaultGrovePositions;
+    groveGroup = plantTrees(scene, positions, textures, biome.treeType);
+
+    // 5. Background procedural mountains
+    backgroundTerrain.updateBiome(biome);
   }
+
+  // Initialize starting biome
+  setBiome(BIOMES.flat);
 
   function updateBiomeFromProgress(progress) {
     const b = biomeForProgress(progress);
@@ -130,8 +150,8 @@ export function createEngine({ textures }) {
     camera.lookAt(0, centerY, 0);
   }
   function resetCamera() {
-    camera.position.set(0, 3.2, 15);
-    camera.lookAt(0, 3.2, 0);
+    camera.position.set(0, 5.6, 15.5);
+    camera.lookAt(0, 2.0, 0);
   }
 
   const frameCbs = [];

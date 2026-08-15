@@ -1,4 +1,4 @@
-// core/trees.js — Biome scenery generation (oak trees, cacti, snow spruce, nether fungi, end pillars).
+// core/trees.js — Biome scenery generation (oak trees, birch trees, cacti, snow spruce, nether fungi, end pillars).
 
 import * as THREE from 'three';
 
@@ -7,34 +7,59 @@ const BLOCK = 0.72; // scenery scale: readable, but subordinate to the lesson
 const _gLog = new THREE.BoxGeometry(BLOCK, BLOCK, BLOCK);
 const _gLeaf = new THREE.BoxGeometry(BLOCK, BLOCK, BLOCK);
 
-export function makeTree({ trunkHeight = 4, seed = 0, materials } = {}) {
+export function makeTree({ trunkHeight = 4, seed = 0, materials, isBirch = false } = {}) {
   const g = new THREE.Group();
 
   let rng = seed * 9301 + 49297;
   const rand = () => { rng = (rng * 9301 + 49297) % 233280; return rng / 233280; };
 
+  const logMaterial = isBirch ? (materials.birchLog || materials.log) : materials.log;
+  const leafMaterials = isBirch ? (materials.birchLeaves || materials.leaves) : materials.leaves;
+
+  // Trunk
   for (let i = 0; i < trunkHeight; i++) {
-    const log = new THREE.Mesh(_gLog, materials.log);
+    const log = new THREE.Mesh(_gLog, logMaterial);
     log.position.set(0, BLOCK * i + BLOCK / 2, 0);
     log.castShadow = true;
     g.add(log);
   }
 
+  // Classic Minecraft layered leaf canopy
   const CANOPY = [];
-  for (let dx = -1; dx <= 1; dx++) {
-    for (let dz = -1; dz <= 1; dz++) {
-      if (Math.abs(dx) + Math.abs(dz) < 2 || rand() > 0.34) CANOPY.push([dx, 0, dz]);
-      if (Math.abs(dx) + Math.abs(dz) < 2 || rand() > 0.58) CANOPY.push([dx, 1, dz]);
+
+  // Bottom 5x5 layer (with random corner cutouts)
+  const yStart = trunkHeight - 2;
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
+      if (Math.abs(dx) === 2 && Math.abs(dz) === 2 && rand() > 0.4) continue;
+      CANOPY.push([dx, yStart, dz]);
     }
   }
-  CANOPY.push([0, 2, 0], [-1, 2, 0], [1, 2, 0], [0, 2, -1], [0, 2, 1]);
+
+  // Mid 5x5 layer
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
+      if (Math.abs(dx) === 2 && Math.abs(dz) === 2 && rand() > 0.6) continue;
+      CANOPY.push([dx, yStart + 1, dz]);
+    }
+  }
+
+  // Upper 3x3 layer
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      CANOPY.push([dx, yStart + 2, dz]);
+    }
+  }
+
+  // Top cap (plus shape)
+  CANOPY.push([0, yStart + 3, 0], [-1, yStart + 3, 0], [1, yStart + 3, 0], [0, yStart + 3, -1], [0, yStart + 3, 1]);
 
   for (const [dx, dy, dz] of CANOPY) {
-    const mat = materials.leaves[(rand() * materials.leaves.length) | 0];
+    const mat = leafMaterials[(rand() * leafMaterials.length) | 0];
     const leaf = new THREE.Mesh(_gLeaf, mat);
     leaf.position.set(
       dx * BLOCK,
-      (trunkHeight - 1 + dy) * BLOCK + BLOCK / 2,
+      dy * BLOCK + BLOCK / 2,
       dz * BLOCK,
     );
     leaf.castShadow = true;
@@ -137,9 +162,15 @@ export function plantTrees(scene, positions, textures, treeType = 'oak') {
   group.name = 'background-grove';
 
   const logMat = new THREE.MeshStandardMaterial({ map: textures.logTex, roughness: 1, metalness: 0 });
+  const birchLogMat = new THREE.MeshStandardMaterial({ map: textures.birchLogTex || textures.logTex, roughness: 1, metalness: 0 });
+
   const leafMats = [0xffffff, 0xd8f0cf, 0xb8dcae].map((color) => new THREE.MeshStandardMaterial({
     map: textures.leafTex, color, roughness: 1, metalness: 0,
   }));
+  const birchLeafMats = [0x9be887, 0x73d45d, 0xbbf0ac].map((color) => new THREE.MeshStandardMaterial({
+    map: textures.leafTex, color, roughness: 1, metalness: 0,
+  }));
+
   const cactusMat = new THREE.MeshStandardMaterial({ map: textures.cactusTex, roughness: 1, metalness: 0 });
   const snowCapMat = new THREE.MeshStandardMaterial({ map: textures.platSnowTex, roughness: 1, metalness: 0 });
   const stemMat = new THREE.MeshStandardMaterial({ map: textures.netherStemTex, roughness: 1, metalness: 0 });
@@ -151,7 +182,9 @@ export function plantTrees(scene, positions, textures, treeType = 'oak') {
 
   const materials = {
     log: logMat,
+    birchLog: birchLogMat,
     leaves: leafMats,
+    birchLeaves: birchLeafMats,
     cactus: cactusMat,
     snowLeaves: leafMats[1],
     snowCap: snowCapMat,
@@ -160,9 +193,11 @@ export function plantTrees(scene, positions, textures, treeType = 'oak') {
     obsidian: obsidianMat,
     crystal: crystalMat,
   };
-  group.userData.materials = [logMat, ...leafMats, cactusMat, snowCapMat, stemMat, capMat, obsidianMat, crystalMat];
+  group.userData.materials = [logMat, birchLogMat, ...leafMats, ...birchLeafMats, cactusMat, snowCapMat, stemMat, capMat, obsidianMat, crystalMat];
 
-  positions.forEach(({ x, z, trunkHeight }, i) => {
+  const activePositions = treeType === 'home_oak' ? positions.slice(0, 2) : positions;
+
+  activePositions.forEach(({ x, z, trunkHeight }, i) => {
     let tree;
     if (treeType === 'cactus') {
       tree = makeCactus({ height: 3 + (i % 2), materials });
@@ -172,6 +207,16 @@ export function plantTrees(scene, positions, textures, treeType = 'oak') {
       tree = makeNetherFungus({ height: 3 + (i % 2), materials });
     } else if (treeType === 'end_pillar') {
       tree = makeEndPillar({ height: 4 + (i % 2), materials });
+    } else if (treeType === 'dense_oak') {
+      // Forest biome: alternate between Lush Oak, Birch, and Spruce trees!
+      const variant = i % 3;
+      if (variant === 1) {
+        tree = makeTree({ trunkHeight: trunkHeight ?? (4 + (i % 2)), seed: i * 137, materials, isBirch: true });
+      } else if (variant === 2) {
+        tree = makeSpruceTree({ height: 4 + (i % 2), materials });
+      } else {
+        tree = makeTree({ trunkHeight: trunkHeight ?? (5 + (i % 2)), seed: i * 137, materials, isBirch: false });
+      }
     } else {
       tree = makeTree({ trunkHeight: trunkHeight ?? (4 + (i % 2)), seed: i * 137, materials });
     }

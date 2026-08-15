@@ -24,7 +24,7 @@ test.describe('boot + hub', () => {
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto('/');
-    await expect(page.locator('#btn-wake')).toBeVisible();
+    await expect(page.locator('#hub')).toBeVisible();
     expect(errors).toEqual([]);
   });
 

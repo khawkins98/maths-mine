@@ -21,6 +21,7 @@ import { MasteryStore } from './game/mastery.js';
 import { Wallet } from './game/wallet.js';
 import { TiltInput } from './game/sensors.js';
 import { createBolt } from './game/bolt.js';
+import { BIOME_ORDER } from './core/biomes.js';
 
 import { createBlockBuilder } from './games/blockBuilder.js';
 import { createSpotWrongun } from './games/spotWrongun/index.js';
@@ -105,6 +106,30 @@ window.__bolt = bolt;
 window.__audio = audio;
 window.__speech = speech;
 
+// ---------- debug terrain switching ([ and ]) ----------
+function cycleBiome(delta) {
+  const currentId = engine.currentBiome().id;
+  let idx = BIOME_ORDER.indexOf(currentId);
+  if (idx < 0) idx = 0;
+  const nextIdx = (idx + delta + BIOME_ORDER.length) % BIOME_ORDER.length;
+  const nextId = BIOME_ORDER[nextIdx];
+  engine.setBiome(nextId);
+  const b = engine.currentBiome();
+  ui.showToast(`Biome: ${b.name}`, 'good');
+  return b;
+}
+window.__nextBiome = () => cycleBiome(1);
+window.__prevBiome = () => cycleBiome(-1);
+
+document.addEventListener('keydown', (e) => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return;
+  if (e.key === ']') {
+    cycleBiome(1);
+  } else if (e.key === '[') {
+    cycleBiome(-1);
+  }
+});
+
 // ---------- render loop dispatch ----------
 // The engine owns the loop; here we fan out per-frame work: the active game's
 // juice/logic, then Bolt (shared, always animated once visible).
@@ -140,34 +165,25 @@ if (ui.els.btnVoice) ui.els.btnVoice.addEventListener('click', () => {
   if (on) speech.speak('Voice on!');
 });
 
-// ---------- the gate: one tap = sensor permission + audio unlock + start ----------
-ui.els.btnWake.addEventListener('click', async () => {
+// Unlock audio/speech on first user gesture anywhere
+document.addEventListener('pointerdown', () => {
   audio.init();
   audio.resume();
-  speech.prime(); // prime TTS synchronously inside this gesture (iOS needs it)
+  speech.prime();
+}, { once: true });
 
-  const granted = await sensors.requestAndStart();
-  // Permission/API can say "yes" while no hardware ever emits data (desktop
-  // Chrome). Wait a beat and only call it tilt-mode if real data arrived.
-  if (granted) await new Promise((r) => setTimeout(r, 500));
-  usingSensors = granted && sensors.available;
-  if (usingSensors) sensors.recenter();
+// ---------- direct boot into level select (hub) ----------
+ui.hideGate();
+bolt.show(true);
+hub.open();
 
-  // The wooden signs paint their equation onto a canvas, and canvas text does
-  // NOT wait for a webfont — it silently falls back to system-ui and stays that
-  // way, because the texture is only drawn once. Wait for the font here (we're
-  // well past first paint by now, so this is normally instant), but never hang
-  // the game on a font that fails to load.
-  if (document.fonts && document.fonts.ready) {
-    await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]);
-  }
-
-  ui.hideGate();
-  bolt.show(true);
-  audio.beep(660, 0.12, 'triangle', 0.06);
-
-  // Into the hub: pick a game. Each game wires
-  // ctx.onExit + the ← Menu button back to hub.open().
-  hub.open();
-  ui.showToast(usingSensors ? 'Motion on — pick a game!' : 'Pick a game to play!', 'good');
-});
+if (ui.els.btnWake) {
+  ui.els.btnWake.addEventListener('click', async () => {
+    audio.init();
+    audio.resume();
+    speech.prime();
+    ui.hideGate();
+    bolt.show(true);
+    hub.open();
+  });
+}
