@@ -225,6 +225,7 @@ export function buildArticulatedGolem() {
 
   g.userData.anim = {
     lLegPivot, rLegPivot, lArmPivot, rArmPivot, headPivot, torsoGroup,
+    legH,
   };
 
   return g;
@@ -344,28 +345,34 @@ function animate() {
       const type = attackState.type;
 
       if (type === 'golem' && currentModelGroup.userData.anim) {
-        const { lArmPivot, rArmPivot, headPivot, torsoGroup } = currentModelGroup.userData.anim;
+        const { lArmPivot, rArmPivot, headPivot, torsoGroup, legH } = currentModelGroup.userData.anim;
+        const baseTorsoY = legH || (16 * 0.055);
+
         if (p < 0.25) {
+          // Wind-up: arms down and back, slight knee crouch
           const sub = p / 0.25;
           lArmPivot.rotation.x = sub * 0.8;
           rArmPivot.rotation.x = sub * 0.8;
-          torsoGroup.position.y = -sub * 0.06;
+          torsoGroup.position.y = baseTorsoY - sub * 0.05;
         } else if (p < 0.65) {
+          // Explosive Uppercut launch!
           const sub = (p - 0.25) / 0.4;
           const swing = Math.sin(sub * Math.PI * 0.5);
           lArmPivot.rotation.x = 0.8 - swing * (0.8 + Math.PI * 0.85);
           rArmPivot.rotation.x = 0.8 - swing * (0.8 + Math.PI * 0.85);
-          currentModelGroup.position.y = attackState.initialPos.y + Math.sin(sub * Math.PI) * 0.25;
+          currentModelGroup.position.y = attackState.initialPos.y + Math.sin(sub * Math.PI) * 0.22;
           headPivot.rotation.x = -Math.sin(sub * Math.PI) * 0.4;
-          torsoGroup.rotation.x = -Math.sin(sub * Math.PI) * 0.25;
+          torsoGroup.rotation.x = -Math.sin(sub * Math.PI) * 0.2;
+          torsoGroup.position.y = baseTorsoY;
         } else {
+          // Smooth recovery back to idle/patrol
           const sub = (p - 0.65) / 0.35;
           lArmPivot.rotation.x = -Math.PI * 0.85 * (1.0 - sub);
           rArmPivot.rotation.x = -Math.PI * 0.85 * (1.0 - sub);
           currentModelGroup.position.y = attackState.initialPos.y;
           headPivot.rotation.x = 0;
           torsoGroup.rotation.x = 0;
-          torsoGroup.position.y = 0;
+          torsoGroup.position.y = baseTorsoY;
         }
       } else if (type === 'creeper') {
         const j = currentModelGroup.userData.joints;
