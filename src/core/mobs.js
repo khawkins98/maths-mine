@@ -391,7 +391,10 @@ export async function loadMobs() {
   const factories = {};
   MOB_TYPES.forEach((type, i) => {
     const gltfScene = results[i];
-    if (gltfScene) {
+    if (type === 'creeper') {
+      factories[type] = () => buildCreeperModel(0.055);
+      console.log(`[mobs] ✅ Loaded Creeper with canonical 4-legged Minecraft rig`);
+    } else if (gltfScene) {
       // Normalize root GLB scene
       normalizeAndScaleModel(gltfScene, TARGET_HEIGHTS[type] || 1.8, type === 'ghast');
       factories[type] = () => {

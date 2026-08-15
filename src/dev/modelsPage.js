@@ -259,6 +259,8 @@ async function switchModel(type) {
 
   if (type === 'golem') {
     currentModelGroup = buildArticulatedGolem();
+  } else if (type === 'creeper') {
+    currentModelGroup = buildCreeperModel(0.055 * 1.3);
   } else if (mobFactories && mobFactories[type]) {
     currentModelGroup = mobFactories[type]();
   } else if (type === 'steve' && characterAssets) {
