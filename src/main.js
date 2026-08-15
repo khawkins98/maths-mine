@@ -28,6 +28,7 @@ import { createBlockBuilder } from './games/blockBuilder.js';
 import { createSpotWrongun } from './games/spotWrongun/index.js';
 import { createNightDefense } from './games/nightDefense/index.js';
 import { createHub } from './hub.js';
+import { createReferenceTray } from './game/referenceTray.js';
 
 // ---------- shared services ----------
 const textures = createTextures();
@@ -111,10 +112,15 @@ ctx.games = GAMES;
 // the game picker
 const hub = createHub(ctx);
 
+// the times-table reference tray ("cheat sheet")
+const referenceTray = createReferenceTray({ mastery, ui });
+ctx.referenceTray = referenceTray;
+
 // debug hook: the shared mascot (headless smoke tests + oxidation checks)
 window.__bolt = bolt;
 window.__audio = audio;
 window.__speech = speech;
+window.__referenceTray = referenceTray;
 
 // ---------- debug terrain switching ([ and ]) ----------
 function cycleBiome(delta) {
