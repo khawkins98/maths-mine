@@ -163,17 +163,19 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
 
     // Stage 4: Animated Iron Golem Guardian!
     if (stage >= 4) {
-      // Start async GLB load — places a procedural golem immediately as placeholder,
-      // then swaps it for the real model when it arrives.
+      // Place procedural placeholder immediately while GLB loads
       golemGroup = buildIronGolemProcedural();
       group.add(golemGroup);
 
       const GLB_URL = `${import.meta.env.BASE_URL}assets/mobs/iron-golem.glb`;
       new GLTFLoader().loadAsync(GLB_URL).then((gltf) => {
-        // Only swap in if Stage 4 is still active
         if (!group.parent || currentStage < 4) return;
 
-        gltf.scene.traverse((n) => {
+        const glbGolem = gltf.scene;
+        glbGolem.name = 'iron-golem';
+
+        // ── 1. Nearest-pixel textures (Minecraft style) ──
+        glbGolem.traverse((n) => {
           if (n.isMesh) {
             n.castShadow = true;
             n.receiveShadow = true;
@@ -185,24 +187,49 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
           }
         });
 
-        const glbGolem = gltf.scene;
-        glbGolem.name = 'iron-golem';
-        // Scale to match the scene — the Sketchfab model is in Minecraft block units
-        glbGolem.scale.setScalar(0.7);
-        glbGolem.position.copy(golemGroup.position);
-        glbGolem.rotation.copy(golemGroup.rotation);
+        // ── 2. Auto-scale: measure bounding box, fit to target height (2.0 world units) ──
+        const TARGET_HEIGHT = 2.0; // ~2.7 Minecraft blocks × BLOCK_SIZE
+        const box = new THREE.Box3().setFromObject(glbGolem);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const modelHeight = size.y || 1;
+        const autoScale = TARGET_HEIGHT / modelHeight;
+        glbGolem.scale.setScalar(autoScale);
 
-        // Copy patrol animation data from procedural placeholder
-        // But the anim nodes need to live on the GLB now for patrol to work
-        // For the real model use the root group for position/rotation only
-        glbGolem.userData.anim = { glb: true, root: glbGolem };
+        // ── 3. Sit on the ground: lift so bottom of bbox touches y = 0 ──
+        const box2 = new THREE.Box3().setFromObject(glbGolem);
+        glbGolem.position.copy(golemGroup.position);
+        glbGolem.position.y = -box2.min.y;
+
+        // ── 4. Find skeleton bones by common names for manual animation ──
+        const bones = {};
+        const BONE_MAP = {
+          head:   ['head', 'Head', 'HEAD'],
+          torso:  ['body', 'Body', 'torso', 'Torso', 'chest', 'Chest', 'spine', 'Spine'],
+          lArm:   ['arm_l', 'LeftArm', 'left_arm', 'ArmL', 'armLeft', 'arm.l'],
+          rArm:   ['arm_r', 'RightArm', 'right_arm', 'ArmR', 'armRight', 'arm.r'],
+          lLeg:   ['leg_l', 'LeftLeg', 'left_leg', 'LegL', 'legLeft', 'leg.l'],
+          rLeg:   ['leg_r', 'RightLeg', 'right_leg', 'LegR', 'legRight', 'leg.r'],
+        };
+        glbGolem.traverse((n) => {
+          if (!n.isBone && n.type !== 'Object3D') return;
+          for (const [key, names] of Object.entries(BONE_MAP)) {
+            if (!bones[key] && names.some(nm => n.name.toLowerCase().includes(nm.toLowerCase()))) {
+              bones[key] = n;
+            }
+          }
+        });
+        // Log what we found for debugging
+        console.log('[house] GLB bones found:', Object.fromEntries(Object.entries(bones).map(([k, v]) => [k, v ? v.name : null])));
+
+        glbGolem.userData.anim = { glb: true, bones };
 
         group.remove(golemGroup);
         group.add(glbGolem);
         golemGroup = glbGolem;
-        console.log('[house] ✅ Iron Golem GLB loaded');
-      }).catch(() => {
-        console.log('[house] ⚠️ iron-golem.glb not found — using procedural fallback');
+        console.log(`[house] ✅ Iron Golem GLB loaded (scale=${autoScale.toFixed(4)})`);
+      }).catch((e) => {
+        console.log('[house] ⚠️ iron-golem.glb not found — using procedural fallback', e);
       });
     }
   }
@@ -304,8 +331,9 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
       golemGroup.rotation.y = -Math.PI / 2;
     }
 
-    // Joint animation — only for the procedural voxel fallback (GLB uses its own rig)
+    // Joint animation — procedural pivot groups OR discovered GLB bones
     if (!anim.glb) {
+      // Procedural voxel rig
       const { headGroup, lArmPivot, rArmPivot, lLegPivot, rLegPivot, torso } = anim;
       if (cycle < 2) {
         lArmPivot.rotation.x = walkPhase * 0.45;
@@ -320,6 +348,16 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
       }
       headGroup.rotation.y = Math.sin(nowT * 1.1) * 0.3;
       torso.position.y = (1.5 * 1.35) + Math.sin(nowT * 2.0) * 0.04;
+    } else {
+      // GLB rig — drive discovered bones directly
+      const { bones } = anim;
+      const dir = cycle < 2 ? 1 : -1;
+      if (bones.lArm) bones.lArm.rotation.x = dir * walkPhase * 0.5;
+      if (bones.rArm) bones.rArm.rotation.x = -dir * walkPhase * 0.5;
+      if (bones.lLeg) bones.lLeg.rotation.x = -dir * walkPhase * 0.4;
+      if (bones.rLeg) bones.rLeg.rotation.x = dir * walkPhase * 0.4;
+      if (bones.head) bones.head.rotation.y = Math.sin(nowT * 1.1) * 0.25;
+      if (bones.torso) bones.torso.rotation.z = Math.sin(nowT * 2.0) * 0.02;
     }
   }
 
