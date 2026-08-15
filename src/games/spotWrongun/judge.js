@@ -328,8 +328,8 @@ export function createJudgeTier(ctx, stage, facts) {
       ui.setStatus('Fixed it!');
       bolt.say(correct ? 'You spotted the fib!' : `Tricky one — look, it’s ${answer}.`, 'happy');
       speak(pickPhrase([
-        `Let's count… ${answer}! So ${words()} is ${answer}, not ${claim}. That sign was fibbing!`,
-        `${words(answer)} — not ${claim}. We caught the fib!`,
+        `Let's count… ${answer}! So ${words(answer)}!`,
+        `${words(answer)}! We fixed the sign!`,
       ]));
     }
 

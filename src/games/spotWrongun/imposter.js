@@ -221,11 +221,11 @@ export function createImposterTier(ctx, stage, facts) {
       ctx.wallet.add(n.reward);
       ui.showToast(`+${n.reward} 🔩`, 'good');
       // title card stays the mode name — never feedback.
-      ui.setStatus(`That sign said ${n.claimText} — but it’s really ${n.answer}!`);
-      bolt.say('Gotcha! That player was fibbing!', 'happy');
+      ui.setStatus(`Spotted! ${n.truthText}`);
+      bolt.say(`Gotcha! ${n.truthText}!`, 'happy');
       speak(pickPhrase([
-        `That’s right! ${words(n, n.answer)}, not ${n.shown}!`,
-        `You spotted it! ${words(n)} is ${n.answer}, not ${n.shown}!`,
+        `That’s right! ${words(n, n.answer)}!`,
+        `You spotted the fibber! ${words(n, n.answer)}!`,
       ]));
 
       later(() => proveTruth(n, () => {
