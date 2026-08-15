@@ -19,10 +19,12 @@ import { easeOutBack } from '../../core/ease.js';
 import { plantTrees, disposeTrees } from '../../core/trees.js';
 import { GOOD_GREEN, CONFETTI_COLS } from './constants.js';
 
+import { createMob } from '../../core/mobs.js';
+
 const NPC_SKINS = ['a', 'b', 'c', 'e', 'f', 'k', 'q'];
 
 export function createStage(ctx) {
-  const { scene, textures, audio, characterAssets } = ctx;
+  const { scene, textures, audio, characterAssets, mobFactories } = ctx;
 
   // ---------- owned geometry (one set, reused by every Nugget) ----------
   const geo = {
@@ -152,13 +154,47 @@ export function createStage(ctx) {
 
   // ---------- build a cast member (articulated: neck / shoulders / hips) ----------
   //
-  // Keeps the exact joint set the tiers animate — neck, shoulders, hips, body,
-  // eyes — so the idle bob, blink, cheer and eject animations are untouched.
-  function makeNugget(variantIdx) {
-    const i = ((variantIdx % NPC_SKINS.length) + NPC_SKINS.length) % NPC_SKINS.length;
+  // Prefers proper Minecraft mob models (Villager for correct players, Zombie
+  // for the imposter in IMPOSTER tier). Falls back to Kenney character + nose
+  // if mob factories are not loaded yet.
+  function makeNugget(variantIdx, { isImposter = false } = {}) {
     const g = new THREE.Group();
-    const model = characterAssets.create(NPC_SKINS[i]);
+
+    // Try mob model first (villager for honest crew, zombie for imposter)
+    if (mobFactories) {
+      const mobType = isImposter ? 'zombie' : 'villager';
+      const mob = createMob(mobFactories, mobType);
+      if (mob) {
+        mob.scale.setScalar(0.72);
+        g.add(mob);
+        // Normalise joints: mob fallbacks already set userData.joints
+        if (!g.userData.joints) {
+          g.userData.joints = mob.userData.joints || { neck: null, shoulders: {}, hips: {}, body: mob, eyes: [] };
+        } else {
+          g.userData.joints = mob.userData.joints;
+        }
+        return g;
+      }
+    }
+
+    // Fallback: Kenney character + villager nose
+    const i = ((variantIdx % NPC_SKINS.length) + NPC_SKINS.length) % NPC_SKINS.length;
+    const skin = NPC_SKINS[i];
+    const model = characterAssets.create(skin);
     model.scale.setScalar(0.78);
+
+    // Villager big nose
+    if (!isImposter) {
+      const neck = model.userData.joints && model.userData.joints.neck;
+      if (neck) {
+        const noseMat = new THREE.MeshStandardMaterial({ color: 0xbd8662, roughness: 0.9 });
+        const nose = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.36, 0.24), noseMat);
+        nose.position.set(0, 0.05, 0.42);
+        nose.castShadow = true;
+        neck.add(nose);
+      }
+    }
+
     g.add(model);
     g.userData.joints = model.userData.joints;
     return g;

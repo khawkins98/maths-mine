@@ -164,6 +164,7 @@ export function createEngine({ textures }) {
   function tick() {
     const dt = Math.min(clock.getDelta(), 0.05);
     clouds.update(dt);
+    if (houseManager && houseManager.update) houseManager.update(dt, nowT());
     for (let i = 0; i < frameCbs.length; i++) frameCbs[i](dt);
     renderer.render(scene, camera);
     requestAnimationFrame(tick);

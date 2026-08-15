@@ -109,7 +109,7 @@ export function createImposterTier(ctx, stage, facts) {
       // child has to hold "the one on the left said 12" in mind while checking
       // the others, and identical villagers make that harder than the maths it
       // is meant to be testing.
-      const g = stage.makeNugget(roundNo + seat * 2);
+      const g = stage.makeNugget(roundNo + seat * 2, { isImposter: isImp });
       g.position.set(layout.x[seat], BASE_Y, layout.z[seat]);
       stage.crewGroup.add(g);
 

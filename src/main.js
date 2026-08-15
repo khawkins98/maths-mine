@@ -16,6 +16,7 @@ import { createSpeech } from './core/speech.js';
 import { createUI } from './core/ui.js';
 import { createWorldFeel } from './core/worldFeel.js';
 import { loadCharacterAssets } from './core/characters.js';
+import { loadMobs } from './core/mobs.js';
 
 import { MasteryStore } from './game/mastery.js';
 import { Wallet } from './game/wallet.js';
@@ -29,7 +30,10 @@ import { createHub } from './hub.js';
 
 // ---------- shared services ----------
 const textures = createTextures();
-const characterAssets = await loadCharacterAssets();
+const [characterAssets, mobFactories] = await Promise.all([
+  loadCharacterAssets(),
+  loadMobs(),
+]);
 const engine = createEngine({ textures });
 const audio = createAudio();
 const speech = createSpeech();
@@ -55,6 +59,7 @@ const ctx = {
   engine,        // frame/reset camera, worldToScreen, nowT, placeCamera, VIEW_DIR
   textures,      // shared CanvasTextures (do NOT dispose in teardown)
   characterAssets, // shared Kenney model geometry + interchangeable skins
+  mobFactories,    // Minecraft mobs: villager, zombie, ghast, enderman (GLB or procedural fallback)
   audio,         // WebAudio SFX
   speech,        // TTS narration + phrase variety
   ui,            // HUD helpers

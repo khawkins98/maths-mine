@@ -134,6 +134,7 @@ export function createTextures() {
   const cobbleTex = pixelTex('#737373', ['#575757', '#8f8f8f', '#424242'], { size: 16, cell: 2 });
   const glassTex = pixelTex('#cceeff', ['#99ddff', '#ffffff', '#88ccff'], { size: 16, cell: 2 });
   const ironBlockTex = pixelTex('#d9d9d9', ['#bfbfbf', '#ededed', '#a6a6a6'], { size: 16, cell: 2 });
+  const ironGolemTex = pixelTex('#c5c8cb', ['#a2a5a8', '#e2e5e8', '#888b8e', '#9b3030', '#7a2222'], { size: 16, cell: 2, bias: 0.65 });
   const pumpkinTex = pixelTex('#d97724', ['#b85e14', '#f08d33', '#1c170f', '#ffe866'], { size: 16, cell: 2 });
 
   // ---- voxel build-plot textures (NOT the shared 1-block dirt/grass above) ----
@@ -157,7 +158,7 @@ export function createTextures() {
   return {
     dirtTex, grassTex, stoneTex, emeraldTex, emeraldTopTex, groundTex, puffTex, slotTex, skyTex, woodTex,
     logTex, birchLogTex, leafTex, cactusTex, netherStemTex, netherCapTex,
-    plankTex, cobbleTex, glassTex, ironBlockTex, pumpkinTex,
+    plankTex, cobbleTex, glassTex, ironBlockTex, ironGolemTex, pumpkinTex,
     platGrassTex, platForestGrassTex, platDirtTex, platSandTex, platSandstoneTex, platSnowTex, platNetherrackTex, platEndstoneTex, platObsidianTex,
   };
 }
