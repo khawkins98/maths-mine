@@ -113,7 +113,7 @@ let golemTex = null;
 function getGolemTexture() {
   if (golemTex) return golemTex;
   const loader = new THREE.TextureLoader();
-  golemTex = loader.load('/assets/mobs/iron_golem.png');
+  golemTex = loader.load('/assets/mobs/iron_golem.png?v=' + Date.now());
   golemTex.colorSpace = THREE.SRGBColorSpace;
   golemTex.magFilter = THREE.NearestFilter;
   golemTex.minFilter = THREE.NearestFilter;

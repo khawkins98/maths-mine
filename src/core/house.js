@@ -207,7 +207,7 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
   function getGolemMaterial(textures) {
     if (golemMaterial) return golemMaterial;
     const texLoader = new THREE.TextureLoader();
-    const golemTex = texLoader.load(`${import.meta.env.BASE_URL}assets/mobs/iron_golem.png`);
+    const golemTex = texLoader.load(`${import.meta.env.BASE_URL}assets/mobs/iron_golem.png?v=2`);
     golemTex.colorSpace = THREE.SRGBColorSpace;
     golemTex.magFilter = THREE.NearestFilter;
     golemTex.minFilter = THREE.NearestFilter;
