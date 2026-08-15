@@ -67,6 +67,8 @@ const ctx = {
   onExit: null,  // set by the host (hub/main) so a game can request to leave
 };
 
+window.__engine = () => engine;
+
 // ---------- game switcher ----------
 // title is read off the factory function by the hub for card labels
 createBlockBuilder.title = 'Block Builder';

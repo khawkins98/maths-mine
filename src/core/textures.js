@@ -129,6 +129,13 @@ export function createTextures() {
   const netherStemTex = pixelTex('#471523', ['#360e1a', '#5c1c2e', '#2b0910'], { size: 16, cell: 2 });
   const netherCapTex = pixelTex('#9e1b1b', ['#801414', '#b82323', '#660e0e'], { size: 16, cell: 2 });
 
+  // House & Iron Golem reward textures
+  const plankTex = pixelTex('#9e7344', ['#855e34', '#b58852', '#704c27'], { size: 16, cell: 2 });
+  const cobbleTex = pixelTex('#737373', ['#575757', '#8f8f8f', '#424242'], { size: 16, cell: 2 });
+  const glassTex = pixelTex('#cceeff', ['#99ddff', '#ffffff', '#88ccff'], { size: 16, cell: 2 });
+  const ironBlockTex = pixelTex('#d9d9d9', ['#bfbfbf', '#ededed', '#a6a6a6'], { size: 16, cell: 2 });
+  const pumpkinTex = pixelTex('#d97724', ['#b85e14', '#f08d33', '#1c170f', '#ffe866'], { size: 16, cell: 2 });
+
   // ---- voxel build-plot textures (NOT the shared 1-block dirt/grass above) ----
   // Separate, RepeatWrapping-enabled instances so the platform can tile its faces
   // without mutating the game blocks' textures (which keep repeat 1,1). Chunky
@@ -150,6 +157,7 @@ export function createTextures() {
   return {
     dirtTex, grassTex, stoneTex, emeraldTex, emeraldTopTex, groundTex, puffTex, slotTex, skyTex, woodTex,
     logTex, birchLogTex, leafTex, cactusTex, netherStemTex, netherCapTex,
+    plankTex, cobbleTex, glassTex, ironBlockTex, pumpkinTex,
     platGrassTex, platForestGrassTex, platDirtTex, platSandTex, platSandstoneTex, platSnowTex, platNetherrackTex, platEndstoneTex, platObsidianTex,
   };
 }

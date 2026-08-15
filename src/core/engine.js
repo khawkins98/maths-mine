@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { BIOMES, biomeForProgress } from './biomes.js';
 import { plantTrees, disposeTrees } from './trees.js';
 import { createBackgroundTerrain } from './terrain.js';
+import { createHouseManager } from './house.js';
 
 export const VIEW_DIR = new THREE.Vector3(0.42, 0.55, 1).normalize();
 
@@ -65,6 +66,9 @@ export function createEngine({ textures }) {
 
   // ---- procedural background terrain & mountains ----
   const backgroundTerrain = createBackgroundTerrain({ scene, textures });
+
+  // ---- player voxel house & iron golem ----
+  const houseManager = createHouseManager({ scene, textures });
 
   // ---- cubic drifting clouds ----
   const clouds = buildClouds();
@@ -177,7 +181,7 @@ export function createEngine({ textures }) {
 
   return {
     renderer, scene, camera, camRig, ground, platform, key, fill, clock,
-    VIEW_DIR,
+    VIEW_DIR, house: houseManager,
     nowT, worldToScreen, projectToScreen,
     placeCamera, resetCamera,
     setBiome, updateBiomeFromProgress, currentBiome: () => activeBiome,

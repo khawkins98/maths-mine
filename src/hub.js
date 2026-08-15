@@ -58,6 +58,55 @@ export function createHub(ctx) {
   const hubVisible = () => !!ui.els.hub && !ui.els.hub.classList.contains('hidden');
   dash.armOpenGesture(ui.els.hub && ui.els.hub.querySelector('h1'), hubVisible);
 
+  function updateHouseUI() {
+    const wallet = ctx.wallet;
+    const house = ctx.engine.house;
+    if (!ui.els.boltsCount || !house) return;
+
+    ui.els.boltsCount.textContent = wallet ? wallet.bolts : 0;
+    const stage = house.getStage();
+    const cost = house.getNextCost();
+
+    if (ui.els.houseStageText) ui.els.houseStageText.textContent = stage;
+    if (ui.els.houseCostText) ui.els.houseCostText.textContent = cost;
+
+    const btn = ui.els.btnBuildHouse;
+    if (btn) {
+      if (stage >= 4) {
+        btn.textContent = '🛡️ Iron Golem Guarding House!';
+        btn.classList.add('disabled');
+      } else {
+        btn.innerHTML = `🔨 Build House (Stage ${stage}/4) · ${cost} 🔩`;
+        if (wallet && wallet.bolts >= cost) {
+          btn.classList.remove('disabled');
+        } else {
+          btn.classList.add('disabled');
+        }
+      }
+    }
+  }
+
+  if (ui.els.btnBuildHouse) {
+    ui.els.btnBuildHouse.addEventListener('click', () => {
+      const house = ctx.engine && ctx.engine.house;
+      const wallet = ctx.wallet;
+      if (!house || !wallet) return;
+
+      const res = house.upgrade(wallet);
+      if (res.success) {
+        if (ctx.audio) ctx.audio.beep(520, 0.15, 'square', 0.1);
+        updateHouseUI();
+        if (res.newStage >= 4) {
+          ui.showToast('🛡️ Iron Golem summoned! Night mode unlocked!', 'good');
+          speech.speak('You summoned the Iron Golem to guard your house!');
+        } else {
+          ui.showToast(`🎉 House upgraded to Stage ${res.newStage}!`, 'good');
+          speech.speak(`You built stage ${res.newStage} of your house!`);
+        }
+      }
+    });
+  }
+
   function renderCards() {
     const wrap = ui.els.hubCards;
     if (!wrap) return;
@@ -76,6 +125,7 @@ export function createHub(ctx) {
       card.addEventListener('click', () => play(id));
       wrap.appendChild(card);
     }
+    updateHouseUI();
   }
 
   // Launch a game by id; wire its exit (a back button / ctx.onExit) to the hub.
@@ -108,6 +158,7 @@ export function createHub(ctx) {
     ui.setStatus('');
     ui.hideClaim();
     renderCards();
+    updateHouseUI();
     ui.showHub();
     bolt.resetPlacement();
     bolt.show(true);

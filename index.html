@@ -254,6 +254,30 @@
       .hub-card .hc-title { font-weight: 700; font-size: clamp(20px, 5vw, 28px); color: var(--ink-light); text-shadow: 0 2px 0 rgba(0,0,0,0.4); }
       .hub-card .hc-desc { font-family: var(--body); font-weight: 600; font-size: clamp(13px, 3.4vw, 16px); color: #f2e6cc; max-width: 22ch; line-height: 1.35; }
 
+      #house-bar {
+        display: flex; gap: 14px; align-items: center; justify-content: center;
+        margin-top: 16px; flex-wrap: wrap; pointer-events: auto;
+      }
+      #bolts-chip {
+        font-family: var(--readout-font); font-weight: 700; font-size: clamp(16px, 4vw, 22px);
+        color: #ffdf70; text-shadow: 0 2px 0 rgba(0,0,0,0.6);
+        background: rgba(0, 0, 0, 0.45); border: 3px solid var(--wood-dark);
+        border-radius: 8px; padding: 8px 16px;
+      }
+      button.hub-build-btn {
+        pointer-events: auto; cursor: pointer;
+        font-family: var(--readout-font); font-weight: 700; font-size: clamp(15px, 3.8vw, 20px);
+        border: 3px solid var(--wood-dark); border-radius: 8px;
+        padding: 10px 20px;
+        background: #388e3c; color: #ffffff;
+        box-shadow: var(--frame), 0 5px 0 #1b5e20;
+        text-shadow: 0 2px 0 rgba(0,0,0,0.5);
+        transition: transform 0.08s steps(2), background 0.12s ease;
+      }
+      button.hub-build-btn:hover { background: #43a047; }
+      button.hub-build-btn:active { transform: translateY(3px); box-shadow: var(--frame), 0 2px 0 #1b5e20; }
+      button.hub-build-btn.disabled { opacity: 0.5; pointer-events: none; background: #616161; }
+
       /* ---- cheap vignette (no post-processing) ---- */
       #vignette {
         position: fixed; inset: 0; z-index: 4; pointer-events: none;
@@ -606,6 +630,12 @@
     <div id="hub" class="hidden">
       <h1>The Maths Mine</h1>
       <div id="hub-cards"></div>
+      <div id="house-bar">
+        <div id="bolts-chip">🔩 <span id="bolts-count">0</span></div>
+        <button id="btn-build-house" class="hub-build-btn">
+          🔨 Build House (Stage <span id="house-stage-text">0</span>/4) · <span id="house-cost-text">5</span> 🔩
+        </button>
+      </div>
     </div>
 
     <div id="bigtotal"></div>
