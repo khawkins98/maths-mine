@@ -112,7 +112,7 @@ test.describe('entry gesture', () => {
     await boot(page);
     await expect(page.locator('#hub h1')).toHaveAttribute('title', /press and hold/i);
     // and nothing new appeared on the child's menu
-    await expect(page.locator('#hub button')).toHaveCount(3);
+    await expect(page.locator('#hub button')).toHaveCount(2);
   });
 
   // The gesture must be armed only on the hub: a finger held on the screen
@@ -270,7 +270,7 @@ test.describe('lifecycle', () => {
     expect(after.timers).toBe(0);
 
     // The hub underneath is untouched and still playable.
-    await expect(page.locator('.hub-card')).toHaveCount(3);
+    await expect(page.locator('.hub-card')).toHaveCount(2);
     expect(errors).toEqual([]);
   });
 

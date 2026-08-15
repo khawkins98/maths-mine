@@ -7,7 +7,7 @@ import * as THREE from 'three';
 export const IMPOSTER_THRESHOLD = 0.5;
 
 // Fixed, gently-elevated FRONTAL views so signs + array read head-on.
-export const VIEW = new THREE.Vector3(0, 0.26, 1).normalize();
+export const VIEW = new THREE.Vector3(0, 0.36, 1).normalize();
 export const VIEW_JUDGE = new THREE.Vector3(0, 0.42, 1).normalize(); // higher: see grass tops
 
 // --- imposter-tier seat layout ---
@@ -26,11 +26,12 @@ export const VIEW_JUDGE = new THREE.Vector3(0, 0.42, 1).normalize(); // higher: 
 // fit at d = 19 with ~7% of the width still to spare, and hold the lettering
 // near 30 px. If the signs ever get smaller or the camera closer, this number
 // moves with them.
-export const CREW_MIN = 3;
-export const CREW_MAX = 4;
+export const CREW_MIN = 2;
+export const CREW_MAX = 2;
 
 const CREW_FIT = {
-  3: { gap: 3.35, sign: 1.0, dist: 15.5 },  // the original, hand-tuned trio
+  2: { gap: 4.2, sign: 1.0, dist: 13.5 },
+  3: { gap: 3.35, sign: 1.0, dist: 15.5 },
   4: { gap: 3.0, sign: 0.9, dist: 19.0 },
 };
 

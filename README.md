@@ -1,7 +1,6 @@
 # The Maths Mine
 
-A tilt-and-tap times-tables toy I built for my kid. Three voxel mini-games on a
-floating island, sharing one adaptive mastery engine and one robot mascot.
+Voxel mini-games on a floating island, sharing one adaptive mastery engine and one robot mascot.
 
 Built with **three.js + Vite**. Tablet-first, no accounts, no ads, no shop, runs
 entirely in the browser.
@@ -11,18 +10,17 @@ entirely in the browser.
 A specific child was struggling with times tables. Drill apps push *recall* and
 treat the *concept* as assumed; LEGO and blocks build the concept but don't
 drill recall or track anything. This tries to do both at once, themed with the
-things that child actually likes — Minecraft, dice, and Among Us.
+things that child actually likes — Minecraft and spatial puzzles.
 
 The core bet is the **array model**: `6 × 4` isn't a fact to memorise, it's six
 columns of four that you can build, count, and rotate. Building it is the
 lesson; answering "how many altogether?" afterwards is the drill.
 
-## The three games
+## The games
 
 | | Game | What the child does |
 |---|---|---|
 | 🧱 | **Block Builder** | Tap (or tilt-pour) blocks into a mould to build an `a × b` wall, answer the total, then **rotate** the wall 90° to feel that `6 × 4 = 4 × 6`. Also does division as equal sharing. |
-| 🎲 | **Shake-a-Batch** | Shake the tablet to spill groups of dice, then count them up. Same maths, completely different hands. |
 | 🕵️ | **Spot the Wrong'un** | Check facts instead of producing them. A villager holds a sign claiming `7 × 8 = 54`; the array builds in front of you and you judge it true or false. Once mastery is far enough along, three villagers turn up and one of them is fibbing. |
 
 All three share one ledger, so practising `6 × 7` anywhere moves mastery
@@ -142,7 +140,6 @@ src/
                        tilt input, Bolt
   games/
     blockBuilder.js
-    shakeBatch.js
     spotWrongun/       tiered judge/imposter rounds on one shared stage
     README.md          ← the game-module contract; read this first
 ```

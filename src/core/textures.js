@@ -64,8 +64,7 @@ export function createTextures() {
   // --- game blocks: chunky, high-contrast, hard-pixel (match platform texel) ---
   const dirtTex = pixelTex('#7a4622', ['#623718', '#8a5730', '#4f2c13', '#96633a'], { cell: 8, bias: 0.55, edge: 0.42 });
   const grassTex = pixelTex('#57ab3b', ['#4a962f', '#69c24a', '#3f8a2a', '#7ad257'], { cell: 8, bias: 0.55, edge: 0.3 });
-  // stone counters for Shake-a-Batch: deliberately plain, because their whole
-  // job is to be counted. Same rim treatment as the dirt blocks so each one
+  // stone blocks: plain stone texture with rim treatment so each one
   // reads as a separate cube in a grid.
   const stoneTex = pixelTex('#9d9d9a', ['#8d8d8a', '#adadaa', '#7f7f7c', '#b6b6b3'], { cell: 8, bias: 0.6, edge: 0.34 });
   // emerald, for Spot the Wrong'un: the array a child counts there is the most

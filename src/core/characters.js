@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-const SKINS = ['a', 'b', 'c', 'e', 'f', 'k', 'm', 'q'];
+const SKINS = ['a', 'b', 'c', 'e', 'f', 'k', 'm', 'q', 'steve'];
 const BASE = `${import.meta.env.BASE_URL}assets/characters/`;
 
 function prepareTexture(texture) {
@@ -31,10 +31,10 @@ export async function loadCharacterAssets() {
   const geometries = new Set();
   gltf.scene.traverse((node) => { if (node.isMesh) geometries.add(node.geometry); });
 
-  function create(skin = 'm') {
+  function create(skin = 'steve') {
     const model = gltf.scene.clone(true);
     const material = new THREE.MeshStandardMaterial({
-      map: textures[skin] || textures.m,
+      map: textures[skin] || textures.steve || textures.m,
       roughness: 0.92,
       metalness: 0,
     });

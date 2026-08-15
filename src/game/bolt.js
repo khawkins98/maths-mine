@@ -34,8 +34,8 @@ export function createBolt({ scene, camera, textures, characterAssets, nowT, bub
 
   let boltShadow = null;
 
-  // A distinct green adventurer rather than an imitation Steve skin.
-  const player = characterAssets.create('m');
+  // Authentic Steve skin (cyan shirt, blue jeans, dark hair, no mustache).
+  const player = characterAssets.create('steve');
 
   const torso = new THREE.Group();
   torso.add(player);

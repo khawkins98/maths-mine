@@ -113,6 +113,32 @@ export function createImposterTier(ctx, stage, facts) {
       g.position.set(layout.x[seat], BASE_Y, layout.z[seat]);
       stage.crewGroup.add(g);
 
+      // Emerald block array showing the true representation (cols × rows) positioned on outer sides of screen
+      const cols = isDiv ? f.quotient : Math.max(f.a, f.b);
+      const rows = isDiv ? f.divisor : Math.min(f.a, f.b);
+      const gridGroup = new THREE.Group();
+      const blockList = [];
+      const cellSpacing = Math.min(0.48, 2.4 / Math.max(cols, 1));
+      const blockScale = cellSpacing / 1.0;
+
+      for (let r = 0; r < rows; r++) {
+        for (let cCol = 0; cCol < cols; cCol++) {
+          const blk = stage.makeBlock();
+          const bx = (cCol - (cols - 1) / 2) * cellSpacing;
+          const by = (r + 0.5) * cellSpacing;
+          const bz = 0;
+          blk.position.set(bx, by, bz);
+          blk.scale.setScalar(blockScale);
+          stage.setCapGrass(blk, r === rows - 1 || isDiv);
+          gridGroup.add(blk);
+          blockList.push(blk);
+        }
+      }
+      // Outer left side for left seats, outer right side for right seats
+      const sideOffset = (seat < size / 2) ? -2.4 : 2.4;
+      gridGroup.position.set(layout.x[seat] + sideOffset, BASE_Y, layout.z[seat] - 0.3);
+      stage.arrayGroup.add(gridGroup);
+
       const signMesh = new THREE.Mesh(stage.geo.sign, new THREE.MeshBasicMaterial({
         map: stage.makeSignTex(left, right, shown, { op: f.op }), transparent: true, side: THREE.DoubleSide,
       }));
@@ -136,6 +162,7 @@ export function createImposterTier(ctx, stage, facts) {
         // what a share-out is worth in emeralds is the pile, not the group size
         reward: isDiv ? f.dividend : truth,
         seat, headIdx: seat, group: g, sign: signMesh, hit,
+        blocks: blockList, gridGroup, cols, rows,
         joints: g.userData.joints,
         bob: Math.random() * Math.PI * 2,
         blinkIn: 2 + Math.random() * 3, blinkT: 0,
@@ -261,25 +288,17 @@ export function createImposterTier(ctx, stage, facts) {
   // counts GROUPS rather than skip-counting to a total the sign already gave.
   function proveTruth(n, done) {
     const isDiv = n.op === 'div';
-    const cols = isDiv ? n.answer : Math.max(n.a, n.b);
-    const rows = isDiv ? n.divisor : Math.min(n.a, n.b);
-    const spacing = 0.62;
-    const cx = n.group.position.x, topY = 3.2;
-    const seatZ = layout.z[n.seat];
-    for (let r = 0; r < rows; r++) {
-      for (let cCol = 0; cCol < cols; cCol++) {
-        const d = new THREE.Mesh(stage.geo.dot, stage.dotMat);
-        d.position.set(cx + (cCol - (cols - 1) / 2) * spacing, topY - r * spacing, seatZ + 0.4);
-        d.scale.setScalar(0.001);
-        d.userData.row = r;
-        stage.fxGroup.add(d);
-        stage.proofDots.push(d);
-      }
-    }
+    const cols = n.cols || (isDiv ? n.answer : Math.max(n.a, n.b));
+    const rows = n.rows || (isDiv ? n.divisor : Math.min(n.a, n.b));
     ui.setTally('');
     let r = 0;
     const step = () => {
-      for (const d of stage.proofDots) if (d.userData.row === r) d.userData.pop = 0;
+      if (n.blocks) {
+        for (let cCol = 0; cCol < cols; cCol++) {
+          const blk = n.blocks[r * cols + cCol];
+          if (blk) { blk.userData.pop = 0; stage.blockPops.push(blk); }
+        }
+      }
       audio.groupChime(r + 1);
       ui.setTally(isDiv
         ? `${r + 1} of ${rows} groups shared`
@@ -298,13 +317,11 @@ export function createImposterTier(ctx, stage, facts) {
   function proveInnocent(n) {
     n.flashT = 0.9;
     audio.groupChime(3);
-    for (let i = 0; i < 3; i++) {
-      const d = new THREE.Mesh(stage.geo.dot, stage.dotMat);
-      d.position.set(n.group.position.x + (i - 1) * 0.5, SIGN_Y + 1.0, layout.z[n.seat] + 0.4);
-      d.scale.setScalar(0.001); d.userData.pop = 0; d.userData.row = -1;
-      d.userData.tick = 0.9;
-      stage.fxGroup.add(d);
-      stage.proofDots.push(d);
+    if (n.blocks) {
+      for (const blk of n.blocks) {
+        blk.userData.pop = 0;
+        stage.blockPops.push(blk);
+      }
     }
   }
 

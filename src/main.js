@@ -23,7 +23,6 @@ import { TiltInput } from './game/sensors.js';
 import { createBolt } from './game/bolt.js';
 
 import { createBlockBuilder } from './games/blockBuilder.js';
-import { createShakeBatch } from './games/shakeBatch.js';
 import { createSpotWrongun } from './games/spotWrongun/index.js';
 import { createHub } from './hub.js';
 
@@ -70,11 +69,9 @@ const ctx = {
 // ---------- game switcher ----------
 // title is read off the factory function by the hub for card labels
 createBlockBuilder.title = 'Block Builder';
-createShakeBatch.title = 'Shake-a-Batch';
 createSpotWrongun.title = 'Spot the Wrong’un';
 const GAMES = {
   'block-builder': createBlockBuilder,
-  'shake-a-batch': createShakeBatch,
   'spot-the-wrongun': createSpotWrongun,
 };
 let current = null;
@@ -169,7 +166,7 @@ ui.els.btnWake.addEventListener('click', async () => {
   bolt.show(true);
   audio.beep(660, 0.12, 'triangle', 0.06);
 
-  // Into the hub: pick a game (Block Builder or Shake-a-Batch). Each game wires
+  // Into the hub: pick a game. Each game wires
   // ctx.onExit + the ← Menu button back to hub.open().
   hub.open();
   ui.showToast(usingSensors ? 'Motion on — pick a game!' : 'Pick a game to play!', 'good');

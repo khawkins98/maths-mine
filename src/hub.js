@@ -16,7 +16,6 @@ import { createParentDashboard } from './game/parentDashboard.js';
 // reads without being told: dirt, then stone, then emerald.
 const META = {
   'block-builder': { icon: 'dirt', desc: 'Build number-walls out of blocks. × and ÷.' },
-  'shake-a-batch': { icon: 'stone', desc: 'Roll the dice, then count the blocks!' },
   'spot-the-wrongun': { icon: 'emerald', desc: 'Find the player who’s fibbing!' },
 };
 
