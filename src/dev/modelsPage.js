@@ -98,11 +98,11 @@ export function makeMinecraftBox(w, h, d, u0, v0, p, texW = 128, texH = 128) {
   // 2: +Y (Top)
   setUV(2, u0 + d, u0 + d + w, v0, v0 + d);
   // 3: -Y (Bottom)
-  setUV(3, u0 + d + w, u0 + d + w + w, v0 + d, v0);
+  setUV(3, u0 + d + w, u0 + d + w + w, v0, v0 + d);
   // 4: +Z (Front)
   setUV(4, u0 + d, u0 + d + w, v0 + d, v0 + d + h);
   // 5: -Z (Back)
-  setUV(5, u0 + d + w + d, u0 + d + w + d + w, v0 + d, v0 + d + h);
+  setUV(5, u0 + d + w + d + w, u0 + d + w + d, v0 + d, v0 + d + h);
 
   uvs.needsUpdate = true;
   return geo;
@@ -130,7 +130,7 @@ export function buildArticulatedGolem() {
   const mat = new THREE.MeshStandardMaterial({
     map: tex,
     roughness: 0.85,
-    metalness: 0.15,
+    metalness: 0.1,
     wireframe: wireframe,
   });
 
@@ -189,10 +189,6 @@ export function buildArticulatedGolem() {
   noseMesh.position.set(0, 3 * P, 5 * P);
   noseMesh.castShadow = true;
   headPivot.add(noseMesh);
-
-  const eyeLight = new THREE.PointLight(0xff6600, 1.2, 4);
-  eyeLight.position.set(0, 5 * P, 5 * P);
-  headPivot.add(eyeLight);
 
   torsoGroup.add(headPivot);
 

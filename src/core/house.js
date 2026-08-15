@@ -192,11 +192,11 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
     // 2: +Y (Top)
     setUV(2, u0 + d, u0 + d + w, v0, v0 + d);
     // 3: -Y (Bottom)
-    setUV(3, u0 + d + w, u0 + d + w + w, v0 + d, v0);
+    setUV(3, u0 + d + w, u0 + d + w + w, v0, v0 + d);
     // 4: +Z (Front)
     setUV(4, u0 + d, u0 + d + w, v0 + d, v0 + d + h);
     // 5: -Z (Back)
-    setUV(5, u0 + d + w + d, u0 + d + w + d + w, v0 + d, v0 + d + h);
+    setUV(5, u0 + d + w + d + w, u0 + d + w + d, v0 + d, v0 + d + h);
 
     uvs.needsUpdate = true;
     return geo;
@@ -217,7 +217,7 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
     golemMaterial = new THREE.MeshStandardMaterial({
       map: golemTex,
       roughness: 0.85,
-      metalness: 0.15,
+      metalness: 0.1,
     });
     return golemMaterial;
   }
@@ -234,8 +234,6 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
     // ── 1. Left & Right Legs (Hinged at hips) ──
     // Leg size: w=6, h=16, d=5. UVs: Right leg (37, 0), Left leg (60, 0)
     const legH = 16 * P;
-    const legW = 6 * P;
-    const legD = 5 * P;
 
     const rLegGeo = makeMinecraftBox(6, 16, 5, 37, 0, P);
     const lLegGeo = makeMinecraftBox(6, 16, 5, 60, 0, P);
@@ -296,11 +294,6 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
     noseMesh.position.set(0, 3 * P, (4 + 1) * P);
     noseMesh.castShadow = true;
     headPivot.add(noseMesh);
-
-    // Glowing Eyes Light
-    const eyeLight = new THREE.PointLight(0xff6600, 1.2, 5);
-    eyeLight.position.set(0, 5 * P, 5 * P);
-    headPivot.add(eyeLight);
 
     torsoGroup.add(headPivot);
 
