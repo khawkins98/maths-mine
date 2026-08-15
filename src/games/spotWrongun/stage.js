@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { createTimers } from '../../core/timers.js';
 import { createBlockKit } from '../../core/blocks.js';
 import { easeOutBack } from '../../core/ease.js';
+import { plantTrees, disposeTrees } from '../../core/trees.js';
 import {
   VILLAGERS, SKIN, SKIN_DARK, HAIR, BROW, GOOD_GREEN, CONFETTI_COLS,
 } from './constants.js';
@@ -25,24 +26,23 @@ export function createStage(ctx) {
 
   // ---------- owned geometry (one set, reused by every Nugget) ----------
   const geo = {
-    // Villager proportions: a tall boxy head with a protruding nose, a long
-    // robe, arms folded across the front, stubby legs.
-    robe: new THREE.BoxGeometry(0.82, 1.0, 0.5),
-    trim: new THREE.BoxGeometry(0.5, 0.72, 0.06),   // apron down the front
-    belt: new THREE.BoxGeometry(0.86, 0.1, 0.54),
-    head: new THREE.BoxGeometry(0.62, 0.7, 0.58),
-    nose: new THREE.BoxGeometry(0.16, 0.3, 0.2),
-    brow: new THREE.BoxGeometry(0.52, 0.08, 0.04),
-    hair: new THREE.BoxGeometry(0.66, 0.22, 0.62),
-    eye: new THREE.BoxGeometry(0.13, 0.16, 0.04),
-    pupil: new THREE.BoxGeometry(0.07, 0.1, 0.03),
-    arm: new THREE.BoxGeometry(0.2, 0.52, 0.22),
-    leg: new THREE.BoxGeometry(0.24, 0.42, 0.26),
-    hit: new THREE.BoxGeometry(1.7, 3.2, 1.5),   // FAT hitbox so small fingers can't miss
-    ring: new THREE.RingGeometry(0.85, 1.2, 28), // hover ground ring (imposter)
-    sign: new THREE.PlaneGeometry(2.15, 1.26),   // ~512×300 aspect
-    shard: new THREE.PlaneGeometry(0.5, 0.5),    // smashed-sign shards
-    dot: new THREE.SphereGeometry(0.16, 12, 10), // imposter micro-proof dots
+    // Minecraft villager proportions: big square head, prominent nose,
+    // tall narrow robe, stubby legs, folded arms.
+    robe: new THREE.BoxGeometry(0.72, 1.0, 0.48),
+    trim: new THREE.BoxGeometry(0.46, 0.72, 0.06),   // apron down the front
+    belt: new THREE.BoxGeometry(0.76, 0.10, 0.52),
+    head: new THREE.BoxGeometry(0.78, 0.78, 0.65),   // wide square Minecraft head
+    nose: new THREE.BoxGeometry(0.18, 0.36, 0.24),   // big defining villager nose
+    brow: new THREE.BoxGeometry(0.68, 0.10, 0.05),
+    hair: new THREE.BoxGeometry(0.82, 0.18, 0.68),   // hood flush on top
+    eye:  new THREE.BoxGeometry(0.11, 0.13, 0.04),   // small beady eyes
+    arm:  new THREE.BoxGeometry(0.22, 0.46, 0.24),
+    leg:  new THREE.BoxGeometry(0.26, 0.34, 0.28),   // short stubby legs
+    hit:  new THREE.BoxGeometry(1.7, 3.2, 1.5),      // FAT hitbox so small fingers can't miss
+    ring: new THREE.RingGeometry(0.85, 1.2, 28),     // hover ground ring (imposter)
+    sign: new THREE.PlaneGeometry(2.15, 1.26),       // ~512×300 aspect
+    shard: new THREE.PlaneGeometry(0.5, 0.5),        // smashed-sign shards
+    dot:  new THREE.SphereGeometry(0.16, 12, 10),    // imposter micro-proof dots
   };
 
   // ---------- owned materials ----------
@@ -50,8 +50,7 @@ export function createStage(ctx) {
   const noseMat = new THREE.MeshStandardMaterial({ color: SKIN_DARK, roughness: 0.85 });
   const hairMat = new THREE.MeshStandardMaterial({ color: HAIR, roughness: 0.9 });
   const browMat = new THREE.MeshStandardMaterial({ color: BROW, roughness: 0.9 });
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.5 });
-  const pupilMat = new THREE.MeshStandardMaterial({ color: 0x2b1d12, roughness: 0.5 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1209, roughness: 0.5 }); // small dark beady eyes
   const legMat = new THREE.MeshStandardMaterial({ color: 0x4a3a2c, roughness: 0.9 });
   // one pair per villager variety
   const robeMats = VILLAGERS.map((v) => new THREE.MeshStandardMaterial({ color: v.robe, roughness: 0.85 }));
@@ -66,12 +65,19 @@ export function createStage(ctx) {
   const { makeBlock, setCapGrass } = blocks;
 
   const sharedGeos = new Set([...Object.values(geo), ...blocks.sharedGeos]);
-  const sharedMats = new Set([skinMat, noseMat, hairMat, browMat, eyeMat, pupilMat, legMat,
+  const sharedMats = new Set([skinMat, noseMat, hairMat, browMat, eyeMat, legMat,
     shardMat, dotMat, ...robeMats, ...trimMats]);
 
   // ---------- scene subtree ----------
   const root = new THREE.Group();
   scene.add(root);
+
+  // Minecraft oak trees around the clearing edges for atmosphere.
+  const treesGroup = plantTrees(scene, [
+    { x: -11, z: -5 }, { x: -8, z: -8 }, { x: 0, z: -10 },
+    { x: 8,   z: -8 }, { x: 12, z: -3 }, { x: 12, z: 4 },
+    { x: -11, z: 3 },  { x: -6, z: 7 },
+  ]);
   const crewGroup = new THREE.Group();  // Nugget(s)
   const signGroup = new THREE.Group();  // billboarded signs
   const arrayGroup = new THREE.Group(); // JUDGE tier: the dirt/grass block array
@@ -196,30 +202,28 @@ export function createStage(ctx) {
     const neck = new THREE.Object3D(); neck.position.set(0, 0.5, 0); g.add(neck);
 
     const head = new THREE.Mesh(geo.head, skinMat);
-    head.position.y = 0.36; head.castShadow = true;
+    head.position.y = 0.40; head.castShadow = true;
     neck.add(head);
 
     // The nose is the villager. Big, blunt, straight off the front of the face.
     const nose = new THREE.Mesh(geo.nose, noseMat);
-    nose.position.set(0, 0.3, 0.36);
+    nose.position.set(0, 0.30, 0.44);
     nose.castShadow = true;
     neck.add(nose);
 
     const brow = new THREE.Mesh(geo.brow, browMat);
-    brow.position.set(0, 0.52, 0.29);
+    brow.position.set(0, 0.58, 0.34);
     neck.add(brow);
 
     const hair = new THREE.Mesh(geo.hair, hairMat);
-    hair.position.set(0, 0.62, -0.02);
+    hair.position.set(0, 0.70, -0.02);
     neck.add(hair);
 
     const eyes = [];
     for (const s of [-1, 1]) {
+      // Small dark beady eyes — reads well on a child's tablet at distance
       const eye = new THREE.Mesh(geo.eye, eyeMat);
-      eye.position.set(s * 0.17, 0.4, 0.3);
-      const pupil = new THREE.Mesh(geo.pupil, pupilMat);
-      pupil.position.set(s * 0.02, 0, 0.03);
-      eye.add(pupil); // parented, so a blink closes the pupil with the eye
+      eye.position.set(s * 0.17, 0.38, 0.34);
       neck.add(eye);
       eyes.push(eye);
     }
@@ -239,9 +243,9 @@ export function createStage(ctx) {
 
     const hips = {};
     for (const s of [-1, 1]) {
-      const hp = new THREE.Object3D(); hp.position.set(s * 0.17, -0.5, 0); g.add(hp);
+      const hp = new THREE.Object3D(); hp.position.set(s * 0.16, -0.55, 0); g.add(hp);
       const leg = new THREE.Mesh(geo.leg, legMat);
-      leg.position.y = -0.2; leg.castShadow = true;
+      leg.position.y = -0.18; leg.castShadow = true;
       hp.add(leg);
       hips[s] = hp;
     }
@@ -374,6 +378,7 @@ export function createStage(ctx) {
     for (const g of Object.values(geo)) g.dispose();
     blocks.dispose();
     for (const m of sharedMats) m.dispose();
+    disposeTrees(scene, treesGroup);
   }
 
   return {

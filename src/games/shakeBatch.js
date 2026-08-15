@@ -36,6 +36,7 @@ import { makeCanvasTex } from '../core/textures.js';
 import { createTimers } from '../core/timers.js';
 import { buildChoiceSet } from '../core/choices.js';
 import { easeOutCubic } from '../core/ease.js';
+import { plantTrees, disposeTrees } from '../core/trees.js';
 
 const DIE = 0.6;                 // die edge length
 const GAP = 0.14;                // gap between dice WITHIN a group
@@ -113,6 +114,13 @@ export function createShakeBatch(ctx) {
   // ---- scene subtree the game owns ----
   const root = new THREE.Group();
   scene.add(root);
+
+  // Minecraft oak trees around the clearing edges for atmosphere.
+  const treesGroup = plantTrees(scene, [
+    { x: -9, z: -5 }, { x: -6, z: -8 }, { x: 2, z: -9 },
+    { x: 8,  z: -6 }, { x: 10, z: 1 },  { x: -10, z: 1 },
+    { x: -7, z: 5 },  { x: 4,  z: 7 },
+  ]);
   const trayGroup = new THREE.Group();
   const diceGroup = new THREE.Group();
   root.add(trayGroup, diceGroup);
@@ -689,6 +697,7 @@ export function createShakeBatch(ctx) {
     tableMats.forEach((m) => m.dispose());
     tableTex.forEach((t) => t.dispose());
     trayMat.dispose(); lipMat.dispose(); trayWoodTex.dispose();
+    disposeTrees(scene, treesGroup);
     ui.els.btnRecenter.style.display = '';
     engine.resetCamera();
     round = null; phase = 'idle';

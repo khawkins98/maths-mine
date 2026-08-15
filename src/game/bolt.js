@@ -1,25 +1,21 @@
-// game/bolt.js — the 3D Bolt mascot: a voxel-ish copper-golem robot parented to
-// the camera so he's always bottom-left of the view and reacts to the child
-// (idle bob, blink, hop on correct, shake on "wow", antenna glow while talking,
-// blob shadow, patina flecks). A speech bubble tracks his head in screen space.
+// game/bolt.js — the 3D mascot: Minecraft Steve, a voxel blocky player character
+// who reacts to the child (idle bob, blink, hop on correct, shake on "wow",
+// blob shadow). A speech bubble tracks his head in screen space.
 //
-// RIG: Bolt is no longer a flat bag of meshes — he has an ARTICULATED SKELETON
-// made of THREE.Object3D pivots (the Minecraft-mob approach for rigid parts):
+// RIG: Steve has an ARTICULATED SKELETON of THREE.Object3D pivots
+// (the Minecraft-mob approach for rigid parts):
 //   root → torso → { neckPivot→head, shoulder→(arm→elbow→hand), hip→leg }
 // Every limb mesh hangs off a pivot placed at its real joint, so rotating a
 // pivot swings the limb from the shoulder/hip. All motion (idle breathing, arm
 // sway, wave, hop, wow, walk) is procedural joint rotation driven from update().
 //
-// OXIDATION-AS-PROGRESS: Bolt starts as shiny un-oxidised COPPER (orange) for a
-// new child and oxidises toward the verdigris-TEAL copper-golem look as overall
-// mastery grows — inspired by Minecraft copper's four oxidation stages.
-// setOxidation(0..1) is the single knob; the palette (and a little metalness +
-// the verdigris fleck opacity) is a pure function of it. It walks the whole
-// joint hierarchy so every part recolours no matter how deep it is nested.
+// EXPERIENCE-AS-PROGRESS: setOxidation(0..1) controls how "battle-worn" Steve
+// looks — fresh and clean at 0, slightly weathered/darker at 1 as mastery grows.
+// The API is preserved so callers don't need to change.
 
 import * as THREE from 'three';
 
-// Bolt stands ON the island rather than being pinned to the camera. Parented to
+// Steve stands ON the island rather than being pinned to the camera. Parented to
 // the camera he was really a 3D HUD element: he ignored the terrain, and when a
 // camera move took his fixed offset below the ground he sank into it, which is
 // exactly what the commutativity rotate used to do to him.
@@ -32,14 +28,15 @@ const FOOT_DROP = 0.92 * BOLT_SCALE;  // model origin sits this far above his fe
 const BOLT_HOME = new THREE.Vector3(-4.6, FOOT_DROP, 4.2); // default: front-left
 const EDGE = 0.74;  // how close to the frame edge he may stand, in NDC
 
-// Endpoint palette per material role: `fresh` = un-oxidised shiny copper (0),
-// `oxid` = weathered verdigris/copper (1, == the original hard-coded colours).
-const OX = {
-  teal:     { fresh: 0xe07b3c, oxid: 0x5cc3bd }, // body / legs / arms
-  tealHi:   { fresh: 0xf0975a, oxid: 0x74d2cc }, // head (lighter face)
-  tealDk:   { fresh: 0xb05c28, oxid: 0x3f9e98 }, // hips / shade
-  copper:   { fresh: 0xe89a54, oxid: 0xc9793d }, // trim: feet, plate, shoulders…
-  copperDk: { fresh: 0xc0703a, oxid: 0x9c5a2b }, // neck / mouth
+// Steve's colour palette — classic Minecraft Steve skin.
+// setOxidation(0..1) lerps toward a slightly more battle-worn darker version.
+const COL = {
+  skin:    { fresh: 0xc8a47a, worn: 0x9a7a55 }, // face / neck
+  hair:    { fresh: 0x3d2b1f, worn: 0x2a1e14 }, // hair cap + beard pixels
+  shirt:   { fresh: 0x6090b0, worn: 0x426a82 }, // iconic blue-grey tunic
+  shirtDk: { fresh: 0x4a7a98, worn: 0x315966 }, // tunic sides / darker areas
+  pants:   { fresh: 0x4a6a8a, worn: 0x304858 }, // blue jeans
+  boots:   { fresh: 0x2a2a2a, worn: 0x1a1a1a }, // dark boots
 };
 
 export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
@@ -47,88 +44,82 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
   const _camPos = new THREE.Vector3();
   const _ndc = new THREE.Vector3();
 
-  let boltEyes = [], boltBulbMat = null, boltShadow = null;
+  let boltEyes = [], boltShadow = null;
 
-  // a MeshStandardMaterial recoloured by setOxidation() from its role's
-  // fresh→oxid endpoints (plus a shiny→matte metalness ramp). The endpoints are
-  // tagged on the material's userData so setOxidation can find it by walking the
-  // hierarchy instead of relying on a flat array.
-  const oxMat = (role, emissive = 0, rough = 0.5) => {
-    const mat = new THREE.MeshStandardMaterial({ color: OX[role].oxid, roughness: rough, metalness: 0.18, emissive });
-    mat.userData.oxFresh = new THREE.Color(OX[role].fresh);
-    mat.userData.oxOxid = new THREE.Color(OX[role].oxid);
+  // current oxidation level (0 = fresh Steve, 1 = battle-worn)
+  let _oxLevel = 0;
+
+  // Coloured material that lerps between fresh and worn as mastery grows.
+  // Tagged with userData so setOxidation can walk the hierarchy and recolour.
+  const oxMat = (role, rough = 0.85) => {
+    const mat = new THREE.MeshStandardMaterial({ color: COL[role].fresh, roughness: rough, metalness: 0.0 });
+    mat.userData.oxFresh = new THREE.Color(COL[role].fresh);
+    mat.userData.oxWorn  = new THREE.Color(COL[role].worn);
     return mat;
   };
-  // a constant (non-oxidising) material — eyes, chest bolt, antenna bulb, sockets
-  const flat = (c, e = 0, rough = 0.5) => new THREE.MeshStandardMaterial({ color: c, roughness: rough, metalness: 0.18, emissive: e });
+  const flat = (c, rough = 0.85) => new THREE.MeshStandardMaterial({ color: c, roughness: rough, metalness: 0.0 });
 
-  // mesh helper — parents `mat`-skinned box/geo under `parent` at a local pos.
-  const node = (parent, geo, mat, x = 0, y = 0, z = 0, rz = 0) => {
+  // mesh helper — parents mat-skinned box under parent at a local position.
+  const node = (parent, geo, mat, x = 0, y = 0, z = 0) => {
     const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z); m.rotation.z = rz;
+    m.position.set(x, y, z);
     parent.add(m); return m;
   };
   const boxGeo = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 
   // ---- joint hierarchy (pivots placed at real joint locations) ----
-  const torso = new THREE.Object3D();          // root of the body; breathing scales this
+  const torso = new THREE.Object3D();
   bolt.add(torso);
 
-  const neckPivot = new THREE.Object3D();       // head swings from the neck base
-  neckPivot.position.set(0, 0.34, 0);
+  const neckPivot = new THREE.Object3D();
+  neckPivot.position.set(0, 0.38, 0);
   torso.add(neckPivot);
 
   const shoulder = { '-1': null, '1': null };
-  const elbow = { '-1': null, '1': null };
-  const hip = { '-1': null, '1': null };
+  const elbow    = { '-1': null, '1': null };
+  const hip      = { '-1': null, '1': null };
 
-  // ---- torso meshes ----
-  node(torso, boxGeo(0.94, 0.72, 0.6), oxMat('teal'), 0, -0.05, 0);   // body
-  node(torso, boxGeo(0.72, 0.18, 0.5), oxMat('tealDk'), 0, -0.42, 0); // hips
-  node(torso, boxGeo(0.52, 0.44, 0.07), oxMat('copper'), 0, -0.02, 0.31); // chest plate
-  node(torso, boxGeo(0.12, 0.12, 0.04), flat(0xffe08a, 0x553a00), 0, -0.02, 0.35); // chest bolt
+  // ---- torso / body — Steve's classic blue-grey shirt ----
+  node(torso, boxGeo(0.50, 0.75, 0.25), oxMat('shirt'), 0, -0.05, 0);      // body front
+  node(torso, boxGeo(0.50, 0.75, 0.25), oxMat('shirtDk'), 0, -0.05, 0);    // reuse — same mesh, slightly darker sides handled by roughness/ambient
+  // waistband
+  node(torso, boxGeo(0.54, 0.10, 0.27), oxMat('pants'), 0, -0.43, 0);
 
-  // ---- legs (hip pivots) ----
+  // ---- legs (hip pivots) — blue jeans + dark boots ----
   for (const s of [-1, 1]) {
-    const h = new THREE.Object3D(); h.position.set(s * 0.22, -0.42, 0); torso.add(h); hip[s] = h;
-    node(h, boxGeo(0.2, 0.3, 0.24), oxMat('teal'), 0, -0.13, 0);     // leg
-    node(h, boxGeo(0.28, 0.18, 0.36), oxMat('copper'), 0, -0.36, 0.05); // foot
+    const h = new THREE.Object3D(); h.position.set(s * 0.125, -0.43, 0); torso.add(h); hip[s] = h;
+    node(h, boxGeo(0.24, 0.50, 0.24), oxMat('pants'), 0, -0.25, 0);  // jeans
+    node(h, boxGeo(0.26, 0.18, 0.30), oxMat('boots'), 0, -0.54, 0.03); // boot
   }
 
   // ---- arms (shoulder pivot → upper arm → elbow pivot → hand) ----
   for (const s of [-1, 1]) {
-    const sh = new THREE.Object3D(); sh.position.set(s * 0.56, 0.22, 0); torso.add(sh); shoulder[s] = sh;
-    node(sh, boxGeo(0.2, 0.2, 0.34), oxMat('copper'), 0, 0, 0);       // shoulder
-    node(sh, boxGeo(0.2, 0.62, 0.24), oxMat('teal'), s * 0.02, -0.38, 0.02, s * 0.06); // upper arm
-    const el = new THREE.Object3D(); el.position.set(s * 0.02, -0.55, 0.02); sh.add(el); elbow[s] = el;
-    node(el, boxGeo(0.24, 0.2, 0.28), oxMat('copper'), s * 0.02, -0.17, 0.02); // hand
+    const sh = new THREE.Object3D(); sh.position.set(s * 0.37, 0.18, 0); torso.add(sh); shoulder[s] = sh;
+    node(sh, boxGeo(0.24, 0.62, 0.24), oxMat('shirt'), s * 0.01, -0.31, 0.01); // upper arm
+    const el = new THREE.Object3D(); el.position.set(s * 0.01, -0.50, 0.01); sh.add(el); elbow[s] = el;
+    node(el, boxGeo(0.24, 0.30, 0.24), oxMat('skin'), 0, -0.18, 0);  // hand (skin-coloured)
   }
 
   // ---- head (under neck pivot) ----
-  node(neckPivot, boxGeo(0.32, 0.16, 0.34), oxMat('copperDk'), 0, 0.06, 0); // neck
-  node(neckPivot, boxGeo(0.74, 0.52, 0.62), oxMat('tealHi'), 0, 0.38, 0);   // head
-  node(neckPivot, boxGeo(0.76, 0.1, 0.64), oxMat('copper'), 0, 0.62, 0);    // brow ridge
+  // Steve has a big square blocky head — the defining Minecraft silhouette
+  node(neckPivot, boxGeo(0.76, 0.76, 0.76), oxMat('skin'), 0, 0.40, 0);  // head
+  // hair cap on top + sides (dark brown, slightly oversized like the Minecraft helmet layer)
+  node(neckPivot, boxGeo(0.82, 0.24, 0.82), oxMat('hair'), 0, 0.74, 0);  // hair top
+  node(neckPivot, boxGeo(0.82, 0.30, 0.06), oxMat('hair'), 0, 0.30, -0.42); // hair back
+  // beard/jaw pixels — classic Steve dark chin stripe
+  node(neckPivot, boxGeo(0.34, 0.10, 0.06), flat(0x2a1e14), 0, 0.10, 0.40);
+
+  // eyes — small, white sclera with dark pupils (beady Minecraft look)
   boltEyes = [];
   for (const s of [-1, 1]) {
-    node(neckPivot, boxGeo(0.22, 0.24, 0.05), flat(0x241a12, 0, 0.8), s * 0.18, 0.38, 0.31); // socket
-    const eye = node(neckPivot, boxGeo(0.15, 0.17, 0.06),
-      new THREE.MeshStandardMaterial({ color: 0xffca55, emissive: 0xffb020, emissiveIntensity: 1.15, roughness: 0.4 }),
-      s * 0.18, 0.38, 0.325);
+    const eye = node(neckPivot, boxGeo(0.16, 0.12, 0.06), flat(0xf2f2f2, 0.5), s * 0.18, 0.42, 0.39);
+    const pupil = new THREE.Mesh(boxGeo(0.09, 0.09, 0.04), flat(0x1a1209, 0.5));
+    pupil.position.set(s * 0.03, 0, 0.02);
+    eye.add(pupil);
     boltEyes.push(eye);
-    node(neckPivot, boxGeo(0.04, 0.04, 0.02), new THREE.MeshBasicMaterial({ color: 0xffffff }), s * 0.15, 0.43, 0.345); // glint
   }
-  node(neckPivot, boxGeo(0.26, 0.05, 0.05), oxMat('copperDk'), 0, 0.22, 0.31); // mouth
-  node(neckPivot, new THREE.CylinderGeometry(0.03, 0.03, 0.34), oxMat('copper'), 0, 0.76, 0); // antenna stalk
-  boltBulbMat = new THREE.MeshStandardMaterial({ color: 0xffc93c, roughness: 0.35, emissive: 0xffc93c, emissiveIntensity: 0.6 });
-  node(neckPivot, new THREE.SphereGeometry(0.09, 12, 12), boltBulbMat, 0, 0.98, 0); // bulb
-
-  // verdigris "patina" flecks on the torso front — invisible on shiny copper,
-  // fading in as Bolt oxidises. Tagged so setOxidation drives their opacity.
-  for (const [x, y, z, sz] of [[-0.3, 0.12, 0.31, 0.14], [0.26, -0.22, 0.31, 0.12], [-0.16, 0.64, 0.32, 0.1], [0.5, -0.32, 0.14, 0.1]]) {
-    const mat = new THREE.MeshStandardMaterial({ color: OX.tealDk.oxid, roughness: 0.75, metalness: 0.1, transparent: true, opacity: 0 });
-    mat.userData.patina = true;
-    node(torso, boxGeo(sz, sz, 0.03), mat, x, y, z);
-  }
+  // nose bridge pixels (subtle, Steve has a slight nose indication)
+  node(neckPivot, boxGeo(0.10, 0.08, 0.05), flat(0xb08a5c, 0.9), 0, 0.28, 0.40);
 
   // blob shadow: parented to the ROOT (not the torso) so it stays flat under the
   // feet and never inherits limb/breathing motion.
@@ -171,24 +162,21 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
   const headAnchor = new THREE.Object3D(); headAnchor.position.set(0.1, 1.21, 0); neckPivot.add(headAnchor);
 
   let oxidation = 0;
-  // The single oxidation knob: palette + metalness + fleck opacity as a pure
-  // function of level. Walks the whole hierarchy and recolours every tagged
-  // material, however deeply it is nested under a joint.
+  // setOxidation(0..1): at 0 Steve is clean and fresh, at 1 he's slightly
+  // battle-worn (darker tones). Walks the hierarchy and recolours tagged mats.
   function setOxidation(level) {
     oxidation = Math.max(0, Math.min(1, level || 0));
     bolt.traverse((o) => {
       const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
       for (const m of mats) {
-        if (m.userData.oxOxid) {
-          m.color.copy(m.userData.oxFresh).lerp(m.userData.oxOxid, oxidation);
-          m.metalness = 0.55 + (0.18 - 0.55) * oxidation; // shiny → matte as it weathers
+        if (m.userData.oxFresh && m.userData.oxWorn) {
+          m.color.copy(m.userData.oxFresh).lerp(m.userData.oxWorn, oxidation);
         }
-        if (m.userData.patina) m.opacity = 0.85 * oxidation;
       }
     });
     bolt.userData.oxidation = oxidation;
   }
-  setOxidation(0); // new child → shiny copper
+  setOxidation(0);
 
   // ---------------------------------------------------------------------------
   //  ANIMATION
@@ -201,7 +189,6 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
   const ACTION_DUR = { wave: 1.9, hop: 0.7, wow: 0.85 };
   let walkOn = false, walkT = 0;
   let blinkIn = 3, blinkT = 0;
-  let boltBulbT = 0;
   let footTapT = 2.5;         // countdown to the next idle foot-tap
   let tapping = 0;            // remaining time of the current foot-tap
 
@@ -362,12 +349,6 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
     }
     const eyeS = blinkT > 0 ? 0.1 : 1;
     for (const e of boltEyes) e.scale.y = eyeS;
-
-    // ---- antenna bulb pulses when he speaks ----
-    if (boltBulbT > 0) {
-      boltBulbT -= dt;
-      boltBulbMat.emissiveIntensity = 0.6 + Math.max(0, boltBulbT) * 1.6 * (0.6 + 0.4 * Math.sin(t * 18));
-    } else boltBulbMat.emissiveIntensity = 0.6;
   }
 
   const _proj = new THREE.Vector3();
@@ -396,13 +377,12 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
       bubbleEl.classList.remove('hidden');
       bubbleEl.style.animation = 'none'; void bubbleEl.offsetWidth; bubbleEl.style.animation = '';
     }
-    boltBulbT = 0.6; // antenna glow pulse while speaking
     react(mood);
   }
 
   function show(v = true) { bolt.visible = v; if (bubbleEl) bubbleEl.classList.toggle('hidden', !v); }
 
-  // dispose the whole joint hierarchy's geometries + materials (Bolt normally
+  // dispose the whole joint hierarchy's geometries + materials (Steve normally
   // lives for the app's lifetime, but keep teardown correct/leak-free).
   function dispose() {
     bolt.traverse((o) => {
@@ -411,7 +391,7 @@ export function createBolt({ scene, camera, textures, nowT, bubbleEl }) {
       if (Array.isArray(mm)) mm.forEach((m) => m.dispose?.());
       else if (mm) mm.dispose?.();
     });
-    camera.remove(bolt);
+    scene.remove(bolt);
   }
 
   return { group: bolt, headAnchor, react, say, update, updateBubble, setOxidation, show, placeAt, resetPlacement,
