@@ -27,12 +27,10 @@ export function createReferenceTray({ mastery, ui } = {}) {
   // ── 2. Create Tray Overlay & Backdrop ──
   const backdrop = document.createElement('div');
   backdrop.id = 'ref-backdrop';
-  backdrop.className = 'hidden';
   document.body.appendChild(backdrop);
 
   const tray = document.createElement('aside');
   tray.id = 'ref-tray';
-  tray.className = 'hidden';
   tray.setAttribute('aria-label', 'Times Tables Reference Tray');
   document.body.appendChild(tray);
 
@@ -145,16 +143,16 @@ export function createReferenceTray({ mastery, ui } = {}) {
     }
 
     render();
-    backdrop.classList.remove('hidden');
-    tray.classList.remove('hidden');
+    backdrop.classList.add('open');
+    tray.classList.add('open');
     tab.classList.add('active');
   }
 
   function close() {
     if (!isOpen) return;
     isOpen = false;
-    backdrop.classList.add('hidden');
-    tray.classList.add('hidden');
+    backdrop.classList.remove('open');
+    tray.classList.remove('open');
     tab.classList.remove('active');
   }
 
