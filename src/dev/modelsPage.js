@@ -261,10 +261,11 @@ async function switchModel(type) {
     currentModelGroup = buildArticulatedGolem();
   } else if (type === 'creeper') {
     currentModelGroup = buildCreeperModel(0.055 * 1.3);
-  } else if (mobFactories && mobFactories[type]) {
-    currentModelGroup = mobFactories[type]();
   } else if (type === 'steve' && characterAssets) {
     currentModelGroup = characterAssets.create('steve');
+    currentModelGroup.scale.setScalar(1.2);
+  } else if (mobFactories && mobFactories[type]) {
+    currentModelGroup = mobFactories[type]();
   }
 
   if (currentModelGroup) {
@@ -283,6 +284,49 @@ function updateWireframe() {
   });
 }
 
+// ── Attack & Action Sequences ──
+let attackState = {
+  active: false,
+  type: '',
+  timer: 0,
+  duration: 1.0,
+  initialScale: new THREE.Vector3(1, 1, 1),
+  initialPos: new THREE.Vector3(0, 0, 0),
+};
+
+function triggerAttack() {
+  if (!currentModelGroup || attackState.active) return;
+
+  const durations = {
+    golem: 0.9,
+    creeper: 1.5,
+    zombie: 0.75,
+    enderman: 1.1,
+    ghast: 1.2,
+    steve: 0.6,
+    villager: 1.2,
+  };
+
+  attackState = {
+    active: true,
+    type: currentModelType,
+    timer: 0,
+    duration: durations[currentModelType] || 0.8,
+    initialScale: currentModelGroup.scale.clone(),
+    initialPos: currentModelGroup.position.clone(),
+  };
+
+  const btn = document.getElementById('btn-attack');
+  if (btn) {
+    btn.style.transform = 'scale(0.95)';
+    btn.style.boxShadow = '0 0 16px rgba(255,152,0,0.8)';
+    setTimeout(() => {
+      btn.style.transform = 'none';
+      btn.style.boxShadow = '0 2px 8px rgba(230,81,0,0.3)';
+    }, 200);
+  }
+}
+
 // ── Animation Loop ──
 const clock = new THREE.Clock();
 
@@ -294,51 +338,221 @@ function animate() {
   if (controls) controls.update();
 
   if (currentModelGroup && animateEnabled) {
-    if (currentModelType === 'golem' && currentModelGroup.userData.anim) {
-      const { lLegPivot, rLegPivot, lArmPivot, rArmPivot, headPivot, torsoGroup } = currentModelGroup.userData.anim;
-      const walkPhase = Math.sin(t * 3.4);
+    if (attackState.active) {
+      attackState.timer += dt * animSpeed;
+      const p = Math.min(attackState.timer / attackState.duration, 1.0);
+      const type = attackState.type;
 
-      lArmPivot.rotation.x = walkPhase * 0.65;
-      rArmPivot.rotation.x = -walkPhase * 0.65;
-      lLegPivot.rotation.x = -walkPhase * 0.5;
-      rLegPivot.rotation.x = walkPhase * 0.5;
+      if (type === 'golem' && currentModelGroup.userData.anim) {
+        const { lArmPivot, rArmPivot, headPivot, torsoGroup } = currentModelGroup.userData.anim;
+        if (p < 0.25) {
+          const sub = p / 0.25;
+          lArmPivot.rotation.x = sub * 0.8;
+          rArmPivot.rotation.x = sub * 0.8;
+          torsoGroup.position.y = -sub * 0.06;
+        } else if (p < 0.65) {
+          const sub = (p - 0.25) / 0.4;
+          const swing = Math.sin(sub * Math.PI * 0.5);
+          lArmPivot.rotation.x = 0.8 - swing * (0.8 + Math.PI * 0.85);
+          rArmPivot.rotation.x = 0.8 - swing * (0.8 + Math.PI * 0.85);
+          currentModelGroup.position.y = attackState.initialPos.y + Math.sin(sub * Math.PI) * 0.25;
+          headPivot.rotation.x = -Math.sin(sub * Math.PI) * 0.4;
+          torsoGroup.rotation.x = -Math.sin(sub * Math.PI) * 0.25;
+        } else {
+          const sub = (p - 0.65) / 0.35;
+          lArmPivot.rotation.x = -Math.PI * 0.85 * (1.0 - sub);
+          rArmPivot.rotation.x = -Math.PI * 0.85 * (1.0 - sub);
+          currentModelGroup.position.y = attackState.initialPos.y;
+          headPivot.rotation.x = 0;
+          torsoGroup.rotation.x = 0;
+          torsoGroup.position.y = 0;
+        }
+      } else if (type === 'creeper') {
+        const j = currentModelGroup.userData.joints;
+        if (p < 0.8) {
+          const swell = 1.0 + Math.pow(p / 0.8, 1.8) * 0.35;
+          currentModelGroup.scale.copy(attackState.initialScale).multiply(new THREE.Vector3(swell, 1.0 + (swell - 1) * 0.6, swell));
+          if (j && j.neck) j.neck.rotation.x = -(p / 0.8) * 0.35;
+          const flash = Math.sin(p * 30) > 0;
+          currentModelGroup.traverse(n => {
+            if (n.isMesh && n.material) n.material.emissive.setHex(flash ? 0xffffff : 0x000000);
+          });
+        } else {
+          const sub = (p - 0.8) / 0.2;
+          currentModelGroup.scale.lerpVectors(currentModelGroup.scale, attackState.initialScale, sub);
+          currentModelGroup.traverse(n => {
+            if (n.isMesh && n.material) n.material.emissive.setHex(0x000000);
+          });
+          if (j && j.neck) j.neck.rotation.x = 0;
+        }
+      } else if (type === 'zombie') {
+        const j = currentModelGroup.userData.joints;
+        if (p < 0.3) {
+          const sub = p / 0.3;
+          if (j.shoulders['-1']) j.shoulders['-1'].rotation.x = -Math.PI * 0.5 - sub * Math.PI * 0.45;
+          if (j.shoulders['1']) j.shoulders['1'].rotation.x = -Math.PI * 0.5 - sub * Math.PI * 0.45;
+          if (j.body) j.body.rotation.x = -sub * 0.25;
+          if (j.neck) j.neck.rotation.x = -sub * 0.35;
+        } else if (p < 0.65) {
+          const sub = (p - 0.3) / 0.35;
+          if (j.shoulders['-1']) j.shoulders['-1'].rotation.x = -Math.PI * 0.95 + sub * Math.PI * 1.1;
+          if (j.shoulders['1']) j.shoulders['1'].rotation.x = -Math.PI * 0.95 + sub * Math.PI * 1.1;
+          if (j.body) {
+            j.body.rotation.x = -0.25 + sub * 0.6;
+            j.body.position.z = sub * 0.25;
+          }
+          if (j.neck) j.neck.rotation.x = -0.35 + sub * 0.7;
+        } else {
+          const sub = (p - 0.65) / 0.35;
+          if (j.shoulders['-1']) j.shoulders['-1'].rotation.x = THREE.MathUtils.lerp(0.15, -Math.PI * 0.5, sub);
+          if (j.shoulders['1']) j.shoulders['1'].rotation.x = THREE.MathUtils.lerp(0.15, -Math.PI * 0.5, sub);
+          if (j.body) {
+            j.body.rotation.x = THREE.MathUtils.lerp(0.35, 0, sub);
+            j.body.position.z = THREE.MathUtils.lerp(0.25, 0, sub);
+          }
+          if (j.neck) j.neck.rotation.x = THREE.MathUtils.lerp(0.35, 0, sub);
+        }
+      } else if (type === 'enderman') {
+        const j = currentModelGroup.userData.joints;
+        if (p < 0.25) {
+          const sub = p / 0.25;
+          if (j.neck) j.neck.rotation.x = -sub * 0.6;
+          if (j.shoulders['-1']) {
+            j.shoulders['-1'].rotation.x = -sub * Math.PI * 0.75;
+            j.shoulders['-1'].rotation.z = sub * 0.45;
+          }
+          if (j.shoulders['1']) {
+            j.shoulders['1'].rotation.x = -sub * Math.PI * 0.75;
+            j.shoulders['1'].rotation.z = -sub * 0.45;
+          }
+        } else if (p < 0.8) {
+          const jitterX = (Math.random() - 0.5) * 0.08;
+          const jitterZ = (Math.random() - 0.5) * 0.08;
+          currentModelGroup.position.x = jitterX;
+          currentModelGroup.position.z = jitterZ;
+          if (j.neck) j.neck.rotation.z = Math.sin(p * 50) * 0.25;
+        } else {
+          const sub = (p - 0.8) / 0.2;
+          currentModelGroup.position.set(0, 0, 0);
+          if (j.neck) {
+            j.neck.rotation.x = THREE.MathUtils.lerp(-0.6, 0, sub);
+            j.neck.rotation.z = 0;
+          }
+          if (j.shoulders['-1']) {
+            j.shoulders['-1'].rotation.x = THREE.MathUtils.lerp(-Math.PI * 0.75, 0, sub);
+            j.shoulders['-1'].rotation.z = THREE.MathUtils.lerp(0.45, 0, sub);
+          }
+          if (j.shoulders['1']) {
+            j.shoulders['1'].rotation.x = THREE.MathUtils.lerp(-Math.PI * 0.75, 0, sub);
+            j.shoulders['1'].rotation.z = THREE.MathUtils.lerp(-0.45, 0, sub);
+          }
+        }
+      } else if (type === 'ghast') {
+        if (p < 0.4) {
+          const sub = p / 0.4;
+          currentModelGroup.position.z = -sub * 0.4;
+          currentModelGroup.scale.copy(attackState.initialScale).multiplyScalar(1.0 + sub * 0.15);
+        } else if (p < 0.7) {
+          const sub = (p - 0.4) / 0.3;
+          currentModelGroup.position.z = -0.4 + sub * 0.8;
+          currentModelGroup.traverse(n => {
+            if (n.isMesh && n.material) n.material.emissive.setHex(0xff3300);
+          });
+        } else {
+          const sub = (p - 0.7) / 0.3;
+          currentModelGroup.position.z = THREE.MathUtils.lerp(0.4, 0, sub);
+          currentModelGroup.scale.lerp(attackState.initialScale, sub);
+          currentModelGroup.traverse(n => {
+            if (n.isMesh && n.material) n.material.emissive.setHex(0x000000);
+          });
+        }
+      } else if (type === 'steve') {
+        const j = currentModelGroup.userData.joints;
+        if (p < 0.3) {
+          const sub = p / 0.3;
+          if (j.shoulders['-1']) {
+            j.shoulders['-1'].rotation.x = -sub * Math.PI * 0.75;
+            j.shoulders['-1'].rotation.z = sub * 0.5;
+          }
+          if (j.body) j.body.rotation.y = -sub * 0.35;
+        } else if (p < 0.65) {
+          const sub = (p - 0.3) / 0.35;
+          if (j.shoulders['-1']) {
+            j.shoulders['-1'].rotation.x = -Math.PI * 0.75 + sub * (Math.PI * 0.75 + 0.5);
+            j.shoulders['-1'].rotation.z = 0.5 - sub * 0.9;
+          }
+          if (j.body) j.body.rotation.y = -0.35 + sub * 0.7;
+        } else {
+          const sub = (p - 0.65) / 0.35;
+          if (j.shoulders['-1']) {
+            j.shoulders['-1'].rotation.x = THREE.MathUtils.lerp(0.5, 0, sub);
+            j.shoulders['-1'].rotation.z = THREE.MathUtils.lerp(-0.4, 0, sub);
+          }
+          if (j.body) j.body.rotation.y = THREE.MathUtils.lerp(0.35, 0, sub);
+        }
+      } else if (type === 'villager') {
+        const j = currentModelGroup.userData.joints;
+        if (j.neck) j.neck.rotation.y = Math.sin(p * 35) * 0.5;
+        if (j.shoulders && j.shoulders['-1']) {
+          j.shoulders['-1'].rotation.x = -0.45 * Math.sin(p * Math.PI);
+        }
+        if (p >= 0.98) {
+          if (j.neck) j.neck.rotation.y = 0;
+          if (j.shoulders && j.shoulders['-1']) j.shoulders['-1'].rotation.x = 0;
+        }
+      }
 
-      currentModelGroup.position.y = Math.abs(Math.sin(t * 3.4)) * 0.05;
-      headPivot.rotation.y = Math.sin(t * 1.1) * 0.3;
-      torsoGroup.rotation.z = Math.sin(t * 3.4) * 0.03;
-    } else if (currentModelGroup.userData.joints) {
-      // Standard joints animation respecting rest bind pose
-      const j = currentModelGroup.userData.joints;
-      const walkPhase = Math.sin(t * 3.2);
+      if (p >= 1.0) {
+        attackState.active = false;
+        currentModelGroup.scale.copy(attackState.initialScale);
+        if (type !== 'ghast') currentModelGroup.position.set(0, 0, 0);
+      }
+    } else {
+      // Normal walk & idle cycle
+      if (currentModelType === 'golem' && currentModelGroup.userData.anim) {
+        const { lLegPivot, rLegPivot, lArmPivot, rArmPivot, headPivot, torsoGroup } = currentModelGroup.userData.anim;
+        const walkPhase = Math.sin(t * 3.4);
 
-      if (j.shoulders && j.shoulders['-1']) {
-        const r0 = j.shoulders['-1'].userData.restRotation;
-        j.shoulders['-1'].rotation.x = (r0 ? r0.x : 0) + walkPhase * 0.45;
-      }
-      if (j.shoulders && j.shoulders['1']) {
-        const r0 = j.shoulders['1'].userData.restRotation;
-        j.shoulders['1'].rotation.x = (r0 ? r0.x : 0) - walkPhase * 0.45;
-      }
-      if (j.hips && j.hips['-1']) {
-        const r0 = j.hips['-1'].userData.restRotation;
-        j.hips['-1'].rotation.x = (r0 ? r0.x : 0) - walkPhase * 0.4;
-      }
-      if (j.hips && j.hips['1']) {
-        const r0 = j.hips['1'].userData.restRotation;
-        j.hips['1'].rotation.x = (r0 ? r0.x : 0) + walkPhase * 0.4;
-      }
-      // Creeper 4-legged walking animation
-      if (j.backHips && j.backHips['-1']) {
-        const r0 = j.backHips['-1'].userData.restRotation;
-        j.backHips['-1'].rotation.x = (r0 ? r0.x : 0) + walkPhase * 0.4;
-      }
-      if (j.backHips && j.backHips['1']) {
-        const r0 = j.backHips['1'].userData.restRotation;
-        j.backHips['1'].rotation.x = (r0 ? r0.x : 0) - walkPhase * 0.4;
-      }
-      if (j.neck) {
-        const r0 = j.neck.userData.restRotation;
-        j.neck.rotation.y = (r0 ? r0.y : 0) + Math.sin(t * 1.2) * 0.25;
+        lArmPivot.rotation.x = walkPhase * 0.65;
+        rArmPivot.rotation.x = -walkPhase * 0.65;
+        lLegPivot.rotation.x = -walkPhase * 0.5;
+        rLegPivot.rotation.x = walkPhase * 0.5;
+
+        currentModelGroup.position.y = Math.abs(Math.sin(t * 3.4)) * 0.05;
+        headPivot.rotation.y = Math.sin(t * 1.1) * 0.3;
+        torsoGroup.rotation.z = Math.sin(t * 3.4) * 0.03;
+      } else if (currentModelGroup.userData.joints) {
+        const j = currentModelGroup.userData.joints;
+        const walkPhase = Math.sin(t * 3.2);
+
+        if (j.shoulders && j.shoulders['-1']) {
+          const r0 = j.shoulders['-1'].userData.restRotation;
+          j.shoulders['-1'].rotation.x = (r0 ? r0.x : 0) + walkPhase * 0.45;
+        }
+        if (j.shoulders && j.shoulders['1']) {
+          const r0 = j.shoulders['1'].userData.restRotation;
+          j.shoulders['1'].rotation.x = (r0 ? r0.x : 0) - walkPhase * 0.45;
+        }
+        if (j.hips && j.hips['-1']) {
+          const r0 = j.hips['-1'].userData.restRotation;
+          j.hips['-1'].rotation.x = (r0 ? r0.x : 0) - walkPhase * 0.4;
+        }
+        if (j.hips && j.hips['1']) {
+          const r0 = j.hips['1'].userData.restRotation;
+          j.hips['1'].rotation.x = (r0 ? r0.x : 0) + walkPhase * 0.4;
+        }
+        if (j.backHips && j.backHips['-1']) {
+          const r0 = j.backHips['-1'].userData.restRotation;
+          j.backHips['-1'].rotation.x = (r0 ? r0.x : 0) + walkPhase * 0.4;
+        }
+        if (j.backHips && j.backHips['1']) {
+          const r0 = j.backHips['1'].userData.restRotation;
+          j.backHips['1'].rotation.x = (r0 ? r0.x : 0) - walkPhase * 0.4;
+        }
+        if (j.neck) {
+          const r0 = j.neck.userData.restRotation;
+          j.neck.rotation.y = (r0 ? r0.y : 0) + Math.sin(t * 1.2) * 0.25;
+        }
       }
     }
   }
@@ -357,6 +571,18 @@ document.querySelectorAll('.model-grid button').forEach((btn) => {
     btn.classList.add('active');
     switchModel(btn.dataset.model);
   });
+});
+
+const btnAttack = document.getElementById('btn-attack');
+if (btnAttack) {
+  btnAttack.addEventListener('click', triggerAttack);
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.key.toLowerCase() === 'a') {
+    e.preventDefault();
+    triggerAttack();
+  }
 });
 
 const btnToggleAnim = document.getElementById('btn-toggle-anim');

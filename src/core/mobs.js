@@ -415,6 +415,94 @@ export async function loadMobs() {
 }
 
 /**
+ * Triggers an authentic Minecraft attack/action sequence on any mob instance.
+ * Call this from any game mode when a mob attacks, takes damage, or gets revealed.
+ */
+export function triggerMobAttack(mobGroup, type) {
+  if (!mobGroup) return;
+  const durations = {
+    golem: 0.9,
+    creeper: 1.4,
+    zombie: 0.75,
+    enderman: 1.1,
+    ghast: 1.2,
+    steve: 0.6,
+    villager: 1.2,
+  };
+
+  mobGroup.userData.attackState = {
+    active: true,
+    type,
+    timer: 0,
+    duration: durations[type] || 0.8,
+    initialScale: mobGroup.scale.clone(),
+    initialPos: mobGroup.position.clone(),
+  };
+}
+
+/**
+ * Update tick for mob attack state machine. Call in game animation loop.
+ */
+export function updateMobAttack(mobGroup, dt) {
+  if (!mobGroup || !mobGroup.userData.attackState || !mobGroup.userData.attackState.active) return;
+  const s = mobGroup.userData.attackState;
+  s.timer += dt;
+  const p = Math.min(s.timer / s.duration, 1.0);
+  const j = mobGroup.userData.joints;
+
+  if (s.type === 'creeper') {
+    if (p < 0.8) {
+      const swell = 1.0 + Math.pow(p / 0.8, 1.8) * 0.35;
+      mobGroup.scale.copy(s.initialScale).multiply(new THREE.Vector3(swell, 1.0 + (swell - 1) * 0.6, swell));
+      if (j && j.neck) j.neck.rotation.x = -(p / 0.8) * 0.35;
+      const flash = Math.sin(p * 30) > 0;
+      mobGroup.traverse(n => {
+        if (n.isMesh && n.material) n.material.emissive.setHex(flash ? 0xffffff : 0x000000);
+      });
+    } else {
+      const sub = (p - 0.8) / 0.2;
+      mobGroup.scale.lerpVectors(mobGroup.scale, s.initialScale, sub);
+      mobGroup.traverse(n => {
+        if (n.isMesh && n.material) n.material.emissive.setHex(0x000000);
+      });
+      if (j && j.neck) j.neck.rotation.x = 0;
+    }
+  } else if (s.type === 'zombie' && j) {
+    if (p < 0.3) {
+      const sub = p / 0.3;
+      if (j.shoulders['-1']) j.shoulders['-1'].rotation.x = -Math.PI * 0.5 - sub * Math.PI * 0.45;
+      if (j.shoulders['1']) j.shoulders['1'].rotation.x = -Math.PI * 0.5 - sub * Math.PI * 0.45;
+      if (j.body) j.body.rotation.x = -sub * 0.25;
+      if (j.neck) j.neck.rotation.x = -sub * 0.35;
+    } else if (p < 0.65) {
+      const sub = (p - 0.3) / 0.35;
+      if (j.shoulders['-1']) j.shoulders['-1'].rotation.x = -Math.PI * 0.95 + sub * Math.PI * 1.1;
+      if (j.shoulders['1']) j.shoulders['1'].rotation.x = -Math.PI * 0.95 + sub * Math.PI * 1.1;
+      if (j.body) {
+        j.body.rotation.x = -0.25 + sub * 0.6;
+        j.body.position.z = sub * 0.25;
+      }
+      if (j.neck) j.neck.rotation.x = -0.35 + sub * 0.7;
+    } else {
+      const sub = (p - 0.65) / 0.35;
+      if (j.shoulders['-1']) j.shoulders['-1'].rotation.x = THREE.MathUtils.lerp(0.15, -Math.PI * 0.5, sub);
+      if (j.shoulders['1']) j.shoulders['1'].rotation.x = THREE.MathUtils.lerp(0.15, -Math.PI * 0.5, sub);
+      if (j.body) {
+        j.body.rotation.x = THREE.MathUtils.lerp(0.35, 0, sub);
+        j.body.position.z = THREE.MathUtils.lerp(0.25, 0, sub);
+      }
+      if (j.neck) j.neck.rotation.x = THREE.MathUtils.lerp(0.35, 0, sub);
+    }
+  }
+
+  if (p >= 1.0) {
+    s.active = false;
+    mobGroup.scale.copy(s.initialScale);
+    mobGroup.position.copy(s.initialPos);
+  }
+}
+
+/**
  * Convenience: create a single mob clone by type name.
  * Pass the factories object returned by loadMobs().
  */
