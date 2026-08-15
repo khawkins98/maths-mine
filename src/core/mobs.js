@@ -14,6 +14,7 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 
 const BASE = `${import.meta.env.BASE_URL}assets/mobs/`;
 const loader = new GLTFLoader();
@@ -305,6 +306,23 @@ const FILENAMES = {
   enderman: 'enderman.glb',
 };
 
+function bindMobJoints(model, type) {
+  const head = model.getObjectByName('Head_04') || model.getObjectByName('Head_03') || model.getObjectByName('Head_05') || model.getObjectByName('head') || model;
+  const spine = model.getObjectByName('Spine_02') || model.getObjectByName('Body_04') || model.getObjectByName('Body_01') || model;
+  const rArm = model.getObjectByName('RightArm_04') || model.getObjectByName('RightArm_08') || model.getObjectByName('Arm_03');
+  const lArm = model.getObjectByName('LeftArm_05') || model.getObjectByName('LeftArm_07') || model.getObjectByName('Arm_03');
+  const rLeg = model.getObjectByName('RightLeg_05') || model.getObjectByName('RightLeg_06') || model.getObjectByName('RightLeg_03') || model.getObjectByName('RightLeg_02');
+  const lLeg = model.getObjectByName('LeftLeg_06') || model.getObjectByName('LeftLeg_07') || model.getObjectByName('LeftLeg_02') || model.getObjectByName('LeftLeg_03');
+
+  model.userData.joints = {
+    neck: head,
+    shoulders: { '-1': rArm || spine, '1': lArm || spine },
+    hips: { '-1': rLeg || spine, '1': lLeg || spine },
+    body: spine,
+    eyes: [],
+  };
+}
+
 /**
  * Load all mobs. Returns a map { villager, zombie, ghast, enderman }
  * where each value is a factory function: `() => THREE.Group`
@@ -319,10 +337,11 @@ export async function loadMobs() {
   MOB_TYPES.forEach((type, i) => {
     const gltfScene = results[i];
     if (gltfScene) {
-      // GLB loaded — clone on each call so the scene can hold multiple instances
+      // GLB loaded — clone with SkeletonUtils so skinned meshes and bone weights clone properly
       factories[type] = () => {
-        const clone = gltfScene.clone(true);
+        const clone = cloneSkeleton(gltfScene);
         clone.name = `${type}-gltf`;
+        bindMobJoints(clone, type);
         return clone;
       };
       console.log(`[mobs] ✅ Loaded ${type}.glb`);
