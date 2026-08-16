@@ -155,6 +155,8 @@ export function createStage(ctx) {
     }, 280);
   }
 
+  let golemHurtT = 0;
+
   function executeMobAttackDeflection(onComplete) {
     if (!currentMob || !golemGroup) {
       if (onComplete) onComplete();
@@ -165,25 +167,11 @@ export function createStage(ctx) {
     currentMob.position.z = 3.6;
     triggerMobAttack(currentMob, currentMobType);
 
-    // 2. At impact moment (300ms), Golem reels back, flashes red, and takes damage
+    // 2. At impact moment (280ms), Golem triggers damage flash and hurt reaction
     setTimeout(() => {
       if (!golemGroup) return;
 
-      // Reel back recoil
-      golemGroup.position.z = 1.9;
-      golemGroup.rotation.x = -0.18;
-
-      // Red damage flash across all Golem mesh materials
-      golemGroup.traverse((node) => {
-        if (node.isMesh && node.material) {
-          if (!node.userData.origEmissive) {
-            node.userData.origEmissive = node.material.emissive ? node.material.emissive.getHex() : 0x000000;
-          }
-          if (node.material.emissive) node.material.emissive.setHex(0xdd1111);
-        }
-      });
-
-      // Spawn damage sparks at Golem's chest
+      golemHurtT = 0.55; // 550ms damage flash & recoil animation
       spawnBurst(new THREE.Vector3(0, 1.4, 2.2), 'red');
 
       // Heavy world shake
@@ -195,21 +183,12 @@ export function createStage(ctx) {
         if (ctx.audio.thunk) ctx.audio.thunk(0);
       }
 
-      // Recover Golem and Mob back to ready stance
+      // Recover Mob back to ready stance
       setTimeout(() => {
-        if (golemGroup) {
-          golemGroup.traverse((node) => {
-            if (node.isMesh && node.material && node.material.emissive) {
-              node.material.emissive.setHex(node.userData.origEmissive || 0x000000);
-            }
-          });
-          golemGroup.position.z = 2.4;
-          golemGroup.rotation.x = 0;
-        }
         if (currentMob) currentMob.position.z = 4.6;
         if (onComplete) onComplete();
-      }, 420);
-    }, 300);
+      }, 500);
+    }, 280);
   }
 
   // Camera framing for Night Defence & Steve positioning
@@ -229,10 +208,36 @@ export function createStage(ctx) {
     if (golemGroup) updateMobAttack(golemGroup, dt);
     if (currentMob) updateMobAttack(currentMob, dt);
 
-    // 2. Update mob launch physics
+    // 2. Continuous deterministic damage flash & recoil animation for Golem
+    if (golemHurtT > 0 && golemGroup) {
+      golemHurtT -= dt;
+      const intensity = Math.max(0, golemHurtT / 0.55);
+
+      // Red damage flash pulse (interpolates smoothly to 0)
+      golemGroup.traverse((node) => {
+        if (node.isMesh && node.material && node.material.emissive) {
+          node.material.emissive.setRGB(intensity * 0.9, 0, 0);
+        }
+      });
+
+      // Recoil & recovery spring
+      const recovery = 1.0 - intensity;
+      golemGroup.position.z = 1.9 + recovery * (2.4 - 1.9);
+      golemGroup.rotation.x = -0.18 * (1.0 - recovery);
+    } else if (golemGroup && !golemGroup.userData.attackState?.active) {
+      // 100% guarantee: reset cleanly to normal when not hurt
+      golemGroup.traverse((node) => {
+        if (node.isMesh && node.material && node.material.emissive) {
+          node.material.emissive.setHex(0x000000);
+        }
+      });
+      golemGroup.rotation.x = 0;
+    }
+
+    // 3. Update mob launch physics
     if (mobLaunchAnim) mobLaunchAnim.update(dt);
 
-    // 3. Update particle bursts
+    // 4. Update particle bursts
     for (let i = particles.length - 1; i >= 0; i--) {
       const pt = particles[i];
       pt.life -= dt;
@@ -246,8 +251,8 @@ export function createStage(ctx) {
       }
     }
 
-    // 4. Subtle ambient breathing on Golem
-    if (golemGroup && !golemGroup.userData.attackState?.active) {
+    // 5. Subtle ambient breathing on Golem
+    if (golemGroup && !golemGroup.userData.attackState?.active && golemHurtT <= 0) {
       const now = performance.now() * 0.002;
       golemGroup.position.y = Math.sin(now * 2) * 0.03;
     }

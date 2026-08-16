@@ -499,6 +499,11 @@ export function updateMobAttack(mobGroup, dt) {
     s.active = false;
     mobGroup.scale.copy(s.initialScale);
     mobGroup.position.copy(s.initialPos);
+    mobGroup.traverse(n => {
+      if (n.isMesh && n.material && n.material.emissive) {
+        n.material.emissive.setHex(0x000000);
+      }
+    });
   }
 }
 

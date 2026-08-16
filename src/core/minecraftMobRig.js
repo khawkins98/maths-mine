@@ -39,26 +39,29 @@ export function makeBoxUV(w, h, d, u0, v0, p = 0.055, texW = 64, texH = 64) {
 }
 
 const texLoader = new THREE.TextureLoader();
-const cachedMats = {};
+const cachedTextures = {};
 
-export function loadPixelMaterial(url, roughness = 0.85, metalness = 0.1) {
-  if (cachedMats[url]) return cachedMats[url];
+export function loadPixelTexture(url) {
+  if (cachedTextures[url]) return cachedTextures[url];
   const tex = texLoader.load(url);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.magFilter = THREE.NearestFilter;
   tex.minFilter = THREE.NearestFilter;
   tex.generateMipmaps = false;
   tex.needsUpdate = true;
+  cachedTextures[url] = tex;
+  return tex;
+}
 
-  const mat = new THREE.MeshStandardMaterial({
+export function loadPixelMaterial(url, roughness = 0.85, metalness = 0.1) {
+  const tex = loadPixelTexture(url);
+  return new THREE.MeshStandardMaterial({
     map: tex,
     roughness,
     metalness,
     transparent: true,
     alphaTest: 0.1,
   });
-  cachedMats[url] = mat;
-  return mat;
 }
 
 // ── 1. STEVE BUILDER ──
