@@ -102,8 +102,9 @@ export function createCombatManager(ctx, stage, facts) {
         mastery.record(activeFact.a, activeFact.b, activeFact.op, false);
       }
 
-      if (bolt.say) bolt.say(`Iron Golem blocked the hit! Try again!`, 'alert');
-      if (speech && speech.speak) speech.speak(`Iron Golem blocked the attack! Try again!`);
+      if (bolt.say) bolt.say(`Ouch! The Golem took damage! Try again!`, 'alert');
+      if (speech && speech.speak) speech.speak(`The mob struck! The Iron Golem absorbed the damage. Try again!`);
+      if (ui.showToast) ui.showToast(`🛡️ Golem took damage!`, 'bad');
 
       stage.executeMobAttackDeflection(() => {
         // Allow player to retry the same challenge

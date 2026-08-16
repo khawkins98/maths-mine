@@ -47,7 +47,7 @@ export function createStage(ctx) {
 
   // ---- 2. Iron Golem Defender ----
   const golemGroup = buildArticulatedGolem();
-  golemGroup.position.set(0, 0, 1.8);
+  golemGroup.position.set(0, 0, 2.4);
   golemGroup.rotation.y = 0; // Facing forward down the lane (+Z)
   root.add(golemGroup);
 
@@ -61,9 +61,13 @@ export function createStage(ctx) {
   const particleGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
   const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffdd44 });
   const smokeMat = new THREE.MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.8 });
+  const redSparkMat = new THREE.MeshBasicMaterial({ color: 0xff2222 });
 
   function spawnBurst(pos, color = 'spark') {
-    const mat = color === 'spark' ? sparkMat : smokeMat;
+    let mat = sparkMat;
+    if (color === 'smoke') mat = smokeMat;
+    else if (color === 'red') mat = redSparkMat;
+
     for (let i = 0; i < 16; i++) {
       const p = new THREE.Mesh(particleGeo, mat);
       p.position.copy(pos);
@@ -94,7 +98,8 @@ export function createStage(ctx) {
       currentMob.add(mMesh);
     }
 
-    currentMob.position.set(0, type === 'ghast' ? 1.8 : 0, 7.5);
+    // Closer standoff: Golem at z=2.4, Mob at z=4.6 (2.2 units apart)
+    currentMob.position.set(0, type === 'ghast' ? 1.6 : 0, 4.6);
     currentMob.rotation.y = Math.PI; // Facing towards Golem and house (-Z)
     root.add(currentMob);
   }
@@ -105,14 +110,17 @@ export function createStage(ctx) {
       return;
     }
 
-    // 1. Trigger Golem Uppercut Attack Sequence
+    // 1. Golem steps forward and delivers crushing uppercut
+    golemGroup.position.z = 3.2;
     triggerMobAttack(golemGroup, 'golem');
 
-    // 2. Launch Mob into the sky after punch impact (at 300ms)
+    // 2. Launch Mob into the sky after punch impact (at 280ms)
     setTimeout(() => {
       if (!currentMob) return;
       spawnBurst(currentMob.position.clone().add(new THREE.Vector3(0, 1.2, 0)), 'spark');
       spawnBurst(currentMob.position.clone().add(new THREE.Vector3(0, 0.6, 0)), 'smoke');
+
+      if (ctx.worldFeel) ctx.worldFeel.impulse(0.2, 0, 0);
 
       const startPos = currentMob.position.clone();
       const startRot = currentMob.rotation.clone();
@@ -135,6 +143,7 @@ export function createStage(ctx) {
               currentMob = null;
             }
             mobLaunchAnim = null;
+            if (golemGroup) golemGroup.position.z = 2.4;
             if (onComplete) onComplete();
           }
         },
@@ -143,31 +152,71 @@ export function createStage(ctx) {
   }
 
   function executeMobAttackDeflection(onComplete) {
-    if (!currentMob) {
+    if (!currentMob || !golemGroup) {
       if (onComplete) onComplete();
       return;
     }
 
-    // Trigger mob attack sequence (Creeper swell, Zombie claw, etc.)
+    // 1. Mob lunges forward to attack Golem
+    currentMob.position.z = 3.6;
     triggerMobAttack(currentMob, currentMobType);
 
-    // Golem steps forward slightly into defensive guard
-    if (golemGroup) {
-      golemGroup.position.z = 2.1;
-      setTimeout(() => {
-        if (golemGroup) golemGroup.position.z = 1.8;
-      }, 400);
-    }
-
+    // 2. At impact moment (300ms), Golem reels back, flashes red, and takes damage
     setTimeout(() => {
-      if (onComplete) onComplete();
-    }, 1000);
+      if (!golemGroup) return;
+
+      // Reel back recoil
+      golemGroup.position.z = 1.9;
+      golemGroup.rotation.x = -0.18;
+
+      // Red damage flash across all Golem mesh materials
+      golemGroup.traverse((node) => {
+        if (node.isMesh && node.material) {
+          if (!node.userData.origEmissive) {
+            node.userData.origEmissive = node.material.emissive ? node.material.emissive.getHex() : 0x000000;
+          }
+          if (node.material.emissive) node.material.emissive.setHex(0xdd1111);
+        }
+      });
+
+      // Spawn damage sparks at Golem's chest
+      spawnBurst(new THREE.Vector3(0, 1.4, 2.2), 'red');
+
+      // Heavy world shake
+      if (ctx.worldFeel) ctx.worldFeel.impulse(0.35, 0, 0);
+
+      // Play clank / hurt sound
+      if (ctx.audio) {
+        ctx.audio.beep(120, 0.28, 'sawtooth', 0.25);
+        if (ctx.audio.thunk) ctx.audio.thunk(0);
+      }
+
+      // Recover Golem and Mob back to ready stance
+      setTimeout(() => {
+        if (golemGroup) {
+          golemGroup.traverse((node) => {
+            if (node.isMesh && node.material && node.material.emissive) {
+              node.material.emissive.setHex(node.userData.origEmissive || 0x000000);
+            }
+          });
+          golemGroup.position.z = 2.4;
+          golemGroup.rotation.x = 0;
+        }
+        if (currentMob) currentMob.position.z = 4.6;
+        if (onComplete) onComplete();
+      }, 420);
+    }, 300);
   }
 
-  // Camera framing for Night Defence (dramatic cinematic angle)
+  // Camera framing for Night Defence & Steve positioning
   function frameCamera() {
-    camera.position.set(-3.5, 4.5, 12.0);
-    camera.lookAt(0, 1.8, 3.0);
+    camera.position.set(-2.5, 3.6, 8.8);
+    camera.lookAt(0, 1.4, 3.5);
+
+    // Place Steve (Bolt) safely on the sidelines near the cottage/torch, scaled to 45%
+    if (ctx.bolt && ctx.bolt.placeAt) {
+      ctx.bolt.placeAt(-3.6, 1.2, 0.45);
+    }
   }
 
   function update(dt) {
