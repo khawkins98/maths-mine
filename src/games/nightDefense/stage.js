@@ -17,6 +17,10 @@ export function createStage(ctx) {
   // Switch to Moonlit Night
   if (engine.setBiome) engine.setBiome(BIOMES.night);
 
+  // Hide background house golem to avoid duplicate golems on island
+  const houseGolem = engine.house?.group?.getObjectByName('iron-golem');
+  if (houseGolem) houseGolem.visible = false;
+
   // ---- 1. Night Torches & Defense Perimeter ----
   const torchMat = new THREE.MeshBasicMaterial({ color: 0xffaa33 });
   const woodMat = new THREE.MeshStandardMaterial({ map: textures.logTex, roughness: 1 });
@@ -210,12 +214,13 @@ export function createStage(ctx) {
 
   // Camera framing for Night Defence & Steve positioning
   function frameCamera() {
-    camera.position.set(-2.5, 3.6, 8.8);
-    camera.lookAt(0, 1.4, 3.5);
+    // Symmetrical, dramatic arena camera focused on the face-off
+    camera.position.set(0, 4.2, 10.2);
+    camera.lookAt(0, 1.3, 3.2);
 
-    // Place Steve (Bolt) safely on the sidelines near the cottage/torch, scaled to 45%
+    // Place Steve (Bolt) outside the left torch line, cheering naturally
     if (ctx.bolt && ctx.bolt.placeAt) {
-      ctx.bolt.placeAt(-3.6, 1.2, 0.45);
+      ctx.bolt.placeAt(-4.6, 2.0, 0.95);
     }
   }
 
@@ -255,6 +260,9 @@ export function createStage(ctx) {
       if (p.mesh.geometry) p.mesh.geometry.dispose();
     });
     particles.length = 0;
+
+    // Restore background house golem
+    if (houseGolem) houseGolem.visible = true;
 
     // Restore previous biome
     if (engine.setBiome) engine.setBiome(previousBiome);
