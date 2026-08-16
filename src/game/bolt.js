@@ -23,8 +23,8 @@ import * as THREE from 'three';
 // In the world he casts onto the same grass as the blocks, is occluded like
 // anything else, and moves with the parallax for free. The cost is that each
 // game must put him somewhere its own camera framing can see, via placeAt().
-const BOLT_SCALE = 0.92;
-const BOLT_HOME = new THREE.Vector3(-4.6, 0, 4.2); // default: front-left
+const BOLT_SCALE = 0.58;
+const BOLT_HOME = new THREE.Vector3(-4.8, 0, 1.8); // natural position beside cottage porch
 const EDGE = 0.74;  // how close to the frame edge he may stand, in NDC
 
 export function createBolt({ scene, camera, textures, characterAssets, nowT, bubbleEl }) {
@@ -224,21 +224,8 @@ export function createBolt({ scene, camera, textures, characterAssets, nowT, bub
 
     // ---- apply root transform ----
     bolt.position.set(home.x, rootY, home.z);
-    // Keep him inside the frame. A game picks his spot in world units to suit
-    // its own layout, but the horizontal field of view shrinks in portrait, so
-    // a spot that reads well on a laptop puts him off the left edge on an
-    // upright tablet — which is the orientation this is actually played in.
-    // Nudge inward when he crosses the margin, in world space, so he is still
-    // genuinely standing on the island: he just stands a little closer in.
-    _ndc.copy(bolt.position).project(camera);
-    if (_ndc.x < -EDGE || _ndc.x > EDGE) {
-      _ndc.x = Math.max(-EDGE, Math.min(EDGE, _ndc.x));
-      _ndc.unproject(camera);
-      bolt.position.x = _ndc.x;
-      bolt.position.z = _ndc.z;
-      bolt.position.y = rootY; // unproject moved him off the grass; put him back
-    }
-    // Turn to face the camera, from wherever he ended up. In the world he no
+
+    // Turn to face the camera. In the world he no
     // longer inherits its orientation, and a mascot addressing the child must
     // not be seen in profile when a game frames the island from another angle.
     _camPos.setFromMatrixPosition(camera.matrixWorld);

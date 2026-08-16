@@ -495,9 +495,9 @@ export function buildArticulatedGolem(scale = 0.055) {
   chestMesh.castShadow = true;
   torsoGroup.add(chestMesh);
 
-  // Head + Nose
+  // Head + Nose (mounted forward on the front of the chest, canonical Minecraft rig)
   const headPivot = new THREE.Group();
-  headPivot.position.set(0, (5 + 12) * P, -2 * P);
+  headPivot.position.set(0, (5 + 12 - 2) * P, 3.5 * P);
 
   const headGeo = makeMinecraftBox128(8, 10, 8, 0, 0, P);
   const headMesh = new THREE.Mesh(headGeo, mat);

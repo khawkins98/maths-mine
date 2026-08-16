@@ -460,10 +460,10 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
     chestMesh.receiveShadow = true;
     torsoGroup.add(chestMesh);
 
-    // ── 3. Head & Snout (Pivoted on top of chest, looks around) ──
+    // ── 3. Head & Snout (Pivoted forward on front of chest) ──
     // Head size: w=8, h=10, d=8. UV: (0, 0). Snout: w=2, h=4, d=2. UV: (24, 0)
     const headPivot = new THREE.Group();
-    headPivot.position.set(0, (5 + 12) * P, -2 * P);
+    headPivot.position.set(0, (5 + 12 - 2) * P, 3.5 * P);
 
     const headGeo = makeMinecraftBox(8, 10, 8, 0, 0, P);
     const headMesh = new THREE.Mesh(headGeo, mat);
