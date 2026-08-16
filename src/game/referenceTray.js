@@ -82,7 +82,6 @@ export function createReferenceTray({ mastery, ui } = {}) {
         <div class="ref-row">
           <div class="ref-eq">
             <span class="ref-factors">${tableNum} × ${i}</span>
-            <span class="ref-eq-sym">=</span>
             <span class="ref-prod">${product}</span>
           </div>
           <div class="ref-vis">

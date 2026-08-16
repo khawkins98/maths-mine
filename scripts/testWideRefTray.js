@@ -45,8 +45,13 @@ async function testWideReferenceTray() {
   await rail12.click();
   await page.waitForTimeout(300);
 
-  await page.screenshot({ path: path.join(outDir, '3_ref_tray_12x_wide.png') });
-  console.log('Saved 3_ref_tray_12x_wide.png');
+  // Switch to Table 11 (User's screenshot test case)
+  const rail11 = page.locator('.ref-rail-btn[data-table="11"]');
+  await rail11.click();
+  await page.waitForTimeout(300);
+
+  await page.screenshot({ path: path.join(outDir, '4_ref_tray_11x_grid.png') });
+  console.log('Saved 4_ref_tray_11x_grid.png');
 
   await browser.close();
   console.log('Wide Reference Tray tests completed successfully!');
