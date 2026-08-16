@@ -52,10 +52,12 @@ export function createReferenceTray({ mastery, ui } = {}) {
     return colors[(tableNum - 1) % colors.length];
   }
 
-  function renderArrayGrid(rows, cols, color) {
+  function renderArrayGrid(factorA, factorB, color) {
+    // Lay out with smaller factor as rows and larger factor as columns so arrays expand horizontally across the card
+    const rows = Math.min(factorA, factorB);
+    const cols = Math.max(factorA, factorB);
     let html = `<div class="ref-array" style="--array-rows: ${rows}; --array-cols: ${cols};">`;
     const total = rows * cols;
-    // For small tables render individual blocks; for huge ones render compact grid
     const blockCount = Math.min(total, 144);
     for (let i = 0; i < blockCount; i++) {
       html += `<div class="ref-block" style="background: ${color};"></div>`;
@@ -68,7 +70,7 @@ export function createReferenceTray({ mastery, ui } = {}) {
     const color = getTableColor(tableNum);
     let html = `
       <div class="ref-header">
-        <h2>${tableNum} × Tables</h2>
+        <h2>${tableNum} × Table</h2>
         <button class="ref-close" id="btn-ref-close" aria-label="Close Reference Tray">✕</button>
       </div>
       <div class="ref-rows">
