@@ -137,6 +137,16 @@ export function createTextures() {
   const ironGolemTex = pixelTex('#c5c8cb', ['#a2a5a8', '#e2e5e8', '#888b8e', '#9b3030', '#7a2222'], { size: 16, cell: 2, bias: 0.65 });
   const pumpkinTex = pixelTex('#d97724', ['#b85e14', '#f08d33', '#1c170f', '#ffe866'], { size: 16, cell: 2 });
 
+  // Authentic Minecraft Blueprint & Village expansion textures
+  const obsidianTex = pixelTex('#1e1233', ['#140a24', '#2d1b4d', '#10071c', '#3c2266', '#090410'], { size: 16, cell: 2, bias: 0.6, edge: 0.5 });
+  const diamondTex = pixelTex('#4dedf4', ['#35dbe2', '#6ff7fc', '#22c2c9', '#8effff'], { size: 16, cell: 2, bias: 0.55, edge: 0.4 });
+  const goldTex = pixelTex('#fce844', ['#ecd429', '#fff36d', '#d6be16', '#fff99d'], { size: 16, cell: 2, bias: 0.55, edge: 0.4 });
+  const redstoneTex = pixelTex('#d41919', ['#b50f0f', '#ef2b2b', '#960707', '#ff4242'], { size: 16, cell: 2, bias: 0.55, edge: 0.4 });
+  const brickTex = pixelTex('#9c4532', ['#823423', '#b35641', '#6b2719', '#c46954'], { size: 16, cell: 2, bias: 0.6 });
+  const hayTex = pixelTex('#c4a835', ['#ad9326', '#dbc049', '#967d19', '#edd463'], { size: 16, cell: 2, bias: 0.6 });
+  const lavaTex = pixelTex('#e65305', ['#cf3e00', '#fa7419', '#b52f00', '#ff9436'], { size: 16, cell: 2, bias: 0.5 });
+  const portalTex = pixelTex('#6d1ba6', ['#4f0f7d', '#8e2ecf', '#360657', '#b14df5'], { size: 16, cell: 2, bias: 0.5 });
+
   // ---- voxel build-plot textures (NOT the shared 1-block dirt/grass above) ----
   // Separate, RepeatWrapping-enabled instances so the platform can tile its faces
   // without mutating the game blocks' textures (which keep repeat 1,1). Chunky
@@ -159,6 +169,7 @@ export function createTextures() {
     dirtTex, grassTex, stoneTex, emeraldTex, emeraldTopTex, groundTex, puffTex, slotTex, skyTex, woodTex,
     logTex, birchLogTex, leafTex, cactusTex, netherStemTex, netherCapTex,
     plankTex, cobbleTex, glassTex, ironBlockTex, ironGolemTex, pumpkinTex,
+    obsidianTex, diamondTex, goldTex, redstoneTex, brickTex, hayTex, lavaTex, portalTex,
     platGrassTex, platForestGrassTex, platDirtTex, platSandTex, platSandstoneTex, platSnowTex, platNetherrackTex, platEndstoneTex, platObsidianTex,
   };
 }

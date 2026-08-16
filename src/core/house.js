@@ -8,7 +8,7 @@ import { localStore, readJSON, writeJSON } from './storage.js';
 const SAVE_KEY = 'house_stage.v1';
 const BLOCK_SIZE = 0.72;
 
-export const HOUSE_COSTS = [5, 10, 15, 20]; // Costs for Stage 1, 2, 3, 4
+export const HOUSE_COSTS = [5, 10, 15, 20, 25, 30, 35, 40]; // Costs for Stages 1 to 8
 
 export function createHouseManager({ scene, textures, storage = localStore() } = {}) {
   const group = new THREE.Group();
@@ -21,17 +21,26 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
   let currentStage = (saved && Number.isFinite(saved.stage)) ? saved.stage : 0;
 
   let golemGroup = null;
+  let wolfGroup = null;
+  let windmillSails = null;
+  let beaconBeam = null;
 
   // Materials
   const logMat = new THREE.MeshStandardMaterial({ map: textures.logTex, roughness: 1, metalness: 0 });
   const birchLogMat = new THREE.MeshStandardMaterial({ map: textures.birchLogTex || textures.logTex, roughness: 1, metalness: 0 });
   const plankMat = new THREE.MeshStandardMaterial({ map: textures.plankTex || textures.woodTex, roughness: 1, metalness: 0 });
   const cobbleMat = new THREE.MeshStandardMaterial({ map: textures.cobbleTex || textures.stoneTex, roughness: 1, metalness: 0 });
+  const brickMat = new THREE.MeshStandardMaterial({ map: textures.brickTex || textures.cobbleTex, roughness: 0.9, metalness: 0 });
   const glassMat = new THREE.MeshStandardMaterial({
     map: textures.glassTex, transparent: true, opacity: 0.65, roughness: 0.2, metalness: 0.1,
   });
-  const ironMat = new THREE.MeshStandardMaterial({ map: textures.ironGolemTex || textures.ironBlockTex || textures.platSnowTex, roughness: 0.6, metalness: 0.3 });
-  const pumpkinMat = new THREE.MeshStandardMaterial({ map: textures.pumpkinTex, roughness: 0.9, metalness: 0 });
+  const ironMat = new THREE.MeshStandardMaterial({ map: textures.ironBlockTex || textures.ironGolemTex, roughness: 0.6, metalness: 0.3 });
+  const goldMat = new THREE.MeshStandardMaterial({ map: textures.goldTex, roughness: 0.5, metalness: 0.4 });
+  const diamondMat = new THREE.MeshStandardMaterial({ map: textures.diamondTex, roughness: 0.4, metalness: 0.2, emissive: 0x113344 });
+  const obsidianMat = new THREE.MeshStandardMaterial({ map: textures.obsidianTex, roughness: 0.7, metalness: 0.1 });
+  const portalMat = new THREE.MeshStandardMaterial({ map: textures.portalTex, roughness: 0.2, emissive: 0x440066 });
+  const lavaMat = new THREE.MeshStandardMaterial({ map: textures.lavaTex, roughness: 0.3, emissive: 0xff4400 });
+  const hayMat = new THREE.MeshStandardMaterial({ map: textures.hayTex, roughness: 0.9, metalness: 0 });
   const roofMat = new THREE.MeshStandardMaterial({ map: textures.logTex, roughness: 1, metalness: 0 });
 
   const boxGeo = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
@@ -43,6 +52,9 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
       if (child.geometry) child.geometry.dispose();
     }
     golemGroup = null;
+    wolfGroup = null;
+    windmillSails = null;
+    beaconBeam = null;
   }
 
   function addVoxel(x, y, z, mat) {
@@ -160,11 +172,183 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
       });
     }
 
-    // Stage 4: Animated Iron Golem Guardian!
+    // Stage 4+: Animated Iron Golem Guardian!
     if (stage >= 4) {
       golemGroup = buildArticulatedIronGolem(textures);
       group.add(golemGroup);
     }
+
+    // ── Stage 5: The Blacksmith's Forge ──
+    if (stage >= 5) {
+      // Hearth foundation (x = 4..7, z = -3..0)
+      for (let fx = 4; fx <= 7; fx++) {
+        for (let fz = -3; fz <= 0; fz++) {
+          addVoxel(fx, 0, fz, cobbleMat);
+        }
+      }
+      // Brick walls and chimney
+      addVoxel(4, 1, -3, brickMat);
+      addVoxel(5, 1, -3, brickMat);
+      addVoxel(6, 1, -3, brickMat);
+      addVoxel(7, 1, -3, brickMat);
+      addVoxel(7, 1, -2, brickMat);
+      addVoxel(7, 1, -1, brickMat);
+      addVoxel(7, 1, 0, brickMat);
+      // Chimney
+      addVoxel(6, 2, -3, brickMat);
+      addVoxel(6, 3, -3, brickMat);
+      addVoxel(6, 4, -3, brickMat);
+      // Lava Hearth Pool
+      addVoxel(5, 1, -2, lavaMat);
+      // Anvil (Iron block)
+      addVoxel(5, 1, 0, ironMat);
+
+      const lavaLight = new THREE.PointLight(0xff5500, 2.5, 10);
+      lavaLight.position.set(5 * BLOCK_SIZE, 1.5 * BLOCK_SIZE, -2 * BLOCK_SIZE);
+      group.add(lavaLight);
+    }
+
+    // ── Stage 6: Village Farmland & Windmill ──
+    if (stage >= 6) {
+      // Farmland crops
+      for (let cx = 4; cx <= 7; cx++) {
+        for (let cz = 2; cz <= 4; cz++) {
+          addVoxel(cx, 0, cz, cobbleMat);
+          addVoxel(cx, 1, cz, hayMat);
+        }
+      }
+      // Windmill Tower Base
+      addVoxel(6, 2, 3, plankMat);
+      addVoxel(6, 3, 3, plankMat);
+      addVoxel(6, 4, 3, logMat);
+
+      // Spinning Windmill Sails
+      windmillSails = new THREE.Group();
+      windmillSails.position.set(6 * BLOCK_SIZE, 4.2 * BLOCK_SIZE, 3.6 * BLOCK_SIZE);
+      for (let blade = 0; blade < 4; blade++) {
+        const bladeMesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.8, 0.05), plankMat);
+        bladeMesh.rotation.z = (blade * Math.PI) / 2;
+        bladeMesh.position.set(0, 0.9 * Math.cos((blade * Math.PI) / 2), 0);
+        windmillSails.add(bladeMesh);
+      }
+      group.add(windmillSails);
+    }
+
+    // ── Stage 7: Tamed Wolf Companion ──
+    if (stage >= 7) {
+      // Cozy doghouse kennel
+      addVoxel(-5, 0, 1, plankMat);
+      addVoxel(-5, 1, 1, plankMat);
+      addVoxel(-5, 0, 2, cobbleMat);
+
+      // Animated 3D Voxel Wolf
+      wolfGroup = buildVoxelWolf();
+      wolfGroup.position.set(-4.2 * BLOCK_SIZE, 0, 2.2 * BLOCK_SIZE);
+      group.add(wolfGroup);
+    }
+
+    // ── Stage 8: Nether Portal & Celestial Beacon ──
+    if (stage >= 8) {
+      // Obsidian Nether Portal Frame (4x5) at x = -6, z = -3..-1
+      addVoxel(-6, 0, -3, obsidianMat);
+      addVoxel(-6, 0, -2, obsidianMat);
+      addVoxel(-6, 0, -1, obsidianMat);
+      addVoxel(-6, 0, 0, obsidianMat);
+
+      addVoxel(-6, 1, -3, obsidianMat);
+      addVoxel(-6, 2, -3, obsidianMat);
+      addVoxel(-6, 3, -3, obsidianMat);
+
+      addVoxel(-6, 1, 0, obsidianMat);
+      addVoxel(-6, 2, 0, obsidianMat);
+      addVoxel(-6, 3, 0, obsidianMat);
+
+      addVoxel(-6, 4, -3, obsidianMat);
+      addVoxel(-6, 4, -2, obsidianMat);
+      addVoxel(-6, 4, -1, obsidianMat);
+      addVoxel(-6, 4, 0, obsidianMat);
+
+      // Glowing Portal Vortex
+      addVoxel(-6, 1, -2, portalMat);
+      addVoxel(-6, 1, -1, portalMat);
+      addVoxel(-6, 2, -2, portalMat);
+      addVoxel(-6, 2, -1, portalMat);
+      addVoxel(-6, 3, -2, portalMat);
+      addVoxel(-6, 3, -1, portalMat);
+
+      const portalLight = new THREE.PointLight(0xa832ff, 3.0, 12);
+      portalLight.position.set(-6 * BLOCK_SIZE, 2.5 * BLOCK_SIZE, -1.5 * BLOCK_SIZE);
+      group.add(portalLight);
+
+      // Diamond Beacon Base
+      addVoxel(0, 0, -5, diamondMat);
+      addVoxel(-1, 0, -5, diamondMat);
+      addVoxel(1, 0, -5, diamondMat);
+      addVoxel(0, 1, -5, glassMat);
+
+      // Soaring Celestial Beacon Beam
+      const beamGeo = new THREE.CylinderGeometry(0.18, 0.18, 40, 16);
+      const beamMat = new THREE.MeshBasicMaterial({
+        color: 0x4dedf4,
+        transparent: true,
+        opacity: 0.65,
+      });
+      beaconBeam = new THREE.Mesh(beamGeo, beamMat);
+      beaconBeam.position.set(0, 20, -5 * BLOCK_SIZE);
+      group.add(beaconBeam);
+    }
+  }
+
+  // ── Helper: 3D Voxel Tamed Wolf Model ──
+  function buildVoxelWolf() {
+    const w = new THREE.Group();
+    w.name = 'tamed-wolf';
+
+    const furMat = new THREE.MeshStandardMaterial({ color: 0xd8d8d8, roughness: 0.9 });
+    const collarMat = new THREE.MeshStandardMaterial({ color: 0xcc2222, roughness: 0.6 });
+    const muzzleMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8 });
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 });
+
+    // Body (sitting)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.5, 0.45), furMat);
+    body.position.set(0, 0.35, 0);
+    w.add(body);
+
+    // Collar
+    const collar = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.1, 0.36), collarMat);
+    collar.position.set(0, 0.58, 0.15);
+    w.add(collar);
+
+    // Head
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.36), furMat);
+    head.position.set(0, 0.76, 0.2);
+    w.add(head);
+
+    // Snout / Muzzle
+    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.15, 0.22), furMat);
+    snout.position.set(0, 0.72, 0.42);
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.06), muzzleMat);
+    nose.position.set(0, 0.76, 0.54);
+    w.add(snout, nose);
+
+    // Ears
+    const rEar = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.08), furMat);
+    rEar.position.set(0.14, 0.98, 0.16);
+    const lEar = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.08), furMat);
+    lEar.position.set(-0.14, 0.98, 0.16);
+    w.add(rEar, lEar);
+
+    // Wagging Tail Pivot
+    const tailPivot = new THREE.Group();
+    tailPivot.position.set(0, 0.22, -0.22);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.35, 0.1), furMat);
+    tail.position.set(0, 0.15, -0.1);
+    tail.rotation.x = -0.6;
+    tailPivot.add(tail);
+    w.add(tailPivot);
+
+    w.userData.tailPivot = tailPivot;
+    return w;
   }
 
   // Helper to build Minecraft BoxGeometry with exact UV mapping into the 128x128 texture atlas
@@ -373,23 +557,31 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
       rLegPivot.rotation.x = -walkPhase * 0.5;
     }
 
-    // Heavy vertical step bounce
-    golemGroup.position.y = Math.abs(Math.sin(nowT * 3.4)) * 0.05;
+    // Windmill sails animation
+    if (windmillSails) {
+      windmillSails.rotation.z += (dt || 0.016) * 1.5;
+    }
 
-    // Head searching and body sway
-    headPivot.rotation.y = Math.sin(nowT * 1.1) * 0.3;
-    torsoGroup.rotation.z = Math.sin(nowT * 3.4) * 0.03;
+    // Tamed wolf tail wagging animation
+    if (wolfGroup && wolfGroup.userData.tailPivot) {
+      wolfGroup.userData.tailPivot.rotation.y = Math.sin(nowT * 9.0) * 0.45;
+    }
+
+    // Beacon skyward beam pulse
+    if (beaconBeam) {
+      beaconBeam.material.opacity = 0.55 + 0.2 * Math.sin(nowT * 3.5);
+    }
   }
 
   function getStage() { return currentStage; }
 
   function getNextCost() {
-    if (currentStage >= 4) return 0;
+    if (currentStage >= 8) return 0;
     return HOUSE_COSTS[currentStage];
   }
 
   function upgrade(wallet) {
-    if (currentStage >= 4) return { success: false, reason: 'max' };
+    if (currentStage >= 8) return { success: false, reason: 'max' };
     const cost = getNextCost();
     if (!wallet || wallet.bolts < cost) return { success: false, reason: 'funds' };
 

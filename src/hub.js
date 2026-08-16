@@ -72,12 +72,26 @@ export function createHub(ctx) {
     if (ui.els.houseCostText) ui.els.houseCostText.textContent = cost;
 
     const btn = ui.els.btnBuildHouse;
+    const STAGE_NAMES = [
+      'Cottage Foundation',
+      'Two-Story Cottage',
+      'Porch & Torches',
+      'Iron Golem Guardian',
+      "Blacksmith's Forge",
+      'Windmill & Farmland',
+      'Pet Tamed Wolf',
+      'Nether Portal & Beacon',
+    ];
+
     if (btn) {
-      if (stage >= 4) {
-        btn.textContent = '🌙 Start Night Defence!';
+      if (stage >= 8) {
+        btn.innerHTML = '🌙 Defend Village (Night Mode)';
         btn.classList.remove('disabled');
+        btn.classList.add('night-mode');
       } else {
-        btn.innerHTML = `🔨 Build House (Stage ${stage}/4) · ${cost} 🔩`;
+        const nextName = STAGE_NAMES[stage] || `Stage ${stage + 1}`;
+        btn.innerHTML = `🔨 Build ${nextName} (${stage}/8) · ${cost} 🔩`;
+        btn.classList.remove('night-mode');
         if (wallet && wallet.bolts >= cost) {
           btn.classList.remove('disabled');
         } else {
@@ -94,12 +108,9 @@ export function createHub(ctx) {
       if (!house || !wallet) return;
 
       const stage = house.getStage();
-      if (stage >= 4) {
+      if (stage >= 8) {
         // Start Night Defence directly
-        if (ctx.startGame) {
-          close();
-          ctx.startGame('night-defense');
-        }
+        play('night-defense');
         return;
       }
 
@@ -107,12 +118,24 @@ export function createHub(ctx) {
       if (res.success) {
         if (ctx.audio) ctx.audio.beep(520, 0.15, 'square', 0.1);
         updateHouseUI();
-        if (res.newStage >= 4) {
+        if (res.newStage === 4) {
           ui.showToast('🛡️ Iron Golem summoned! Night mode unlocked!', 'good');
-          speech.speak('You summoned the Iron Golem to guard your house!');
+          speech.speak('You summoned the Iron Golem to guard your village!');
+        } else if (res.newStage === 5) {
+          ui.showToast("🔨 Blacksmith's Forge constructed! Lava hearth glowing!", 'good');
+          speech.speak("You built the Blacksmith's Forge!");
+        } else if (res.newStage === 6) {
+          ui.showToast('🌾 Farmland & Windmill constructed!', 'good');
+          speech.speak('You built the Farmland and Windmill!');
+        } else if (res.newStage === 7) {
+          ui.showToast('🐾 You tamed a loyal Minecraft Wolf!', 'good');
+          speech.speak('You tamed a loyal pet wolf!');
+        } else if (res.newStage === 8) {
+          ui.showToast('🔮 Nether Portal lit & Celestial Beacon activated!', 'good');
+          speech.speak('You built the Nether Portal and Celestial Beacon!');
         } else {
-          ui.showToast(`🎉 House upgraded to Stage ${res.newStage}!`, 'good');
-          speech.speak(`You built stage ${res.newStage} of your house!`);
+          ui.showToast(`🎉 Village upgraded to Stage ${res.newStage}!`, 'good');
+          speech.speak(`You built stage ${res.newStage} of your village!`);
         }
       }
     });
