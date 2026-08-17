@@ -493,12 +493,55 @@ export function updateMobAttack(mobGroup, dt) {
       }
       if (j.neck) j.neck.rotation.x = THREE.MathUtils.lerp(0.35, 0, sub);
     }
+  } else if (s.type === 'golem' && j) {
+    // Canonical Minecraft Iron Golem double-arm uppercut swing
+    if (p < 0.25) {
+      // Phase 1: Windup — arms swing back, torso leans forward into the blow
+      const sub = p / 0.25;
+      if (j.shoulders['-1']) j.shoulders['-1'].rotation.x = sub * 0.45;
+      if (j.shoulders['1']) j.shoulders['1'].rotation.x = sub * 0.45;
+      if (j.body) {
+        j.body.rotation.x = sub * 0.18;
+        j.body.position.y = -sub * 0.05;
+      }
+      if (j.neck) j.neck.rotation.x = -sub * 0.12;
+    } else if (p < 0.55) {
+      // Phase 2: Explosive Uppercut — both massive arms whip straight up and overhead!
+      const sub = (p - 0.25) / 0.30;
+      const armRot = 0.45 - sub * 2.85; // 0.45 -> -2.4 rad
+      if (j.shoulders['-1']) j.shoulders['-1'].rotation.x = armRot;
+      if (j.shoulders['1']) j.shoulders['1'].rotation.x = armRot;
+      if (j.body) {
+        j.body.rotation.x = 0.18 - sub * 0.45; // 0.18 -> -0.27 rad (rears back)
+        j.body.position.y = -0.05 + sub * 0.20; // heave upward
+      }
+      if (j.neck) j.neck.rotation.x = -0.12 - sub * 0.30; // head tilts up with punch
+    } else {
+      // Phase 3: Recovery — arms and torso smoothly return to idle ready stance
+      const sub = (p - 0.55) / 0.45;
+      if (j.shoulders['-1']) j.shoulders['-1'].rotation.x = THREE.MathUtils.lerp(-2.4, 0, sub);
+      if (j.shoulders['1']) j.shoulders['1'].rotation.x = THREE.MathUtils.lerp(-2.4, 0, sub);
+      if (j.body) {
+        j.body.rotation.x = THREE.MathUtils.lerp(-0.27, 0, sub);
+        j.body.position.y = THREE.MathUtils.lerp(0.15, 0, sub);
+      }
+      if (j.neck) j.neck.rotation.x = THREE.MathUtils.lerp(-0.42, 0, sub);
+    }
   }
 
   if (p >= 1.0) {
     s.active = false;
     mobGroup.scale.copy(s.initialScale);
     mobGroup.position.copy(s.initialPos);
+    if (j) {
+      if (j.shoulders['-1']) j.shoulders['-1'].rotation.set(0, 0, 0);
+      if (j.shoulders['1']) j.shoulders['1'].rotation.set(0, 0, 0);
+      if (j.body) {
+        j.body.rotation.set(0, 0, 0);
+        j.body.position.set(0, 0, 0);
+      }
+      if (j.neck) j.neck.rotation.set(0, 0, 0);
+    }
     mobGroup.traverse(n => {
       if (n.isMesh && n.material && n.material.emissive) {
         n.material.emissive.setHex(0x000000);

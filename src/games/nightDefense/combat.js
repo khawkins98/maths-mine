@@ -81,7 +81,7 @@ export function createCombatManager(ctx, stage, facts) {
       if (wallet) wallet.add(earned);
       ui.showToast(`💥 UPPERCUT! +${earned} 🔩`, 'good');
 
-      if (bolt.say) bolt.say(`BOOM! Golem smash! +${earned} bolts!`, 'happy');
+      if (bolt.say) bolt.say(`BOOM! Golem smash! +${earned} bolts!`);
       if (speech && speech.speak) speech.speak(`Smash! Correct! Plus ${earned} bolts!`);
 
       // Execute 3D Golem uppercut and launch mob
