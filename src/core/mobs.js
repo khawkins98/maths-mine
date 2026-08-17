@@ -430,6 +430,7 @@ export function triggerMobAttack(mobGroup, type) {
     villager: 1.2,
   };
 
+  const j = mobGroup.userData.joints;
   mobGroup.userData.attackState = {
     active: true,
     type,
@@ -437,6 +438,8 @@ export function triggerMobAttack(mobGroup, type) {
     duration: durations[type] || 0.8,
     initialScale: mobGroup.scale.clone(),
     initialPos: mobGroup.position.clone(),
+    initialBodyPos: j && j.body ? j.body.position.clone() : new THREE.Vector3(),
+    initialBodyRot: j && j.body ? j.body.rotation.clone() : new THREE.Euler(),
   };
 }
 
@@ -480,7 +483,7 @@ export function updateMobAttack(mobGroup, dt) {
       if (j.shoulders['1']) j.shoulders['1'].rotation.x = -Math.PI * 0.95 + sub * Math.PI * 1.1;
       if (j.body) {
         j.body.rotation.x = -0.25 + sub * 0.6;
-        j.body.position.z = sub * 0.25;
+        j.body.position.z = s.initialBodyPos.z + sub * 0.25;
       }
       if (j.neck) j.neck.rotation.x = -0.35 + sub * 0.7;
     } else {
@@ -489,11 +492,12 @@ export function updateMobAttack(mobGroup, dt) {
       if (j.shoulders['1']) j.shoulders['1'].rotation.x = THREE.MathUtils.lerp(0.15, -Math.PI * 0.5, sub);
       if (j.body) {
         j.body.rotation.x = THREE.MathUtils.lerp(0.35, 0, sub);
-        j.body.position.z = THREE.MathUtils.lerp(0.25, 0, sub);
+        j.body.position.z = THREE.MathUtils.lerp(s.initialBodyPos.z + 0.25, s.initialBodyPos.z, sub);
       }
       if (j.neck) j.neck.rotation.x = THREE.MathUtils.lerp(0.35, 0, sub);
     }
   } else if (s.type === 'golem' && j) {
+    const baseY = s.initialBodyPos.y;
     // Canonical Minecraft Iron Golem double-arm uppercut swing
     if (p < 0.25) {
       // Phase 1: Windup — arms swing back, torso leans forward into the blow
@@ -502,7 +506,7 @@ export function updateMobAttack(mobGroup, dt) {
       if (j.shoulders['1']) j.shoulders['1'].rotation.x = sub * 0.45;
       if (j.body) {
         j.body.rotation.x = sub * 0.18;
-        j.body.position.y = -sub * 0.05;
+        j.body.position.y = baseY - sub * 0.04;
       }
       if (j.neck) j.neck.rotation.x = -sub * 0.12;
     } else if (p < 0.55) {
@@ -513,7 +517,7 @@ export function updateMobAttack(mobGroup, dt) {
       if (j.shoulders['1']) j.shoulders['1'].rotation.x = armRot;
       if (j.body) {
         j.body.rotation.x = 0.18 - sub * 0.45; // 0.18 -> -0.27 rad (rears back)
-        j.body.position.y = -0.05 + sub * 0.20; // heave upward
+        j.body.position.y = baseY - 0.04 + sub * 0.15; // heave upward above baseline
       }
       if (j.neck) j.neck.rotation.x = -0.12 - sub * 0.30; // head tilts up with punch
     } else {
@@ -523,7 +527,7 @@ export function updateMobAttack(mobGroup, dt) {
       if (j.shoulders['1']) j.shoulders['1'].rotation.x = THREE.MathUtils.lerp(-2.4, 0, sub);
       if (j.body) {
         j.body.rotation.x = THREE.MathUtils.lerp(-0.27, 0, sub);
-        j.body.position.y = THREE.MathUtils.lerp(0.15, 0, sub);
+        j.body.position.y = THREE.MathUtils.lerp(baseY + 0.11, baseY, sub);
       }
       if (j.neck) j.neck.rotation.x = THREE.MathUtils.lerp(-0.42, 0, sub);
     }
@@ -537,8 +541,8 @@ export function updateMobAttack(mobGroup, dt) {
       if (j.shoulders['-1']) j.shoulders['-1'].rotation.set(0, 0, 0);
       if (j.shoulders['1']) j.shoulders['1'].rotation.set(0, 0, 0);
       if (j.body) {
-        j.body.rotation.set(0, 0, 0);
-        j.body.position.set(0, 0, 0);
+        j.body.rotation.copy(s.initialBodyRot || new THREE.Euler());
+        j.body.position.copy(s.initialBodyPos || new THREE.Vector3());
       }
       if (j.neck) j.neck.rotation.set(0, 0, 0);
     }
