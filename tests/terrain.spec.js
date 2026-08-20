@@ -2,6 +2,36 @@ import { test, expect } from '@playwright/test';
 import { boot, pick, state, waitForState, answer } from './helpers.js';
 
 test.describe('continuous procedural terrain', () => {
+  test('flat biome is exactly level across every generated cell and camera-visible matrix', async ({ page }) => {
+    const errors = await boot(page);
+    await page.evaluate(() => window.__biome('flat'));
+    for (const seed of [7, 123456, -90210]) {
+      const result = await page.evaluate((nextSeed) => {
+        window.__terrainSetSeed(nextSeed);
+        const terrain = window.__terrain();
+        const heights = [];
+        const cell = terrain.dimensions.cell;
+        for (let z = terrain.coverage.minZ + cell / 2; z < terrain.coverage.maxZ; z += cell) {
+          for (let x = terrain.coverage.minX + cell / 2; x < terrain.coverage.maxX; x += cell) {
+            heights.push(terrain.sample(x, z));
+          }
+        }
+        const rendered = window.__terrainInstanceHeights();
+        return { heights, rendered, count: window.__engine().ground.count };
+      }, seed);
+      expect(result.heights).toHaveLength(result.count);
+      expect(result.heights.every((height) => height === 0), `seed ${seed} full grid`).toBe(true);
+      expect(result.rendered.all).toHaveLength(result.count);
+      expect(result.rendered.all.every((height) => height === 0), `seed ${seed} rendered matrices`).toBe(true);
+      expect(result.rendered.cameraVisible.length, `seed ${seed} camera coverage`).toBeGreaterThan(0);
+      expect(result.rendered.cameraVisible.every((height) => height === 0), `seed ${seed} visible shelf`).toBe(true);
+    }
+    const rayHits = await page.evaluate(() => [[0, 0], [-34, -46], [34, -46], [-34, 30], [34, 30]]
+      .map(([x, z]) => window.__terrainGroundHit(x, z)));
+    expect(rayHits.every((height) => height !== null && Math.abs(height) < 1e-6)).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
   test('is deterministic and keeps the protected footprint plus buffer flat', async ({ page }) => {
     const errors = await boot(page);
     const initialDefault = await page.evaluate(() => {
@@ -144,11 +174,18 @@ test.describe('continuous procedural terrain', () => {
 
   test('has idempotent teardown', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => window.__hub && window.__terrainDispose());
+    const clouds = await page.evaluate(() => {
+      window.__terrainDispose();
+      window.__engine().clouds.dispose();
+      window.__engine().clouds.dispose();
+      return window.__engine().clouds.inspect();
+    });
     const state = await page.evaluate(() => window.__terrain());
     expect(state.disposed).toBe(true);
     expect(state.columnCount).toBe(0);
     expect(state.meshCount).toBe(0);
+    expect(clouds.disposed).toBe(true);
+    expect(clouds.geometryUuids).toHaveLength(1);
   });
 
   test('keeps stages, actors, and array corners visible and on safe ground', async ({ page }) => {
@@ -237,6 +274,20 @@ test.describe('continuous procedural terrain', () => {
   test('stabilizes renderer resources and grove ownership through 20 world/game cycles', async ({ page }) => {
     test.setTimeout(600_000);
     const errors = await boot(page);
+    const forceRegisterLongLived = () => page.evaluate(() => {
+      const engine = window.__engine();
+      const saved = [];
+      engine.scene.traverse((object) => {
+        if (!object.isMesh || !object.geometry || !object.visible) return;
+        saved.push({ object, frustumCulled: object.frustumCulled });
+        object.frustumCulled = false;
+      });
+      engine.renderer.render(engine.scene, engine.camera);
+      const memory = { ...engine.renderer.info.memory };
+      for (const entry of saved) entry.object.frustumCulled = entry.frustumCulled;
+      return { memory, cullingRestored: saved.every((entry) => entry.object.frustumCulled === entry.frustumCulled),
+        cloud: engine.clouds.inspect() };
+    });
     const cycle = async (index) => {
       await page.evaluate((i) => {
         const biomes = ['flat', 'hills', 'forest', 'desert', 'snow', 'nether', 'end'];
@@ -282,6 +333,17 @@ test.describe('continuous procedural terrain', () => {
       previousEndpoint = endpoint;
     }
     expect(plateau, 'renderer counts must plateau across complete biome passes').not.toBeNull();
+    // Renderer memory is lazy: deterministically register every long-lived
+    // geometry once, then replay the exact pass to prove registration itself
+    // has stabilized before measuring the game/biome schedule.
+    const registered = await forceRegisterLongLived();
+    const replayed = await forceRegisterLongLived();
+    expect(replayed.memory.geometries).toBeLessThanOrEqual(registered.memory.geometries);
+    expect(replayed.memory.textures).toBeLessThanOrEqual(registered.memory.textures);
+    expect(registered.cullingRestored).toBe(true);
+    expect(replayed.cullingRestored).toBe(true);
+    expect(replayed.cloud.geometryUuids).toHaveLength(1);
+    expect(replayed.cloud.culling.every((value) => value === true)).toBe(true);
     const counts = [];
     for (let i = 0; i < 20; i++) counts.push(await cycle(nextCycle++));
     const final = await page.evaluate(() => window.__terrain());
