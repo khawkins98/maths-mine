@@ -7,7 +7,7 @@ import * as THREE from 'three';
 export const IMPOSTER_THRESHOLD = 0.5;
 
 // Fixed, gently-elevated FRONTAL views so signs + array read head-on.
-export const VIEW = new THREE.Vector3(0, 0.26, 1).normalize();
+export const VIEW = new THREE.Vector3(0, 0.36, 1).normalize();
 export const VIEW_JUDGE = new THREE.Vector3(0, 0.42, 1).normalize(); // higher: see grass tops
 
 // --- imposter-tier seat layout ---
@@ -26,11 +26,12 @@ export const VIEW_JUDGE = new THREE.Vector3(0, 0.42, 1).normalize(); // higher: 
 // fit at d = 19 with ~7% of the width still to spare, and hold the lettering
 // near 30 px. If the signs ever get smaller or the camera closer, this number
 // moves with them.
-export const CREW_MIN = 3;
-export const CREW_MAX = 4;
+export const CREW_MIN = 2;
+export const CREW_MAX = 2;
 
 const CREW_FIT = {
-  3: { gap: 3.35, sign: 1.0, dist: 15.5 },  // the original, hand-tuned trio
+  2: { gap: 4.2, sign: 1.0, dist: 13.5 },
+  3: { gap: 3.35, sign: 1.0, dist: 15.5 },
   4: { gap: 3.0, sign: 0.9, dist: 19.0 },
 };
 
@@ -49,26 +50,9 @@ export function crewLayout(n) {
   return { x, z, signScale: fit.sign, dist: fit.dist };
 }
 
-export const BASE_Y = 0.62;  // Nugget centre height (feet on the grass)
+export const BASE_Y = 0;     // authored character models have feet at zero
 export const SIGN_Y = 3.05;  // sign centre height, above the raised arms
 
-// Villager varieties, loosely after the Minecraft professions: a robe colour
-// and the apron/trim that goes over it. The crew is drawn from these so three
-// villagers standing together are told apart by what they wear, which is how
-// you tell them apart in Minecraft too.
-export const VILLAGERS = [
-  { robe: 0x8a6242, trim: 0xc2a06d },  // farmer: brown, straw apron
-  { robe: 0xe4e0d6, trim: 0xa33b32 },  // librarian: white, red band
-  { robe: 0x7a4a8f, trim: 0x593369 },  // cleric: purple
-  { robe: 0x474c55, trim: 0x2c3037 },  // toolsmith: dark grey
-  { robe: 0x5c8a4a, trim: 0x3d6631 },  // nitwit: green
-  { robe: 0xa4543f, trim: 0x76392a },  // mason: terracotta
-];
-
-export const SKIN = 0xc09372;      // villager skin
-export const SKIN_DARK = 0xa87c5e; // the nose, a shade deeper
-export const HAIR = 0x50331f;
-export const BROW = 0x3a2415;
 export const GOOD_GREEN = 0x43d17c;
 export const CONFETTI_COLS = [0xff6b6b, 0xffd24a, 0x58e08a, 0x6ad2ff, 0xb98bff, 0xff9f5a, 0x7ef0d0, 0xf78fb3];
 

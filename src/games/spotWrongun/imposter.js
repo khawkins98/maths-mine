@@ -56,7 +56,7 @@ export function createImposterTier(ctx, stage, facts) {
     // of empty ground in front, at every aspect ratio. He stands off the same
     // proportion of the camera distance so a wider crew does not leave him
     // marooned in the foreground, dwarfing the villagers he is introducing.
-    bolt.placeAt(-2.0, layout.dist * 0.26, 0.62);
+    bolt.placeAt(-5.2, layout.dist * 0.23, 0.72);
   }
 
   // The claim as the child reads it, and as the ledger scores it. `a,b` stay
@@ -109,9 +109,36 @@ export function createImposterTier(ctx, stage, facts) {
       // child has to hold "the one on the left said 12" in mind while checking
       // the others, and identical villagers make that harder than the maths it
       // is meant to be testing.
-      const g = stage.makeNugget(roundNo + seat * 2);
+      const g = stage.makeNugget(roundNo + seat * 2, { isImposter: isImp });
       g.position.set(layout.x[seat], BASE_Y, layout.z[seat]);
       stage.crewGroup.add(g);
+
+      // Emerald block array showing the true representation (cols × rows) positioned on outer sides of screen
+      const cols = isDiv ? f.quotient : Math.max(f.a, f.b);
+      const rows = isDiv ? f.divisor : Math.min(f.a, f.b);
+      const gridGroup = new THREE.Group();
+      const blockList = [];
+      const cellSpacing = Math.min(0.48, 2.4 / Math.max(cols, 1));
+      const blockScale = cellSpacing / 1.0;
+
+      const rowGap = isDiv ? cellSpacing * 0.45 : 0;
+      for (let r = 0; r < rows; r++) {
+        for (let cCol = 0; cCol < cols; cCol++) {
+          const blk = stage.makeBlock();
+          const bx = (cCol - (cols - 1) / 2) * cellSpacing;
+          const by = (r + 0.5) * cellSpacing + r * rowGap;
+          const bz = 0;
+          blk.position.set(bx, by, bz);
+          blk.scale.setScalar(blockScale);
+          stage.setCapGrass(blk, isDiv || r === rows - 1);
+          gridGroup.add(blk);
+          blockList.push(blk);
+        }
+      }
+      // Outer left side for left seats, outer right side for right seats
+      const sideOffset = (seat < size / 2) ? -2.4 : 2.4;
+      gridGroup.position.set(layout.x[seat] + sideOffset, BASE_Y, layout.z[seat] - 0.3);
+      stage.arrayGroup.add(gridGroup);
 
       const signMesh = new THREE.Mesh(stage.geo.sign, new THREE.MeshBasicMaterial({
         map: stage.makeSignTex(left, right, shown, { op: f.op }), transparent: true, side: THREE.DoubleSide,
@@ -136,6 +163,7 @@ export function createImposterTier(ctx, stage, facts) {
         // what a share-out is worth in emeralds is the pile, not the group size
         reward: isDiv ? f.dividend : truth,
         seat, headIdx: seat, group: g, sign: signMesh, hit,
+        blocks: blockList, gridGroup, cols, rows,
         joints: g.userData.joints,
         bob: Math.random() * Math.PI * 2,
         blinkIn: 2 + Math.random() * 3, blinkT: 0,
@@ -159,12 +187,12 @@ export function createImposterTier(ctx, stage, facts) {
     ui.hideBigTotal();
     ui.setTally('');
     ui.els.btnRecenter.style.display = 'none';
-    ui.setStatus('Tap the sign that’s wrong — or drag across to read them all.');
-    bolt.say('One sign is fibbing!', 'wow');
+    ui.setStatus('Tap the sign that’s wrong.');
+    bolt.say('One player is fibbing!', 'wow');
     speak(pickPhrase([
-      'One sign is fibbing! Tap the wrong one.',
-      'Uh oh — one of these is a wrong’un. Which sign is fibbing?',
-      'One sign is a mix-up! Tap the one that’s wrong.',
+      'One player is fibbing! Tap their sign.',
+      'Uh oh — one of these is a wrong’un. Which player is fibbing?',
+      'One player has a mix-up! Tap their sign.',
     ]));
   }
 
@@ -193,11 +221,11 @@ export function createImposterTier(ctx, stage, facts) {
       ctx.wallet.add(n.reward);
       ui.showToast(`+${n.reward} 🔩`, 'good');
       // title card stays the mode name — never feedback.
-      ui.setStatus(`That sign said ${n.claimText} — but it’s really ${n.answer}!`);
-      bolt.say('Gotcha! That one was fibbing!', 'happy');
+      ui.setStatus(`Spotted! ${n.truthText}`);
+      bolt.say(`Gotcha! ${n.truthText}!`, 'happy');
       speak(pickPhrase([
-        `That’s right! ${words(n, n.answer)}, not ${n.shown}!`,
-        `You spotted it! ${words(n)} is ${n.answer}, not ${n.shown}!`,
+        `That’s right! ${words(n, n.answer)}!`,
+        `You spotted the fibber! ${words(n, n.answer)}!`,
       ]));
 
       later(() => proveTruth(n, () => {
@@ -229,13 +257,26 @@ export function createImposterTier(ctx, stage, facts) {
 
   function ejectNugget(n) {
     n.ejecting = true;
-    const dir = crew.length > 1 ? (n.seat / (crew.length - 1)) * 2 - 1 : 0;
-    n.ev.set(dir * 2.2 + (Math.random() - 0.5), 12.5, -2.5 - Math.random());
-    n.espin = 8 + Math.random() * 4;
     n.hit.userData.index = -1;
-    stage.dustPuff(n.group.position.x, BASE_Y - 0.4, n.group.position.z);
-    // launching a villager off the island should be felt through your feet
-    ctx.worldFeel.impulse(0.75, n.group.position.x, n.group.position.z);
+
+    // Flash red first (Minecraft hit flash)
+    n.group.traverse((child) => {
+      if (child.isMesh && child.material && child.material.color) {
+        if (!child.userData.origColor) {
+          child.userData.origColor = child.material.color.getHex();
+        }
+        child.material.color.setHex(0xff2222);
+      }
+    });
+    stage.damageSfx();
+
+    // After red flash, GO POOF and SMOKE!
+    later(() => {
+      n.group.visible = false;
+      stage.poofPuff(n.group.position.x, BASE_Y + 0.8, n.group.position.z);
+      stage.poofSfx();
+      ctx.worldFeel.impulse(0.75, n.group.position.x, n.group.position.z);
+    }, 350);
   }
 
   function shatterSign(n) {
@@ -261,25 +302,17 @@ export function createImposterTier(ctx, stage, facts) {
   // counts GROUPS rather than skip-counting to a total the sign already gave.
   function proveTruth(n, done) {
     const isDiv = n.op === 'div';
-    const cols = isDiv ? n.answer : Math.max(n.a, n.b);
-    const rows = isDiv ? n.divisor : Math.min(n.a, n.b);
-    const spacing = 0.62;
-    const cx = n.group.position.x, topY = 3.2;
-    const seatZ = layout.z[n.seat];
-    for (let r = 0; r < rows; r++) {
-      for (let cCol = 0; cCol < cols; cCol++) {
-        const d = new THREE.Mesh(stage.geo.dot, stage.dotMat);
-        d.position.set(cx + (cCol - (cols - 1) / 2) * spacing, topY - r * spacing, seatZ + 0.4);
-        d.scale.setScalar(0.001);
-        d.userData.row = r;
-        stage.fxGroup.add(d);
-        stage.proofDots.push(d);
-      }
-    }
+    const cols = n.cols || (isDiv ? n.answer : Math.max(n.a, n.b));
+    const rows = n.rows || (isDiv ? n.divisor : Math.min(n.a, n.b));
     ui.setTally('');
     let r = 0;
     const step = () => {
-      for (const d of stage.proofDots) if (d.userData.row === r) d.userData.pop = 0;
+      if (n.blocks) {
+        for (let cCol = 0; cCol < cols; cCol++) {
+          const blk = n.blocks[r * cols + cCol];
+          if (blk) { blk.userData.pop = 0; stage.blockPops.push(blk); }
+        }
+      }
       audio.groupChime(r + 1);
       ui.setTally(isDiv
         ? `${r + 1} of ${rows} groups shared`
@@ -298,13 +331,11 @@ export function createImposterTier(ctx, stage, facts) {
   function proveInnocent(n) {
     n.flashT = 0.9;
     audio.groupChime(3);
-    for (let i = 0; i < 3; i++) {
-      const d = new THREE.Mesh(stage.geo.dot, stage.dotMat);
-      d.position.set(n.group.position.x + (i - 1) * 0.5, SIGN_Y + 1.0, layout.z[n.seat] + 0.4);
-      d.scale.setScalar(0.001); d.userData.pop = 0; d.userData.row = -1;
-      d.userData.tick = 0.9;
-      stage.fxGroup.add(d);
-      stage.proofDots.push(d);
+    if (n.blocks) {
+      for (const blk of n.blocks) {
+        blk.userData.pop = 0;
+        stage.blockPops.push(blk);
+      }
     }
   }
 
@@ -417,20 +448,16 @@ export function createImposterTier(ctx, stage, facts) {
       }
     }
 
-    // the ejected villager tumbles off, limbs flailing
+    // the ejected fibbing villager leans left and falls sideways during red flash before going poof
     for (const n of crew) {
       if (!n.ejecting) continue;
-      n.ev.y -= 26 * dt;
-      n.group.position.addScaledVector(n.ev, dt);
-      n.group.rotation.z += n.espin * dt;
-      n.group.rotation.x += n.espin * 0.6 * dt;
-      const j = n.joints;
-      if (j) {
-        j.shoulders[-1].rotation.z = Math.sin(t * 22) * 1.4;
-        j.shoulders[1].rotation.z = Math.sin(t * 22 + 1.7) * 1.4;
-        j.hips[-1].rotation.x = Math.sin(t * 26) * 0.9;
-        j.hips[1].rotation.x = Math.sin(t * 26 + Math.PI) * 0.9;
-        j.neck.rotation.z = Math.sin(t * 30) * 0.4;
+      if (n.group.visible) {
+        if (n.ejectT == null) n.ejectT = 0;
+        n.ejectT += dt;
+        const progress = Math.min(1, n.ejectT / 0.35);
+        n.group.rotation.z = -0.55 * progress; // lean left ~30 degrees
+        n.group.position.y = BASE_Y - 0.22 * progress; // fall down slightly
+        n.group.position.x = layout.x[n.seat] - 0.12 * progress + (Math.random() - 0.5) * 0.04;
       }
     }
   }

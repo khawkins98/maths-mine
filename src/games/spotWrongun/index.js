@@ -167,6 +167,7 @@ export function createSpotWrongun(ctx) {
         : (mastery.overallProgress() > IMPOSTER_THRESHOLD ? 'imposter' : 'judge'));
 
     bolt.setOxidation(mastery.overallProgress());
+    if (ctx.engine.updateBiomeFromProgress) ctx.engine.updateBiomeFromProgress(mastery.overallProgress());
     active().newRound();
   }
 

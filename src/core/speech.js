@@ -39,6 +39,11 @@ export function createSpeech() {
   const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
   let voiceOn = true;
   let chosenVoice = null;
+  let pendingVoice = null;
+  // Firefox can expose voices synchronously on first load, so pickVoice() may
+  // read this during initialization. Declare it before the first pickVoice()
+  // call instead of leaving it in the temporal dead zone below.
+  let current = null;    // { u, epoch, done, timer } — also holds the utterance
 
   // Score the available voices rather than taking the first English one. Device
   // voice lists vary wildly; the "Enhanced"/"Premium"/"Neural" variants are a
@@ -66,7 +71,6 @@ export function createSpeech() {
     if (!current) chosenVoice = best;
     else pendingVoice = best;
   }
-  let pendingVoice = null;
   if (synth) { pickVoice(); synth.addEventListener?.('voiceschanged', pickVoice); }
 
   // ---- state ----
@@ -74,13 +78,12 @@ export function createSpeech() {
   // which invalidates every callback still in flight from the previous one.
   let epoch = 0;
   const queue = [];      // groups: { parts: [{ text, gap }] } — one per speak()
-  let current = null;    // { u, epoch, done, timer } — also holds the utterance
   let gapTimer = null;
   let resumeAt = 0;      // no speaking before this: the cancel window
 
   function utter(part, myEpoch) {
     const u = new SpeechSynthesisUtterance(part.text);
-    if (chosenVoice) u.voice = chosenVoice;
+    try { if (chosenVoice) u.voice = chosenVoice; } catch (_) {}
     u.rate = 0.92; u.pitch = 1.12; u.volume = 1; // friendly, unhurried
 
     // Held in `current` rather than left to the garbage collector: a collected

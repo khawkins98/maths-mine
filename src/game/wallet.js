@@ -25,7 +25,15 @@ export class Wallet {
     return this.bolts;
   }
 
-  reset() { this.bolts = 0; this.save(); }
+  // Spend `n` bolts if available. Returns true if successful.
+  spend(n) {
+    const cost = Math.max(0, Math.round(n) || 0);
+    if (this.bolts < cost) return false;
+    this.bolts -= cost;
+    this.save();
+    return true;
+  }
 
+  reset() { this.bolts = 0; this.save(); }
   save() { writeJSON(this._storage, SAVE_KEY, { bolts: this.bolts }); }
 }

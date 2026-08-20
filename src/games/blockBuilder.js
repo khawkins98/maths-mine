@@ -22,6 +22,8 @@ import { createPointerInput } from '../core/pointer.js';
 import { buildChoiceSet } from '../core/choices.js';
 import { easeOutBack, easeOutBounce, easeOutCubic } from '../core/ease.js';
 import { createBlockKit, CELL, BLOCK, CAP_H, BODY_H } from '../core/blocks.js';
+import { plantTrees, disposeTrees } from '../core/trees.js';
+import { getBlueprint } from './blueprints.js';
 
 const DROP_INTERVAL = 0.16;    // seconds between poured blocks (full pour)
 const DROP_TIME = 0.25;        // seconds for the drop-and-bounce of a placed block
@@ -41,7 +43,10 @@ export function createBlockBuilder(ctx) {
   const VIEW_DIR = engine.VIEW_DIR;
 
   // ---- shared block geometry (rounded dirt body + grass "lip" cap) ----
-  const blocks = createBlockKit(ctx.textures);
+  const activeBiome = engine.currentBiome ? engine.currentBiome() : null;
+  const bodyTex = activeBiome && activeBiome.blockBodyKey ? textures[activeBiome.blockBodyKey] : textures.dirtTex;
+  const capTex = activeBiome && activeBiome.blockCapKey ? textures[activeBiome.blockCapKey] : textures.grassTex;
+  const blocks = createBlockKit(ctx.textures, { body: bodyTex, cap: capTex });
   const { makeBlock, setCapGrass } = blocks;
   const slotGeo = new THREE.PlaneGeometry(CELL * 0.94, CELL * 0.94);
   const sharedGeos = new Set([...blocks.sharedGeos, slotGeo]);
@@ -49,6 +54,13 @@ export function createBlockBuilder(ctx) {
   // ---- the game's own scene subtree ----
   const root = new THREE.Group();
   scene.add(root);
+
+  // Minecraft oak trees around the clearing edges for atmosphere.
+  // Positions are behind/beside the play area so they never obstruct blocks.
+  const treesGroup = plantTrees(scene, [
+    { x: -13, z: -7 }, { x: -7, z: -10 },
+    { x: 7, z: -10 }, { x: 13, z: -7 },
+  ], textures);
 
   let wall = new THREE.Group();
   root.add(wall);
@@ -113,9 +125,10 @@ export function createBlockBuilder(ctx) {
   function updateColumnGrass(c) {
     let maxR = -1;
     for (let r = 0; r < round.R; r++) if (round.cells[c][r]) maxR = r;
+    const setGrass = (round && round.blockKit && round.blockKit.setCapGrass) || setCapGrass;
     for (let r = 0; r < round.R; r++) {
       const b = round.blocks[c][r];
-      if (b) setCapGrass(b, r === maxR);
+      if (b) setGrass(b, r === maxR);
     }
   }
 
@@ -213,6 +226,12 @@ export function createBlockBuilder(ctx) {
 
     wall.position.set(0, wallCenterYFor(R), 0);
     wall.rotation.set(0, 0, 0);
+
+    const bp = getBlueprint(C, R);
+    const roundBody = textures[bp.materialKey] || bodyTex;
+    const roundCap = textures[bp.capKey] || capTex;
+    const roundBlockKit = createBlockKit(textures, { body: roundBody, cap: roundCap });
+
     round = {
       op: q.op, a: factA, b: factB, C, R, answer,
       dividend: q.dividend, divisor: q.divisor, quotient: q.quotient,
@@ -220,6 +239,8 @@ export function createBlockBuilder(ctx) {
       cells: Array.from({ length: C }, () => new Array(R).fill(false)),
       blocks: Array.from({ length: C }, () => new Array(R).fill(null)),
       placed: 0, groupsDone: 0, askT: 0, answered: false,
+      blueprint: bp,
+      blockKit: roundBlockKit,
     };
     buildMold(C, R);
     frameCamera(C, R);
@@ -235,17 +256,13 @@ export function createBlockBuilder(ctx) {
     ui.setTally('');
 
     if (q.op === 'div') {
-      // Title card = mode name only (never the equation, never feedback).
-      // One instruction only: Bolt speaks it. In sensor mode there's no ghost
-      // finger, so keep a short tilt cue; in drag mode the first-touch hint +
-      // Bolt cover placement — no redundant footer.
       ui.setStatus(sensorsLive() ? 'Tilt to pour · fill every group equally' : '');
-      bolt.say(`Share ${q.dividend} into ${q.divisor} groups!`, '');
+      bolt.say(`Share ${q.dividend} into ${q.divisor} groups! (${bp.icon} ${bp.name})`, '');
       speak(`Let's share ${q.dividend} into ${q.divisor} equal groups.`);
     } else {
       ui.setStatus(sensorsLive() ? 'Tilt forward to pour · tilt left/right to aim' : '');
-      bolt.say(`Build ${q.a} groups of ${q.b}!`, '');
-      speak(`Let's build ${q.a} groups of ${q.b}.`);
+      bolt.say(`${bp.icon} Blueprint: ${bp.name} (${q.a} × ${q.b})!`, '');
+      speak(`Let's construct the ${bp.name}: ${q.a} groups of ${q.b}.`);
     }
 
     if (sensorsLive()) sensors.recenter();
@@ -259,7 +276,7 @@ export function createBlockBuilder(ctx) {
     if (col[r]) return false;
     col[r] = true;
     round.placed++;
-    const mesh = makeBlock();
+    const mesh = (round.blockKit && round.blockKit.makeBlock) ? round.blockKit.makeBlock() : makeBlock();
     round.blocks[c][r] = mesh;
     const target = cellPos(c, r, round.C, round.R);
     const fromY = (round.R * CELL) / 2 + 1.8;
@@ -393,6 +410,7 @@ export function createBlockBuilder(ctx) {
 
     mastery.record(round.a, round.b, correct, ms);
     bolt.setOxidation(mastery.overallProgress()); // weather Bolt as mastery grows
+    if (ctx.engine.updateBiomeFromProgress) ctx.engine.updateBiomeFromProgress(mastery.overallProgress());
 
     const eqStr = round.op === 'div'
       ? `${round.dividend} ÷ ${round.divisor} = ${round.answer}`
@@ -406,18 +424,27 @@ export function createBlockBuilder(ctx) {
       // floating number competes with it at this confirm moment.
       ui.setAskEq(eqStr);
       ui.popAskEq();
-      const reward = round.blocksTotal;
+
+      const bp = round.blueprint;
+      const reward = (bp && bp.bonusBolts) ? bp.bonusBolts : round.blocksTotal;
       wallet.add(reward);
       audio.chordSound();
       celebrate();
-      ui.showToast(`+${reward} 🔩`, 'good');
+      if (bp && bp.activationVFX) spawnBlueprintVFX(bp.activationVFX);
+
+      if (bp) {
+        ui.showToast(`✨ ${bp.icon} ${bp.name} Complete! +${reward} 🔩`, 'good');
+      } else {
+        ui.showToast(`+${reward} 🔩`, 'good');
+      }
+
       if (round.op === 'div') {
         ui.setStatus(`Yes! ${round.dividend} ÷ ${round.divisor} = ${round.answer} each.`);
         bolt.say(`YES! +${reward} bolts!`, 'happy');
         speak(pickPhrase([`That's right! ${divWords(round.dividend, round.divisor, round.answer)}!`, `Yes! Each group gets ${round.answer}!`, `You shared it — ${round.answer} each!`]));
       } else {
         ui.setStatus(`Yes! ${round.a} × ${round.b} = ${round.answer}.`);
-        bolt.say(`YES! +${reward} bolts!`, 'happy');
+        bolt.say(bp ? `${bp.icon} ${bp.name} built! +${reward} 🔩!` : `YES! +${reward} bolts!`, 'happy');
         speak(pickPhrase([`That's right! ${eqWords(round.a, round.b, round.answer)}!`, `Yes! ${eqWords(round.a, round.b, round.answer)}!`, `You got it — ${round.answer}!`, `Nice work! ${round.answer} blocks!`]));
       }
       // fade the answer slabs ~600ms after the green flash, THEN reveal Rotate/Next
@@ -660,6 +687,38 @@ export function createBlockBuilder(ctx) {
 
   // ---------- juice ----------
   function flashSpout(color) { flashCol = new THREE.Color(color); flashT = 0.25; }
+
+  function spawnBlueprintVFX(vfxType) {
+    if (!round) return;
+    const vfxColors = {
+      portal: [0x9e2ecf, 0x5a0db8, 0xd47aff, 0x2e0059],
+      beacon: [0x4dedf4, 0x6ff7fc, 0xffffff, 0x22c2c9],
+      fire: [0xff4400, 0xffaa00, 0xff2200, 0xffdd44],
+      torches: [0xff9900, 0xffdd44, 0xff5500],
+      redstone: [0xff1111, 0xcc0000, 0xff6666],
+      wheat: [0xecd429, 0xc4a835, 0x55aa22],
+      emerald: [0x2fbf6d, 0x41d47f, 0x77f0ad],
+      sand: [0xd8c582, 0xc9b072, 0xefdfaa],
+      sparkle: [0xffe600, 0xffffff, 0xffaa00],
+    };
+    const pal = vfxColors[vfxType] || vfxColors.sparkle;
+    for (let i = 0; i < 45; i++) {
+      const s = 0.16 + Math.random() * 0.16;
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(s, s, s),
+        new THREE.MeshBasicMaterial({ color: pal[i % pal.length] })
+      );
+      const px = (Math.random() - 0.5) * (round.C * CELL);
+      const py = wallCenterYFor(round.R) + (Math.random() - 0.5) * (round.R * CELL * 0.6);
+      m.position.set(px, py, 0.4);
+      const speed = 2.5 + Math.random() * 3.5;
+      const angle = Math.random() * Math.PI * 2;
+      m.userData.v = new THREE.Vector3(Math.cos(angle) * speed, 3.5 + Math.random() * 4.5, Math.sin(angle) * speed);
+      root.add(m);
+      confetti.push({ mesh: m, life: 1.8 });
+    }
+  }
+
   function celebrate() {
     for (let i = 0; i < 60; i++) {
       const m = new THREE.Mesh(
@@ -807,6 +866,7 @@ export function createBlockBuilder(ctx) {
       else mm?.dispose?.();
     });
     blocks.dispose(); slotGeo.dispose();
+    disposeTrees(scene, treesGroup);
     ui.els.btnRecenter.style.display = ''; // restore what start() hid
     engine.resetCamera();
     round = null; phase = 'idle';

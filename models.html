@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D Models & Mobs Dev Showcase — The Maths Mine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Pixelify+Sans:wght@600;700&display=swap" rel="stylesheet" />
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        background: #181920;
+        color: #e0e2ec;
+        font-family: system-ui, -apple-system, sans-serif;
+        overflow: hidden;
+        height: 100vh;
+        width: 100vw;
+        display: flex;
+      }
+      #viewport {
+        flex: 1;
+        height: 100%;
+        position: relative;
+      }
+      #canvas-container {
+        width: 100%;
+        height: 100%;
+      }
+      #sidebar {
+        width: 360px;
+        height: 100%;
+        background: #20222c;
+        border-left: 2px solid #2f3242;
+        padding: 20px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        z-index: 10;
+        box-shadow: -4px 0 20px rgba(0,0,0,0.4);
+      }
+      h1 {
+        font-family: 'Pixelify Sans', sans-serif;
+        font-size: 22px;
+        color: #ffd15c;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .badge {
+        background: #394260;
+        color: #8cc5ef;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-family: sans-serif;
+      }
+      .section-title {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: #8c93a8;
+        font-weight: 700;
+        margin-top: 4px;
+      }
+      .model-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+      }
+      .btn {
+        background: #2b2e3e;
+        border: 2px solid #3d4258;
+        color: #e0e2ec;
+        padding: 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        transition: all 0.15s ease;
+      }
+      .btn:hover {
+        background: #393e54;
+        border-color: #555d7a;
+      }
+      .btn.active {
+        background: #ffd15c;
+        color: #241a10;
+        border-color: #e6b83b;
+      }
+      .control-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #272a38;
+        padding: 8px 12px;
+        border-radius: 6px;
+      }
+      .control-row label {
+        font-size: 13px;
+        font-weight: 500;
+      }
+      input[type="range"] {
+        flex: 0 0 130px;
+        accent-color: #ffd15c;
+      }
+      .toggle-btn {
+        padding: 4px 10px;
+        font-size: 12px;
+      }
+      #hud-info {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        background: rgba(24, 25, 32, 0.85);
+        backdrop-filter: blur(8px);
+        padding: 12px 18px;
+        border-radius: 8px;
+        border: 1px solid #383c50;
+        font-size: 13px;
+        color: #b0b6cc;
+        pointer-events: none;
+      }
+      #hud-info strong {
+        color: #ffffff;
+        font-size: 15px;
+      }
+      .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #8cc5ef;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 13px;
+        margin-top: auto;
+        padding: 10px;
+        background: #262938;
+        border-radius: 6px;
+        text-align: center;
+        justify-content: center;
+      }
+      .back-link:hover {
+        background: #33374c;
+        color: #ffffff;
+      }
+      #tex-preview-container {
+        background: #181920;
+        padding: 8px;
+        border-radius: 6px;
+        border: 1px solid #2f3242;
+        text-align: center;
+      }
+      #tex-preview {
+        max-width: 100%;
+        height: 120px;
+        image-rendering: pixelated;
+        border: 1px solid #444;
+        background: #000;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="viewport">
+      <div id="canvas-container"></div>
+      <div id="hud-info">
+        <div id="model-name"><strong>Iron Golem</strong></div>
+        <div id="model-stats">Height: ~2.4m | Articulated Skeleton</div>
+      </div>
+    </div>
+
+    <div id="sidebar">
+      <div>
+        <h1>Mob Showcase <span class="badge">DEV</span></h1>
+        <p style="font-size: 12px; color: #8c93a8; margin-top: 2px;">Inspect 3D Minecraft models & limb physics</p>
+      </div>
+
+      <div class="section-title">Select Model</div>
+      <div class="model-grid">
+        <button class="btn active" data-model="golem">🪨 Iron Golem</button>
+        <button class="btn" data-model="villager">🟤 Villager</button>
+        <button class="btn" data-model="zombie">🟢 Zombie</button>
+        <button class="btn" data-model="creeper">💥 Creeper</button>
+        <button class="btn" data-model="ghast">⬜ Ghast</button>
+        <button class="btn" data-model="enderman">⬛ Enderman</button>
+        <button class="btn" data-model="steve">🧑 Steve</button>
+      </div>
+
+      <div class="section-title">Animation Controls</div>
+      <div class="control-row">
+        <label>Animate Limbs</label>
+        <button id="btn-toggle-anim" class="btn toggle-btn active">ON</button>
+      </div>
+      <div class="control-row">
+        <label>Walk Speed</label>
+        <input id="slider-speed" type="range" min="0.1" max="2.5" step="0.05" value="1.0" />
+      </div>
+      <div class="control-row">
+        <label>Model Scale</label>
+        <input id="slider-scale" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
+      </div>
+
+      <div class="section-title">Attack / Action Sequences</div>
+      <button id="btn-attack" class="btn" style="background: linear-gradient(135deg, #e65100, #ff8f00); border: 1px solid #ffa726; color: #ffffff; font-weight: 700; width: 100%; padding: 10px 14px; font-size: 13px; cursor: pointer; border-radius: 6px; box-shadow: 0 2px 8px rgba(230,81,0,0.3); transition: all 0.15s ease;">⚔️ Trigger Attack Sequence</button>
+      <div style="font-size: 11px; color: #8c93a8; text-align: center; margin-top: 4px; margin-bottom: 8px;">Shortcut: <kbd style="background:#262938; padding:1px 5px; border-radius:3px; border:1px solid #444; color:#fff;">Space</kbd> or <kbd style="background:#262938; padding:1px 5px; border-radius:3px; border:1px solid #444; color:#fff;">A</kbd></div>
+
+      <div class="section-title">Viewport & Rendering</div>
+      <div class="control-row">
+        <label>Wireframe</label>
+        <button id="btn-wireframe" class="btn toggle-btn">OFF</button>
+      </div>
+      <div class="control-row">
+        <label>Auto-Rotate</label>
+        <button id="btn-rotate" class="btn toggle-btn">OFF</button>
+      </div>
+      <div class="control-row">
+        <label>Ground Grid</label>
+        <button id="btn-grid" class="btn toggle-btn active">ON</button>
+      </div>
+
+      <div class="section-title">Texture Map</div>
+      <div id="tex-preview-container">
+        <img id="tex-preview" src="/assets/mobs/iron_golem.png?v=2" alt="Texture map preview" />
+        <div style="font-size: 11px; color: #8c93a8; margin-top: 4px;">Nearest-Neighbor (Pixelated)</div>
+      </div>
+
+      <a href="/" class="back-link">← Return to The Maths Mine</a>
+    </div>
+
+    <script type="module" src="/src/dev/modelsPage.js"></script>
+  </body>
+</html>

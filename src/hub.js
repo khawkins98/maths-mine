@@ -16,8 +16,8 @@ import { createParentDashboard } from './game/parentDashboard.js';
 // reads without being told: dirt, then stone, then emerald.
 const META = {
   'block-builder': { icon: 'dirt', desc: 'Build number-walls out of blocks. × and ÷.' },
-  'shake-a-batch': { icon: 'stone', desc: 'Roll the dice, then count the blocks!' },
-  'spot-the-wrongun': { icon: 'emerald', desc: 'Find the sign that’s fibbing!' },
+  'spot-the-wrongun': { icon: 'emerald', desc: 'Find the player who’s fibbing!' },
+  'night-defense': { icon: 'obsidian', desc: 'Defend your cottage against nighttime mobs!' },
 };
 
 export function createHub(ctx) {
@@ -51,10 +51,95 @@ export function createHub(ctx) {
     // Erasing progress must also un-weather Bolt: he is the visible face of
     // overallProgress(), and a fully verdigris mascot on a blank ledger is the
     // app contradicting itself in front of the next child.
-    onChange: () => { if (bolt.setOxidation) bolt.setOxidation(ctx.mastery.overallProgress()); },
+    onChange: () => {
+      if (bolt.setOxidation) bolt.setOxidation(ctx.mastery.overallProgress());
+      if (ctx.engine.updateBiomeFromProgress) ctx.engine.updateBiomeFromProgress(ctx.mastery.overallProgress());
+    },
   });
   const hubVisible = () => !!ui.els.hub && !ui.els.hub.classList.contains('hidden');
   dash.armOpenGesture(ui.els.hub && ui.els.hub.querySelector('h1'), hubVisible);
+
+  function updateHouseUI() {
+    const wallet = ctx.wallet;
+    const house = ctx.engine.house;
+    if (!ui.els.boltsCount || !house) return;
+
+    ui.els.boltsCount.textContent = wallet ? wallet.bolts : 0;
+    const stage = house.getStage();
+    const cost = house.getNextCost();
+
+    if (ui.els.houseStageText) ui.els.houseStageText.textContent = stage;
+    if (ui.els.houseCostText) ui.els.houseCostText.textContent = cost;
+
+    const btn = ui.els.btnBuildHouse;
+    const STAGE_NAMES = [
+      'Cottage Foundation',
+      'Two-Story Cottage',
+      'Porch & Torches',
+      'Iron Golem Guardian',
+      "Blacksmith's Forge",
+      'Windmill & Farmland',
+      'Pet Tamed Wolf',
+      'Nether Portal & Beacon',
+    ];
+
+    if (btn) {
+      if (stage >= 8) {
+        btn.innerHTML = '🌙 Defend Village (Night Mode)';
+        btn.classList.remove('disabled');
+        btn.classList.add('night-mode');
+      } else {
+        const nextName = STAGE_NAMES[stage] || `Stage ${stage + 1}`;
+        btn.innerHTML = `🔨 Build ${nextName} (${stage}/8) · ${cost} 🔩`;
+        btn.classList.remove('night-mode');
+        if (wallet && wallet.bolts >= cost) {
+          btn.classList.remove('disabled');
+        } else {
+          btn.classList.add('disabled');
+        }
+      }
+    }
+  }
+
+  if (ui.els.btnBuildHouse) {
+    ui.els.btnBuildHouse.addEventListener('click', () => {
+      const house = ctx.engine && ctx.engine.house;
+      const wallet = ctx.wallet;
+      if (!house || !wallet) return;
+
+      const stage = house.getStage();
+      if (stage >= 8) {
+        // Start Night Defence directly
+        play('night-defense');
+        return;
+      }
+
+      const res = house.upgrade(wallet);
+      if (res.success) {
+        if (ctx.audio) ctx.audio.beep(520, 0.15, 'square', 0.1);
+        updateHouseUI();
+        if (res.newStage === 4) {
+          ui.showToast('🛡️ Iron Golem summoned! Night mode unlocked!', 'good');
+          speech.speak('You summoned the Iron Golem to guard your village!');
+        } else if (res.newStage === 5) {
+          ui.showToast("🔨 Blacksmith's Forge constructed! Lava hearth glowing!", 'good');
+          speech.speak("You built the Blacksmith's Forge!");
+        } else if (res.newStage === 6) {
+          ui.showToast('🌾 Farmland & Windmill constructed!', 'good');
+          speech.speak('You built the Farmland and Windmill!');
+        } else if (res.newStage === 7) {
+          ui.showToast('🐾 You tamed a loyal Minecraft Wolf!', 'good');
+          speech.speak('You tamed a loyal pet wolf!');
+        } else if (res.newStage === 8) {
+          ui.showToast('🔮 Nether Portal lit & Celestial Beacon activated!', 'good');
+          speech.speak('You built the Nether Portal and Celestial Beacon!');
+        } else {
+          ui.showToast(`🎉 Village upgraded to Stage ${res.newStage}!`, 'good');
+          speech.speak(`You built stage ${res.newStage} of your village!`);
+        }
+      }
+    });
+  }
 
   function renderCards() {
     const wrap = ui.els.hubCards;
@@ -74,6 +159,7 @@ export function createHub(ctx) {
       card.addEventListener('click', () => play(id));
       wrap.appendChild(card);
     }
+    updateHouseUI();
   }
 
   // Launch a game by id; wire its exit (a back button / ctx.onExit) to the hub.
@@ -92,6 +178,7 @@ export function createHub(ctx) {
   function open() {
     speech.reset(); // the menu greeting should not queue behind a dead round
     if (ctx.stopGame) ctx.stopGame();
+    if (ctx.engine.updateBiomeFromProgress) ctx.engine.updateBiomeFromProgress(ctx.mastery.overallProgress());
     ui.hideBack();
     ui.hideChoices();
     ui.hideConfirm();
@@ -105,6 +192,7 @@ export function createHub(ctx) {
     ui.setStatus('');
     ui.hideClaim();
     renderCards();
+    updateHouseUI();
     ui.showHub();
     bolt.resetPlacement();
     bolt.show(true);

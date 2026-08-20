@@ -15,19 +15,27 @@ import { createAudio } from './core/audio.js';
 import { createSpeech } from './core/speech.js';
 import { createUI } from './core/ui.js';
 import { createWorldFeel } from './core/worldFeel.js';
+import { loadCharacterAssets } from './core/characters.js';
+import { loadMobs } from './core/mobs.js';
 
 import { MasteryStore } from './game/mastery.js';
 import { Wallet } from './game/wallet.js';
 import { TiltInput } from './game/sensors.js';
 import { createBolt } from './game/bolt.js';
+import { BIOME_ORDER } from './core/biomes.js';
 
 import { createBlockBuilder } from './games/blockBuilder.js';
-import { createShakeBatch } from './games/shakeBatch.js';
 import { createSpotWrongun } from './games/spotWrongun/index.js';
+import { createNightDefense } from './games/nightDefense/index.js';
 import { createHub } from './hub.js';
+import { createReferenceTray } from './game/referenceTray.js';
 
 // ---------- shared services ----------
 const textures = createTextures();
+const [characterAssets, mobFactories] = await Promise.all([
+  loadCharacterAssets(),
+  loadMobs(),
+]);
 const engine = createEngine({ textures });
 const audio = createAudio();
 const speech = createSpeech();
@@ -35,7 +43,7 @@ const ui = createUI();
 const mastery = new MasteryStore();
 const wallet = new Wallet();
 const sensors = new TiltInput();
-const bolt = createBolt({ scene: engine.scene, camera: engine.camera, textures, nowT: engine.nowT, bubbleEl: ui.els.bubble });
+const bolt = createBolt({ scene: engine.scene, camera: engine.camera, textures, characterAssets, nowT: engine.nowT, bubbleEl: ui.els.bubble });
 // Parallax + a springy, touchable ground. Long-lived: it belongs to the world,
 // not to any one game, so it survives every game switch.
 const worldFeel = createWorldFeel({ engine, audio, textures });
@@ -52,6 +60,8 @@ const ctx = {
   camera: engine.camera,
   engine,        // frame/reset camera, worldToScreen, nowT, placeCamera, VIEW_DIR
   textures,      // shared CanvasTextures (do NOT dispose in teardown)
+  characterAssets, // shared Kenney model geometry + interchangeable skins
+  mobFactories,    // Minecraft mobs: villager, zombie, ghast, enderman (GLB or procedural fallback)
   audio,         // WebAudio SFX
   speech,        // TTS narration + phrase variety
   ui,            // HUD helpers
@@ -64,15 +74,17 @@ const ctx = {
   onExit: null,  // set by the host (hub/main) so a game can request to leave
 };
 
+window.__engine = () => engine;
+
 // ---------- game switcher ----------
 // title is read off the factory function by the hub for card labels
 createBlockBuilder.title = 'Block Builder';
-createShakeBatch.title = 'Shake-a-Batch';
 createSpotWrongun.title = 'Spot the Wrong’un';
+createNightDefense.title = 'Night Defence';
 const GAMES = {
   'block-builder': createBlockBuilder,
-  'shake-a-batch': createShakeBatch,
   'spot-the-wrongun': createSpotWrongun,
+  'night-defense': createNightDefense,
 };
 let current = null;
 function startGame(id, opts) {
@@ -100,10 +112,39 @@ ctx.games = GAMES;
 // the game picker
 const hub = createHub(ctx);
 
+// the times-table reference tray ("cheat sheet")
+const referenceTray = createReferenceTray({ mastery, ui });
+ctx.referenceTray = referenceTray;
+
 // debug hook: the shared mascot (headless smoke tests + oxidation checks)
 window.__bolt = bolt;
 window.__audio = audio;
 window.__speech = speech;
+window.__referenceTray = referenceTray;
+
+// ---------- debug terrain switching ([ and ]) ----------
+function cycleBiome(delta) {
+  const currentId = engine.currentBiome().id;
+  let idx = BIOME_ORDER.indexOf(currentId);
+  if (idx < 0) idx = 0;
+  const nextIdx = (idx + delta + BIOME_ORDER.length) % BIOME_ORDER.length;
+  const nextId = BIOME_ORDER[nextIdx];
+  engine.setBiome(nextId);
+  const b = engine.currentBiome();
+  ui.showToast(`Biome: ${b.name}`, 'good');
+  return b;
+}
+window.__nextBiome = () => cycleBiome(1);
+window.__prevBiome = () => cycleBiome(-1);
+
+document.addEventListener('keydown', (e) => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return;
+  if (e.key === ']') {
+    cycleBiome(1);
+  } else if (e.key === '[') {
+    cycleBiome(-1);
+  }
+});
 
 // ---------- render loop dispatch ----------
 // The engine owns the loop; here we fan out per-frame work: the active game's
@@ -140,34 +181,25 @@ if (ui.els.btnVoice) ui.els.btnVoice.addEventListener('click', () => {
   if (on) speech.speak('Voice on!');
 });
 
-// ---------- the gate: one tap = sensor permission + audio unlock + start ----------
-ui.els.btnWake.addEventListener('click', async () => {
+// Unlock audio/speech on first user gesture anywhere
+document.addEventListener('pointerdown', () => {
   audio.init();
   audio.resume();
-  speech.prime(); // prime TTS synchronously inside this gesture (iOS needs it)
+  speech.prime();
+}, { once: true });
 
-  const granted = await sensors.requestAndStart();
-  // Permission/API can say "yes" while no hardware ever emits data (desktop
-  // Chrome). Wait a beat and only call it tilt-mode if real data arrived.
-  if (granted) await new Promise((r) => setTimeout(r, 500));
-  usingSensors = granted && sensors.available;
-  if (usingSensors) sensors.recenter();
+// ---------- direct boot into level select (hub) ----------
+ui.hideGate();
+bolt.show(true);
+hub.open();
 
-  // The wooden signs paint their equation onto a canvas, and canvas text does
-  // NOT wait for a webfont — it silently falls back to system-ui and stays that
-  // way, because the texture is only drawn once. Wait for the font here (we're
-  // well past first paint by now, so this is normally instant), but never hang
-  // the game on a font that fails to load.
-  if (document.fonts && document.fonts.ready) {
-    await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]);
-  }
-
-  ui.hideGate();
-  bolt.show(true);
-  audio.beep(660, 0.12, 'triangle', 0.06);
-
-  // Into the hub: pick a game (Block Builder or Shake-a-Batch). Each game wires
-  // ctx.onExit + the ← Menu button back to hub.open().
-  hub.open();
-  ui.showToast(usingSensors ? 'Motion on — pick a game!' : 'Pick a game to play!', 'good');
-});
+if (ui.els.btnWake) {
+  ui.els.btnWake.addEventListener('click', async () => {
+    audio.init();
+    audio.resume();
+    speech.prime();
+    ui.hideGate();
+    bolt.show(true);
+    hub.open();
+  });
+}

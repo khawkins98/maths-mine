@@ -254,6 +254,30 @@
       .hub-card .hc-title { font-weight: 700; font-size: clamp(20px, 5vw, 28px); color: var(--ink-light); text-shadow: 0 2px 0 rgba(0,0,0,0.4); }
       .hub-card .hc-desc { font-family: var(--body); font-weight: 600; font-size: clamp(13px, 3.4vw, 16px); color: #f2e6cc; max-width: 22ch; line-height: 1.35; }
 
+      #house-bar {
+        display: flex; gap: 14px; align-items: center; justify-content: center;
+        margin-top: 16px; flex-wrap: wrap; pointer-events: auto;
+      }
+      #bolts-chip {
+        font-family: var(--readout-font); font-weight: 700; font-size: clamp(16px, 4vw, 22px);
+        color: #ffdf70; text-shadow: 0 2px 0 rgba(0,0,0,0.6);
+        background: rgba(0, 0, 0, 0.45); border: 3px solid var(--wood-dark);
+        border-radius: 8px; padding: 8px 16px;
+      }
+      button.hub-build-btn {
+        pointer-events: auto; cursor: pointer;
+        font-family: var(--readout-font); font-weight: 700; font-size: clamp(15px, 3.8vw, 20px);
+        border: 3px solid var(--wood-dark); border-radius: 8px;
+        padding: 10px 20px;
+        background: #388e3c; color: #ffffff;
+        box-shadow: var(--frame), 0 5px 0 #1b5e20;
+        text-shadow: 0 2px 0 rgba(0,0,0,0.5);
+        transition: transform 0.08s steps(2), background 0.12s ease;
+      }
+      button.hub-build-btn:hover { background: #43a047; }
+      button.hub-build-btn:active { transform: translateY(3px); box-shadow: var(--frame), 0 2px 0 #1b5e20; }
+      button.hub-build-btn.disabled { opacity: 0.5; pointer-events: none; background: #616161; }
+
       /* ---- cheap vignette (no post-processing) ---- */
       #vignette {
         position: fixed; inset: 0; z-index: 4; pointer-events: none;
@@ -408,6 +432,10 @@
         60% { transform: translate(-50%, -115%) scale(1.05); }
         100% { transform: translate(-50%, -115%) scale(1); }
       }
+      /* A four-sign portrait layout has no spare horizontal lane for a speech
+         card. The same line is spoken aloud and repeated in the status footer,
+         so suppress the duplicate instead of covering a villager/sign. */
+      @media (orientation: portrait) { #bubble { display: none; } }
 
       /* ---- big surviving-total badge for commutativity ---- */
       #bigtotal {
@@ -568,6 +596,146 @@
       .pd-danger { border: 3px solid #8f2f1c; background: #fdeae5; padding: 12px 14px; }
       .pd-row { display: flex; flex-wrap: wrap; gap: 10px; }
       .pd-btn-danger { background: #b3341c; color: #fff; border-color: #6d1e0f; }
+
+      /* ---- Reference Tray ("Cheat Sheet") (src/game/referenceTray.js) ---- */
+      #btn-ref-tab {
+        position: fixed; top: 50%; right: 0; transform: translateY(-50%);
+        z-index: 25; pointer-events: auto;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 4px; padding: 10px 8px;
+        background: var(--wood-fill);
+        color: var(--ink-light);
+        border: 3px solid var(--wood-dark); border-right: none;
+        box-shadow: -3px 3px 0 var(--wood-drop);
+        cursor: pointer; font-family: var(--num); font-size: 13px; font-weight: 700;
+        transition: transform 0.2s ease, background 0.1s ease;
+      }
+      #btn-ref-tab:hover { background: #b0824b; }
+      #btn-ref-tab.active { transform: translateY(-50%) translateX(100%); opacity: 0; pointer-events: none; }
+      #btn-ref-tab .ref-tab-icon { font-size: 20px; }
+
+      #ref-backdrop {
+        position: fixed; inset: 0; z-index: 29;
+        background: rgba(10, 8, 4, 0.55);
+        backdrop-filter: blur(2px);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s ease;
+      }
+      #ref-backdrop.open {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      #ref-tray {
+        position: fixed; top: 0; right: 0; bottom: 0;
+        width: min(96vw, 920px); z-index: 30;
+        display: flex;
+        background: #e8dcbf;
+        color: #2a1a08;
+        border-left: 4px solid var(--wood-dark);
+        box-shadow: -8px 0 36px rgba(0,0,0,0.65);
+        font-family: var(--num);
+        transform: translateX(100%);
+        transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+        pointer-events: none;
+        visibility: hidden;
+      }
+      #ref-tray.open {
+        transform: translateX(0);
+        pointer-events: auto;
+        visibility: visible;
+      }
+
+      .ref-rail {
+        width: 68px;
+        background: var(--wood-fill);
+        border-right: 3px solid var(--wood-dark);
+        display: flex; flex-direction: column;
+        overflow-y: auto; padding: 10px 6px; gap: 8px;
+      }
+      .ref-rail-btn {
+        width: 100%; height: 48px;
+        background: #c59b63;
+        border: 2px solid var(--wood-dark);
+        color: #2a1a08; font-family: var(--num); font-size: 20px; font-weight: 800;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
+        transition: all 0.1s ease;
+        border-radius: 4px;
+      }
+      .ref-rail-btn.active {
+        background: #ffd35a;
+        border-color: #8c5a1e;
+        box-shadow: inset 0 2px 0 rgba(255,255,255,0.7), 0 2px 4px rgba(0,0,0,0.25);
+        transform: scale(1.06);
+      }
+
+      .ref-content {
+        flex: 1; display: flex; flex-direction: column;
+        overflow-y: auto; padding: 18px 24px;
+      }
+      .ref-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 14px; padding-bottom: 10px; border-bottom: 3px solid #cfc09f;
+      }
+      .ref-header h2 {
+        margin: 0; font-size: 28px; color: #3a2200; letter-spacing: -0.5px;
+      }
+      .ref-close {
+        width: 40px; height: 40px;
+        background: var(--wood-fill); border: 2px solid var(--wood-dark);
+        color: var(--ink-light); font-size: 20px; font-weight: 800;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
+        border-radius: 4px;
+      }
+      .ref-close:hover { background: #b0824b; }
+
+      /* 2-3 Column Grid Layout */
+      .ref-rows {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+        gap: 12px;
+      }
+      .ref-row {
+        display: flex; flex-direction: column;
+        background: #f4ecda; border: 2px solid #d4c6a6;
+        padding: 10px 14px 12px; border-radius: 8px;
+        min-height: 135px;
+        box-sizing: border-box;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+        gap: 8px;
+      }
+      .ref-eq {
+        font-size: 19px; font-weight: 800; color: #2e1c05;
+        display: flex; align-items: center; justify-content: space-between;
+        border-bottom: 1.5px solid #e2d6ba; padding-bottom: 6px;
+      }
+      .ref-prod {
+        color: #d04600; font-size: 20px; font-weight: 900;
+        background: #ffeac2; border: 1.5px solid #dcb07a;
+        padding: 1px 8px; border-radius: 4px;
+      }
+      .ref-vis {
+        flex: 1; height: 88px; width: 100%;
+        display: flex; justify-content: center; align-items: center;
+        overflow: hidden;
+      }
+      .ref-array {
+        display: grid;
+        grid-template-rows: repeat(var(--array-rows), 1fr);
+        grid-template-columns: repeat(var(--array-cols), 1fr);
+        gap: 2px;
+        height: 100%;
+        max-height: 88px;
+        aspect-ratio: var(--array-cols) / var(--array-rows);
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+      .ref-block {
+        width: 100%; height: 100%;
+        border-radius: 1.5px;
+        box-shadow: inset 1px 1px 0 rgba(255,255,255,0.45), inset -1px -1px 0 rgba(0,0,0,0.35);
+      }
     </style>
   </head>
   <body>
@@ -602,6 +770,12 @@
     <div id="hub" class="hidden">
       <h1>The Maths Mine</h1>
       <div id="hub-cards"></div>
+      <div id="house-bar">
+        <div id="bolts-chip">🔩 <span id="bolts-count">0</span></div>
+        <button id="btn-build-house" class="hub-build-btn">
+          🔨 Build House (Stage <span id="house-stage-text">0</span>/4) · <span id="house-cost-text">5</span> 🔩
+        </button>
+      </div>
     </div>
 
     <div id="bigtotal"></div>
@@ -614,8 +788,8 @@
 
     <div class="toast" id="toast"></div>
 
-    <!-- Wake-up-Bolt gate: satisfies iOS sensor permission + audio unlock in one tap -->
-    <div id="gate">
+    <!-- Wake-up-Bolt gate: hidden by default to boot straight to level select -->
+    <div id="gate" class="hidden">
       <svg class="bolt" viewBox="0 0 100 100" aria-hidden="true">
         <!-- fresh (un-oxidised) COPPER Bolt — matches the in-game mascot at 0
              progress; he only weathers to teal as the child masters facts -->
@@ -629,9 +803,9 @@
         <rect x="40" y="62" width="20" height="5" fill="#0c1020"/>
       </svg>
       <h1>The Maths Mine</h1>
-      <p>Three games to master your times tables — with Bolt. Tap below to wake him up and pick a game!</p>
+      <p>Games to master your times tables — with Bolt. Tap below to wake him up and pick a game!</p>
       <button class="big" id="btn-wake">Wake up Bolt!</button>
-      <p class="fine" id="gate-fine">On a tablet this asks permission to use motion (for the shake game). No sensors? Everything works by tapping.</p>
+      <p class="fine" id="gate-fine">On a tablet this asks permission to use motion sensors. No sensors? Everything works by tapping.</p>
     </div>
 
     <script type="module" src="/src/main.js"></script>

@@ -92,4 +92,9 @@ export const ICON_PALETTES = {
     fleckTop: ['#35c471', '#5ae596', '#2bb267'],
     fleckSide: ['#27a95e', '#41d47f', '#1e9152'],
   },
+  obsidian: {
+    top: '#312347', left: '#211533', right: '#150c22',
+    fleckTop: ['#473266', '#593b82', '#26183b'],
+    fleckSide: ['#2e1b4a', '#3f2566', '#1a0d2e'],
+  },
 };

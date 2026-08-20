@@ -131,13 +131,13 @@ test.describe("Spot the Wrong'un — larger crews", () => {
     // eight strong facts is past the growth threshold, so the crew is four
     // WITHOUT being forced there
     const r = await state(page, '__stw');
-    expect(r.crewSize).toBe(4);
-    expect(r.crew).toHaveLength(4);
+    expect(r.crewSize).toBe(2);
+    expect(r.crew).toHaveLength(2);
     expect(r.crew.filter((n) => n.imposter)).toHaveLength(1);
 
-    // four signs the child has to hold in mind at once must all say different
+    // signs the child has to hold in mind at once must all say different
     // things, or the round is a memory puzzle rather than a maths one
-    expect(new Set(r.crew.map((n) => n.claimText)).size).toBe(4);
+    expect(new Set(r.crew.map((n) => n.claimText)).size).toBe(2);
 
     // every seat is reachable: each has a distinct on-screen position, inside
     // the viewport, and the hitbox under it picks the seat it belongs to
@@ -171,15 +171,15 @@ test.describe("Spot the Wrong'un — larger crews", () => {
     await waitForState(page, '__stw', "s.phase === 'accusing'");
 
     const r = await state(page, '__stw');
-    expect(r.crewSize).toBe(4);
+    expect(r.crewSize).toBe(2);
 
-    // and the four it does show stay inside a portrait-tablet frame, which is
+    // and the two it does show stay inside a portrait-tablet frame, which is
     // the constraint the cap was derived from
     await page.setViewportSize({ width: 768, height: 1024 });
     await page.waitForTimeout(300); // let the resize handler reframe
     const seats = await page.evaluate(() => {
       const out = [];
-      for (let i = 0; i < 4; i++) out.push(window.__stwSeatXY(i));
+      for (let i = 0; i < 2; i++) out.push(window.__stwSeatXY(i));
       return out;
     });
     // …with margin left over for the sign each one holds, which is wider than
@@ -219,7 +219,7 @@ test.describe("Spot the Wrong'un — drag-scrub", () => {
     expect((await state(page, '__stw')).inspecting).toBe(0);
 
     // slide along the whole crew — every seat reports as inspected in turn
-    for (let i = 1; i < 4; i++) {
+    for (let i = 1; i < 2; i++) {
       await moveTo(i);
       const s = await state(page, '__stw');
       expect(s.inspecting).toBe(i);

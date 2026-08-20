@@ -9,10 +9,29 @@ import { boot, pick, waitForState, state, answer } from './helpers.js';
 // pixel-hunting a WebGL canvas.
 
 test.describe('boot + hub', () => {
-  test('gate leads to a hub listing all three games', async ({ page }) => {
+  test('a synchronously available Firefox-style voice list does not block startup', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'speechSynthesis', {
+        configurable: true,
+        value: {
+          getVoices: () => [{ name: 'Test Voice', lang: 'en-GB', localService: true }],
+          addEventListener() {},
+          speak() {},
+          cancel() {},
+        },
+      });
+    });
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto('/');
+    await expect(page.locator('#hub')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('gate leads to a hub listing available games', async ({ page }) => {
     const errors = await boot(page);
     const { games } = await page.evaluate(() => window.__hub());
-    expect(games).toEqual(['block-builder', 'shake-a-batch', 'spot-the-wrongun']);
+    expect(games).toEqual(['block-builder', 'spot-the-wrongun', 'night-defense']);
     await expect(page.locator('.hub-card')).toHaveCount(3);
     expect(errors).toEqual([]);
   });
@@ -118,66 +137,6 @@ test.describe('Block Builder', () => {
   });
 });
 
-test.describe('Shake-a-Batch', () => {
-  test('one shake rolls the factors, which multiply out into a countable array', async ({ page }) => {
-    const errors = await boot(page);
-    await pick(page, 'shake-a-batch', '__sbb');
-
-    const round = await state(page, '__sbb');
-    expect(round.phase).toBe('rolling');
-
-    // The groups die is an ordinary pip die, so its factor must be rollable.
-    expect(round.target).toBeGreaterThanOrEqual(2);
-    expect(round.target).toBeLessThanOrEqual(6);
-    expect(round.target * round.groupSize).toBe(round.answer);
-
-    // One shake rolls both factors; the array then builds itself.
-    await page.evaluate(() => window.__shake());
-    await waitForState(page, '__sbb', 's.factorDice === 2');
-    await waitForState(page, '__sbb', "s.phase === 'asking'", 40_000);
-
-    const asking = await state(page, '__sbb');
-    expect(asking.groups).toBe(round.target);
-    // exactly one counter per unit of the product, so counting them is the answer
-    expect(asking.dice).toBe(round.answer);
-    expect(asking.choices).toContain(asking.answer);
-
-    await answer(page, asking.answer);
-    await waitForState(page, '__sbb', "s.phase === 'next'", 30_000);
-    expect(errors).toEqual([]);
-  });
-
-  // The whole trick of the game: the dice are loaded to the fact the ledger
-  // wants practised. If loading silently failed the dice would contradict the
-  // question, so read back what each settled die is really showing.
-  test('the loaded dice land showing the factors they were loaded with', async ({ page }) => {
-    await boot(page);
-    await pick(page, 'shake-a-batch', '__sbb');
-    const { target, groupSize } = await state(page, '__sbb');
-
-    await page.evaluate(() => window.__shake());
-    await waitForState(page, '__sbb', "s.phase === 'spawning' || s.phase === 'settling' || s.phase === 'asking'", 30_000);
-
-    const { shown } = await state(page, '__sbb');
-    expect(shown).toHaveLength(2);
-    expect([...shown].sort()).toEqual([target, groupSize].sort());
-
-    // and the counters land square, because a grid of aligned blocks can be
-    // counted at a glance where a scatter of tilted ones cannot
-    await waitForState(page, '__sbb', "s.phase === 'asking'", 40_000);
-    const tilt = await page.evaluate(() => {
-      const scene = window.__bolt.group.parent;
-      let worst = 0;
-      scene.traverse((o) => {
-        if (o.isMesh && o.userData && o.userData.baseScale === 1 && o.userData.landQuat) {
-          worst = Math.max(worst, Math.abs(o.rotation.x), Math.abs(o.rotation.y), Math.abs(o.rotation.z));
-        }
-      });
-      return worst;
-    });
-    expect(tilt).toBeLessThan(1e-6);
-  });
-});
 
 test.describe("Spot the Wrong'un", () => {
   test('judge tier: scores a true/false claim', async ({ page }) => {
@@ -257,8 +216,8 @@ test.describe('progress', () => {
     // switch games: the count must carry, not reset
     await page.locator('#btn-back').click();
     await expect(page.locator('#hub')).toBeVisible();
-    await pick(page, 'shake-a-batch', '__sbb');
-    expect((await state(page, '__sbb')).bolts).toBe(earned);
+    await pick(page, 'spot-the-wrongun', '__stw');
+    expect((await state(page, '__stw')).bolts).toBe(earned);
 
     // and survive a reload
     await boot(page);
@@ -393,7 +352,6 @@ test.describe('teardown', () => {
 
     for (const [id, hook] of [
       ['block-builder', '__bb'],
-      ['shake-a-batch', '__sbb'],
       ['spot-the-wrongun', '__stw'],
     ]) {
       await pick(page, id, hook);

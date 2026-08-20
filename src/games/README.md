@@ -112,10 +112,12 @@ had already grown their own copy.
   Bolt keeps weathering as mastery grows.
 - Narrate with `ctx.speech` and vary phrasing via `pickPhrase`.
 
-## Bolt oxidation (shared mascot state)
+## Mascot experience state
 
-Bolt starts shiny copper (`setOxidation(0)`) for a new child and oxidises toward
-verdigris teal at `setOxidation(1)`, driven off `ctx.mastery.overallProgress()`.
+The shared miner starts bright (`setOxidation(0)`) for a new child and gains a
+subtle weathered tint at `setOxidation(1)`, driven by
+`ctx.mastery.overallProgress()`. The legacy method name remains part of the game
+API so individual games do not need to know which mascot model is installed.
 Any game should refresh it after recording an answer; the state persists across
 games and now across sessions.
 

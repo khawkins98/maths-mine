@@ -44,10 +44,11 @@ export function createJudgeTier(ctx, stage, facts) {
   const wallHalf = (cols) => (cols * CELL) / 2;
   const nugXFor = (cols) => WALL_CX - wallHalf(cols) - 2.0;
 
-  function judgeCellPos(col, row, cols) {
+  function judgeCellPos(col, row, cols, isDiv = false) {
+    const rowGap = isDiv ? 0.22 : 0;
     return {
       x: (col - (cols - 1) / 2) * CELL + WALL_CX,
-      y: BLOCK / 2 + row * CELL,   // row 0 rests on the grass (y ≥ 0)
+      y: BLOCK / 2 + row * CELL + row * rowGap,
       z: 0,
     };
   }
@@ -167,7 +168,7 @@ export function createJudgeTier(ctx, stage, facts) {
       }
       for (let c2 = 0; c2 < cols; c2++) {
         const blk = stage.makeBlock();
-        const p = judgeCellPos(c2, r, cols);
+        const p = judgeCellPos(c2, r, cols, jr.op === 'div');
         blk.position.set(p.x, p.y, p.z);
         stage.setCapGrass(blk, true); // this new row is the exposed top → grassy lip
         blk.scale.setScalar(0.001);
@@ -327,8 +328,8 @@ export function createJudgeTier(ctx, stage, facts) {
       ui.setStatus('Fixed it!');
       bolt.say(correct ? 'You spotted the fib!' : `Tricky one — look, it’s ${answer}.`, 'happy');
       speak(pickPhrase([
-        `Let's count… ${answer}! So ${words()} is ${answer}, not ${claim}. That sign was fibbing!`,
-        `${words(answer)} — not ${claim}. We caught the fib!`,
+        `Let's count… ${answer}! So ${words(answer)}!`,
+        `${words(answer)}! We fixed the sign!`,
       ]));
     }
 
