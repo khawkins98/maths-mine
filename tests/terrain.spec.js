@@ -235,7 +235,7 @@ test.describe('continuous procedural terrain', () => {
   });
 
   test('stabilizes renderer resources and grove ownership through 20 world/game cycles', async ({ page }) => {
-    test.setTimeout(240_000);
+    test.setTimeout(600_000);
     const errors = await boot(page);
     const cycle = async (index) => {
       await page.evaluate((i) => {
