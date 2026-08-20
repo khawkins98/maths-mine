@@ -88,14 +88,17 @@ export function createHub(ctx) {
         btn.innerHTML = '🌙 Defend Village (Night Mode)';
         btn.classList.remove('disabled');
         btn.classList.add('night-mode');
+        btn.disabled = false;
       } else {
         const nextName = STAGE_NAMES[stage] || `Stage ${stage + 1}`;
         btn.innerHTML = `🔨 Build ${nextName} (${stage}/8) · ${cost} 🔩`;
         btn.classList.remove('night-mode');
         if (wallet && wallet.bolts >= cost) {
           btn.classList.remove('disabled');
+          btn.disabled = false;
         } else {
           btn.classList.add('disabled');
+          btn.disabled = true;
         }
       }
     }

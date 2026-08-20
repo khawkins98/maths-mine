@@ -178,6 +178,9 @@ if (ui.els.btnVoice) ui.els.btnVoice.addEventListener('click', () => {
   speech.setVoiceOn(on);
   ui.els.btnVoice.textContent = on ? '🔊' : '🔇';
   ui.els.btnVoice.classList.toggle('off', !on);
+  ui.els.btnVoice.setAttribute('aria-pressed', String(on));
+  ui.els.btnVoice.setAttribute('aria-label', on ? 'Turn voice off' : 'Turn voice on');
+  ui.els.btnVoice.title = on ? 'Turn voice off' : 'Turn voice on';
   if (on) speech.speak('Voice on!');
 });
 
