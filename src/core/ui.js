@@ -100,9 +100,14 @@ export function createUI() {
     els.choices.innerHTML = '';
     for (const v of values) {
       const b = document.createElement('button');
+      b.type = 'button';
       b.className = 'choice';
       b.textContent = v;
-      b.addEventListener('click', () => onPick(v, b));
+      b.addEventListener('click', () => {
+        choiceButtons().forEach((choice) => choice.classList.remove('selected'));
+        b.classList.add('selected');
+        onPick(v, b);
+      });
       els.choices.appendChild(b);
     }
     els.choices.classList.remove('hidden');
@@ -126,7 +131,9 @@ export function createUI() {
     }, 380);
   }
   function choiceButtons() { return [...els.choices.querySelectorAll('.choice')]; }
-  function lockChoices() { choiceButtons().forEach((c) => (c.style.pointerEvents = 'none')); }
+  // A real disabled state blocks keyboard activation as well as pointer taps.
+  // Pointer-events alone allowed Enter/Space to submit an answer repeatedly.
+  function lockChoices() { choiceButtons().forEach((c) => { c.disabled = true; }); }
   function currentChoiceValues() { return choiceButtons().map((c) => Number(c.textContent)); }
 
   function showBigTotal(text) { els.bigTotal.textContent = text; els.bigTotal.className = 'show'; }

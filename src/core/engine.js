@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { BIOMES, biomeForProgress } from './biomes.js';
 import { plantTrees, disposeTrees } from './trees.js';
-import { createBackgroundTerrain } from './terrain.js';
+import { createProceduralTerrain, sampleTerrainHeight, isTerrainDecorationAllowed } from './terrain.js';
 import { createHouseManager } from './house.js';
 
 export const VIEW_DIR = new THREE.Vector3(0.42, 0.55, 1).normalize();
@@ -60,12 +60,10 @@ export function createEngine({ textures }) {
   fill.position.set(-8, 5, -4);
   scene.add(fill);
 
-  // ---- voxel build-plot floating island ----
-  const { platform, ground, updatePlatformTextures } = buildPlatform(textures);
-  scene.add(platform);
-
-  // ---- procedural background terrain & mountains ----
-  const backgroundTerrain = createBackgroundTerrain({ scene, textures });
+  // ---- one continuous seeded terrain, including the flat build clearing ----
+  const terrain = createProceduralTerrain({ scene, textures });
+  const platform = terrain.group; // retained API for the subtle worldFeel spring
+  let ground = null;
 
   // ---- player voxel house & iron golem ----
   const houseManager = createHouseManager({ scene, textures });
@@ -79,15 +77,13 @@ export function createEngine({ textures }) {
   let groveGroup = null;
 
   const defaultGrovePositions = [
-    { x: -11, z: -8 }, { x: 11, z: -8 },
-    { x: -12, z: 2 },  { x: 12, z: 2 },
+    { x: -28, z: -22 }, { x: 28, z: -22 },
+    { x: -30, z: 4 },  { x: 30, z: 4 },
   ];
 
   const forestGrovePositions = [
-    { x: -12, z: -9 }, { x: -6, z: -10 }, { x: 0, z: -10 }, { x: 6, z: -10 }, { x: 12, z: -9 },
-    { x: -14, z: -3 }, { x: 14, z: -3 },
-    { x: -14, z: 3 },  { x: 14, z: 3 },
-    { x: -11, z: 7 },  { x: 11, z: 7 },  { x: 0, z: 8 },
+    { x: -30, z: -25 }, { x: -20, z: -27 }, { x: 0, z: -27 }, { x: 20, z: -27 }, { x: 30, z: -25 },
+    { x: -30, z: -10 }, { x: 30, z: -10 }, { x: -31, z: 5 }, { x: 31, z: 5 },
   ];
 
   function setBiome(target) {
@@ -108,18 +104,16 @@ export function createEngine({ textures }) {
     ambientLight.color.setHex(biome.ambientColor);
     ambientLight.intensity = biome.ambientIntensity;
 
-    // 3. Ground platform textures
-    const topTex = textures[biome.topTexKey] || textures.platGrassTex;
-    const sideTex = textures[biome.sideTexKey] || textures.platDirtTex;
-    updatePlatformTextures(topTex, sideTex);
+    // 3. Terrain geometry/materials. An unchanged seed+biome is a no-op.
+    ground = terrain.build(biome);
 
     // 4. Scenery trees/cacti/fungi/pillars
     if (groveGroup) disposeTrees(scene, groveGroup);
     const positions = biome.treeType === 'dense_oak' ? forestGrovePositions : defaultGrovePositions;
-    groveGroup = plantTrees(scene, positions, textures, biome.treeType);
-
-    // 5. Background procedural mountains
-    backgroundTerrain.updateBiome(biome);
+    const safePositions = positions.filter(({ x, z }) => isTerrainDecorationAllowed(x, z));
+    groveGroup = plantTrees(scene, safePositions.map((p) => ({ ...p,
+      y: sampleTerrainHeight(p.x, p.z, { seed: terrain.inspect().seed, style: biome.mountainStyle }),
+    })), textures, biome.treeType);
   }
 
   // Initialize starting biome
@@ -134,6 +128,53 @@ export function createEngine({ textures }) {
 
   // Debug hook
   window.__biome = (id) => setBiome(id);
+  window.__terrain = () => ({ ...terrain.inspect(), biome: activeBiome.id,
+    sample: (x, z) => sampleTerrainHeight(x, z, { seed: terrain.inspect().seed, style: activeBiome.mountainStyle }),
+    decorationAllowed: isTerrainDecorationAllowed,
+    treeCells: (() => {
+      const cells = [];
+      scene.traverse((object) => {
+        if (!object.userData.decorationType) return;
+        const world = new THREE.Vector3();
+        object.getWorldPosition(world);
+        const box = new THREE.Box3().setFromObject(object);
+        cells.push({ x: world.x, y: world.y, z: world.z,
+          bounds: { minX: box.min.x, maxX: box.max.x, minY: box.min.y, maxY: box.max.y,
+            minZ: box.min.z, maxZ: box.max.z }, type: object.userData.decorationType });
+      });
+      return cells;
+    })(),
+    groveCount: scene.children.filter((object) => object.name === 'background-grove').length,
+    rendererMemory: { ...renderer.info.memory },
+    seedPersistence: 'ephemeral-debug; reload resets the default seed',
+    fluidCells: [],
+  });
+  window.__terrainSetSeed = (seed) => {
+    ground = terrain.setSeed(seed, activeBiome);
+    setBiome(activeBiome); // re-seat owned decoration on the regenerated surface
+    return terrain.inspect();
+  };
+  window.__terrainGroundHit = (x, z) => {
+    const ray = new THREE.Raycaster(new THREE.Vector3(x, 10, z), new THREE.Vector3(0, -1, 0));
+    const hit = ground && ray.intersectObject(ground, false)[0];
+    return hit ? hit.point.y : null;
+  };
+  window.__terrainSightline = (x, y, z) => {
+    const target = new THREE.Vector3(x, y, z);
+    const origin = new THREE.Vector3();
+    camera.getWorldPosition(origin);
+    const distance = origin.distanceTo(target);
+    const ray = new THREE.Raycaster(origin, target.clone().sub(origin).normalize(), 0, distance - 0.05);
+    const groves = scene.children.filter((object) => object.name === 'background-grove');
+    const terrainHits = ground ? ray.intersectObject(ground, false) : [];
+    const groveHits = ray.intersectObjects(groves, true);
+    const projected = target.clone().project(camera);
+    return { clear: terrainHits.length === 0 && groveHits.length === 0,
+      terrainClear: terrainHits.length === 0, groveClear: groveHits.length === 0,
+      checkedTerrain: !!ground, depth: projected.z };
+  };
+  window.__terrainRender = () => { renderer.render(scene, camera); return { ...renderer.info.memory }; };
+  window.__terrainDispose = () => { terrain.dispose(); terrain.dispose(); return terrain.inspect(); };
 
   const clock = new THREE.Clock();
   const nowT = () => clock.getElapsedTime();
@@ -147,15 +188,39 @@ export function createEngine({ textures }) {
     obj3d.getWorldPosition(_proj); _proj.project(camera);
     return { x: (_proj.x * 0.5 + 0.5) * window.innerWidth, y: (-_proj.y * 0.5 + 0.5) * window.innerHeight };
   }
+  function projectBoundsToScreen(obj3d) {
+    obj3d.updateWorldMatrix(true, true);
+    const box = new THREE.Box3();
+    obj3d.traverse((object) => {
+      if (!object.geometry || object.userData.ignoreProjectionBounds) return;
+      if (!object.geometry.boundingBox) object.geometry.computeBoundingBox();
+      box.union(object.geometry.boundingBox.clone().applyMatrix4(object.matrixWorld));
+    });
+    if (box.isEmpty()) return null;
+    const points = [];
+    for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) {
+      for (const z of [box.min.z, box.max.z]) {
+        const point = new THREE.Vector3(x, y, z).project(camera);
+        points.push({ x: (point.x * 0.5 + 0.5) * window.innerWidth,
+          y: (-point.y * 0.5 + 0.5) * window.innerHeight });
+      }
+    }
+    return { minX: Math.min(...points.map((p) => p.x)), maxX: Math.max(...points.map((p) => p.x)),
+      minY: Math.min(...points.map((p) => p.y)), maxY: Math.max(...points.map((p) => p.y)) };
+  }
 
   function placeCamera(centerY, dist, viewDir = VIEW_DIR) {
-    camera.position.copy(viewDir).multiplyScalar(dist);
+    const portraitFit = Math.max(1, Math.min(3.2, 1.45 / camera.aspect));
+    camera.position.copy(viewDir).multiplyScalar(dist * portraitFit);
     camera.position.y += centerY;
     camera.lookAt(0, centerY, 0);
   }
   function resetCamera() {
-    camera.position.set(0, 5.6, 15.5);
-    camera.lookAt(0, 2.0, 0);
+    const portraitFit = Math.max(1, Math.min(3.2, 1.45 / camera.aspect));
+    // The persistent village and Steve both live left of the lesson origin;
+    // centre the hub framing between them and the build plot.
+    camera.position.set(-4.5, 5.6 * portraitFit, 15.5 * portraitFit);
+    camera.lookAt(-4.5, 2.0, 0);
   }
 
   const frameCbs = [];
@@ -181,100 +246,13 @@ export function createEngine({ textures }) {
   function start() { resize(); tick(); }
 
   return {
-    renderer, scene, camera, camRig, ground, platform, key, fill, clock,
+    renderer, scene, camera, camRig, get ground() { return ground; }, platform, key, fill, clock,
     VIEW_DIR, house: houseManager,
-    nowT, worldToScreen, projectToScreen,
+    nowT, worldToScreen, projectToScreen, projectBoundsToScreen,
     placeCamera, resetCamera,
     setBiome, updateBiomeFromProgress, currentBiome: () => activeBiome,
     onFrame, start, resize,
   };
-}
-
-function buildPlatform(textures) {
-  const platform = new THREE.Group();
-  platform.name = 'voxel-island';
-
-  const W = 30, D = 24;
-  const TEXEL = 2;
-
-  function face(tex, ru, rv) {
-    const t = tex.clone();
-    t.needsUpdate = true;
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(ru, rv);
-    return new THREE.MeshStandardMaterial({ map: t, roughness: 1, metalness: 0 });
-  }
-
-  function slab(w, h, d, topTex, sideTex) {
-    const side = () => face(sideTex, 1, 1);
-    const mats = [side(), side(), null, side(), side(), side()];
-    mats[0].map.repeat.set(d / TEXEL, h / TEXEL);
-    mats[1].map.repeat.set(d / TEXEL, h / TEXEL);
-    mats[4].map.repeat.set(w / TEXEL, h / TEXEL);
-    mats[5].map.repeat.set(w / TEXEL, h / TEXEL);
-    mats[3].map.repeat.set(w / TEXEL, d / TEXEL);
-    mats[2] = face(topTex, w / TEXEL, d / TEXEL);
-    const geo = new THREE.BoxGeometry(w, h, d);
-    return new THREE.Mesh(geo, mats);
-  }
-
-  const t1 = slab(W, 1.2, D, textures.platGrassTex, textures.platDirtTex);
-  t1.position.y = -0.6;
-  t1.receiveShadow = true;
-  platform.add(t1);
-
-  const t2 = slab(W - 4, 1.8, D - 4, textures.platDirtTex, textures.platDirtTex);
-  t2.position.y = -1.2 - 0.9;
-  platform.add(t2);
-
-  const t3 = slab(W - 11, 3.0, D - 10, textures.platDirtTex, textures.platDirtTex);
-  t3.position.y = -3.0 - 1.5;
-  platform.add(t3);
-
-  const rimGeo = new THREE.BoxGeometry(1, 1, 1);
-  const rimMat = new THREE.MeshStandardMaterial({ map: textures.platGrassTex.clone(), roughness: 1, metalness: 0 });
-  rimMat.map.needsUpdate = true;
-  rimMat.map.repeat.set(1, 1);
-
-  const hx = W / 2 - 0.5, hz = D / 2 - 0.5;
-  const cells = [];
-  for (let x = -hx; x <= hx; x += 1) { cells.push([x, hz]); cells.push([x, -hz]); }
-  for (let z = -hz + 1; z <= hz - 1; z += 1) { cells.push([hx, z]); cells.push([-hx, z]); }
-  const rim = new THREE.InstancedMesh(rimGeo, rimMat, cells.length);
-  rim.receiveShadow = true;
-  const m4 = new THREE.Matrix4();
-  cells.forEach(([x, z], i) => {
-    const lift = 0.35 + ((x + z) & 1 ? 0.14 : 0);
-    m4.makeTranslation(x, lift - 0.5, z);
-    rim.setMatrixAt(i, m4);
-  });
-  rim.instanceMatrix.needsUpdate = true;
-  platform.add(rim);
-
-  function updatePlatformTextures(topTex, sideTex) {
-    // t1 top (material index 2) & sides (index 0,1,3,4,5)
-    t1.material[2].map.image = topTex.image; t1.material[2].map.needsUpdate = true;
-    [0, 1, 3, 4, 5].forEach((i) => {
-      t1.material[i].map.image = sideTex.image;
-      t1.material[i].map.needsUpdate = true;
-    });
-
-    // t2 & t3
-    [t2, t3].forEach((t) => {
-      t.material.forEach((mat) => {
-        if (mat && mat.map) {
-          mat.map.image = sideTex.image;
-          mat.map.needsUpdate = true;
-        }
-      });
-    });
-
-    // rim
-    rimMat.map.image = topTex.image;
-    rimMat.map.needsUpdate = true;
-  }
-
-  return { platform, ground: t1, updatePlatformTextures };
 }
 
 function buildClouds() {

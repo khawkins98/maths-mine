@@ -85,17 +85,20 @@ export function createHub(ctx) {
 
     if (btn) {
       if (stage >= 8) {
-        btn.innerHTML = '🌙 Defend Village (Night Mode)';
+        btn.innerHTML = '<span aria-hidden="true">🌙</span> Defend Village <span class="cta-detail">Night Mode</span>';
         btn.classList.remove('disabled');
         btn.classList.add('night-mode');
+        btn.disabled = false;
       } else {
         const nextName = STAGE_NAMES[stage] || `Stage ${stage + 1}`;
-        btn.innerHTML = `🔨 Build ${nextName} (${stage}/8) · ${cost} 🔩`;
+        btn.innerHTML = `<span aria-hidden="true">🔨</span> Build ${nextName} <span class="cta-detail">${stage}/8 · ${cost} 🔩</span>`;
         btn.classList.remove('night-mode');
         if (wallet && wallet.bolts >= cost) {
           btn.classList.remove('disabled');
+          btn.disabled = false;
         } else {
           btn.classList.add('disabled');
+          btn.disabled = true;
         }
       }
     }
@@ -152,6 +155,7 @@ export function createHub(ctx) {
       const card = document.createElement('button');
       card.className = 'hub-card';
       card.dataset.game = id;
+      card.dataset.material = meta.icon;
       card.innerHTML =
         `<img class="hc-icon" alt="" src="${iconFor(meta.icon)}">` +
         `<div class="hc-title">${(factory && factory.title) || title}</div>` +
@@ -196,8 +200,8 @@ export function createHub(ctx) {
     ui.showHub();
     bolt.resetPlacement();
     bolt.show(true);
-    // Bolt walks in, then greets the child with a wave.
-    if (bolt.playWalk) { bolt.playWalk(true); timers.later(() => bolt.playWalk(false), 1100); }
+    // Game teardown must leave no latent locomotion state; greet from the
+    // restored home pose rather than scheduling a walk timer across scenes.
     bolt.say('Pick a game!', '');
     if (bolt.playWave) timers.later(() => bolt.playWave(), 1150);
     speech.speak('Pick a game to play!');

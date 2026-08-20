@@ -22,7 +22,6 @@ import { createPointerInput } from '../core/pointer.js';
 import { buildChoiceSet } from '../core/choices.js';
 import { easeOutBack, easeOutBounce, easeOutCubic } from '../core/ease.js';
 import { createBlockKit, CELL, BLOCK, CAP_H, BODY_H } from '../core/blocks.js';
-import { plantTrees, disposeTrees } from '../core/trees.js';
 import { getBlueprint } from './blueprints.js';
 
 const DROP_INTERVAL = 0.16;    // seconds between poured blocks (full pour)
@@ -54,13 +53,6 @@ export function createBlockBuilder(ctx) {
   // ---- the game's own scene subtree ----
   const root = new THREE.Group();
   scene.add(root);
-
-  // Minecraft oak trees around the clearing edges for atmosphere.
-  // Positions are behind/beside the play area so they never obstruct blocks.
-  const treesGroup = plantTrees(scene, [
-    { x: -13, z: -7 }, { x: -7, z: -10 },
-    { x: 7, z: -10 }, { x: 13, z: -7 },
-  ], textures);
 
   let wall = new THREE.Group();
   root.add(wall);
@@ -96,6 +88,7 @@ export function createBlockBuilder(ctx) {
   let firstRound = true;
   let moldGroup = null, pulsedTile = null;
   let forcedOp = null;   // test hook: force the next round's operation
+  let forcedDimensions = null; // explicit debug/QA round; normal production flow leaves this null
   let flashT = 0, flashCol = null;
   let spinRAF = 0;    // the commutativity rotate's own animation frame
   let divSplit = null; // the division reveal, advanced by update(dt)
@@ -201,7 +194,14 @@ export function createBlockBuilder(ctx) {
   // ---------- round flow ----------
   function newRound() {
     speech.reset(); // a new round starts a new sentence, not a queue
-    const q = mastery.nextQuestion(forcedOp ? { op: forcedOp } : {});
+    let q = mastery.nextQuestion(forcedOp ? { op: forcedOp } : {});
+    if (forcedDimensions) {
+      const { C, R, op } = forcedDimensions;
+      q = op === 'div'
+        ? { op, a: C, b: R, dividend: C * R, divisor: R, quotient: C }
+        : { op: 'mul', a: C, b: R };
+      forcedDimensions = null;
+    }
     mastery.beginQuestion(q);
     forcedOp = null;
     clearWall();
@@ -241,6 +241,7 @@ export function createBlockBuilder(ctx) {
       placed: 0, groupsDone: 0, askT: 0, answered: false,
       blueprint: bp,
       blockKit: roundBlockKit,
+      visualC: C, visualR: R,
     };
     buildMold(C, R);
     frameCamera(C, R);
@@ -626,6 +627,8 @@ export function createBlockBuilder(ctx) {
         setCapGrass(b, c === 0);
       }
     }
+    round.visualC = R;
+    round.visualR = C;
   }
 
   // ---------- input: tap / drag to place (ray-picked) ----------
@@ -820,6 +823,9 @@ export function createBlockBuilder(ctx) {
     window.__bb = () => ({
       placed: round?.placed, groupsDone: round?.groupsDone, phase,
       C: round?.C, R: round?.R, answer: round?.answer,
+      a: round?.a, b: round?.b,
+      dividend: round?.dividend, divisor: round?.divisor, quotient: round?.quotient,
+      visualC: round?.visualC, visualR: round?.visualR,
       op: round?.op, mode: round?.op,
       divisionGap: round?.divisionGap || 0,
       rowYs: round?.op === 'div' && round.blocks[0]
@@ -831,9 +837,17 @@ export function createBlockBuilder(ctx) {
     window.__place = (c, r) => placeInCell(c, r);
     window.__cellXY = (c, r) => { const p = cellPos(c, r, round.C, round.R); return engine.worldToScreen(p.x + wall.position.x, p.y + wall.position.y); };
     window.__nextMode = (op) => { forcedOp = (op === 'div' || op === 'mul') ? op : null; }; // test: force next round's ×/÷
+    window.__bbForceRound = (C, R, op = 'mul') => {
+      const cols = Math.max(2, Math.min(10, Math.round(C)));
+      const rows = Math.max(2, Math.min(6, Math.round(R)));
+      mastery.endQuestion();
+      forcedDimensions = { C: cols, R: rows, op: op === 'div' ? 'div' : 'mul' };
+      newRound();
+      return window.__bb();
+    };
   }
   function clearDebug() {
-    for (const k of ['__bb', '__place', '__cellXY', '__nextMode']) { try { delete window[k]; } catch (_) { window[k] = undefined; } }
+    for (const k of ['__bb', '__place', '__cellXY', '__nextMode', '__bbForceRound']) { try { delete window[k]; } catch (_) { window[k] = undefined; } }
   }
 
   // ---------- interface ----------
@@ -866,7 +880,6 @@ export function createBlockBuilder(ctx) {
       else mm?.dispose?.();
     });
     blocks.dispose(); slotGeo.dispose();
-    disposeTrees(scene, treesGroup);
     ui.els.btnRecenter.style.display = ''; // restore what start() hid
     engine.resetCamera();
     round = null; phase = 'idle';

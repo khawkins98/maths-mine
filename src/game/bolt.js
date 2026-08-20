@@ -72,6 +72,8 @@ export function createBolt({ scene, camera, textures, characterAssets, nowT, bub
   function resetPlacement() {
     bolt.userData.scale = BOLT_SCALE;
     home.copy(BOLT_HOME);
+    walkOn = false;
+    walkT = 0;
   }
 
   function placeAt(x, z, scale = 1) {
@@ -123,6 +125,11 @@ export function createBolt({ scene, camera, textures, characterAssets, nowT, bub
   function startAction(name) { action = name; actionT = 0; }
   function playWave() { startAction('wave'); }
   function playWalk(on) { walkOn = !!on; if (on) walkT = 0; }
+  function debugState() {
+    return { home: { x: home.x, y: home.y, z: home.z },
+      position: { x: bolt.position.x, y: bolt.position.y, z: bolt.position.z },
+      visible: bolt.visible, walking: walkOn, action, hasTranslationPath: false };
+  }
 
   // Reset every joint to its neutral pose, then re-apply the layered anims. This
   // keeps things drift-free: each frame is computed from scratch.
@@ -293,6 +300,6 @@ export function createBolt({ scene, camera, textures, characterAssets, nowT, bub
   }
 
   return { group: bolt, headAnchor, react, say, update, updateBubble, setOxidation, show, placeAt, resetPlacement,
-    playWave, playWalk, dispose,
+    playWave, playWalk, debugState, dispose,
     get oxidation() { return oxidation; } };
 }

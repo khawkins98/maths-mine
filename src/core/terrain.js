@@ -1,175 +1,161 @@
-// core/terrain.js — Procedural background terrain & mountain ranges.
-// Generates voxel-styled background mountains, snow-capped peaks, rolling hills,
-// desert mesas, nether spires, and end void structures.
-
+// Deterministic continuous voxel terrain with a protected gameplay clearing.
 import * as THREE from 'three';
 
-const BLOCK_XZ = 3.2;
-const BLOCK_Y = 1.8;
+export const TERRAIN_SEED = 0x4d415448;
+export const TERRAIN_CELL = 2;
+export const TERRAIN_X_RADIUS = 34;
+export const TERRAIN_MIN_Z = -46;
+export const TERRAIN_MAX_Z = 30;
+export const PROTECTED_BOUNDS = Object.freeze({ minX: -12, maxX: 8, minZ: -8, maxZ: 6 });
+export const ENVELOPE_BOUNDS = Object.freeze({ minX: -14, maxX: 10, minZ: -10, maxZ: 8 });
+const TERRAIN_BASE_Y = -7;
 
-export function createBackgroundTerrain({ scene, textures }) {
-  const containerGroup = new THREE.Group();
-  containerGroup.name = 'background-terrain';
-  scene.add(containerGroup);
+function hash2(x, z, seed) {
+  let h = (Math.imul(x, 374761393) + Math.imul(z, 668265263) + seed) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+export function isInsideBounds(x, z, bounds = PROTECTED_BOUNDS) {
+  return x >= bounds.minX && x <= bounds.maxX && z >= bounds.minZ && z <= bounds.maxZ;
+}
 
-  let currentGroup = null;
+export function distanceFromEnvelope(x, z) {
+  return Math.max(ENVELOPE_BOUNDS.minX - x, x - ENVELOPE_BOUNDS.maxX,
+    ENVELOPE_BOUNDS.minZ - z, z - ENVELOPE_BOUNDS.maxZ, 0);
+}
+
+export function isTerrainDecorationAllowed(x, z) {
+  return distanceFromEnvelope(x, z) >= TERRAIN_CELL * 2;
+}
+
+/** Pure production height model. The distance cap guarantees <= 1:1 slope. */
+export function sampleTerrainHeight(x, z, { seed = TERRAIN_SEED, style = 'hills' } = {}) {
+  const distance = distanceFromEnvelope(x, z);
+  if (distance === 0) return 0;
+  let amplitude = 3, bias = 0.25;
+  if (style === 'flat') { amplitude = 1; bias = 0; }
+  else if (style === 'forest_mountains') { amplitude = 4; bias = 0.7; }
+  else if (style === 'mesas') { amplitude = 3.5; bias = 0.4; }
+  else if (style === 'snow_peaks') { amplitude = 5; bias = 1; }
+  else if (style === 'nether_spires') { amplitude = 4; bias = 0.2; }
+  else if (style === 'end_void') { amplitude = 3.5; bias = 0.4; }
+  // Seeded phases make this deterministic while the long wavelengths put a
+  // strict upper bound below one vertical unit per TERRAIN_CELL step.
+  const phaseX = hash2(0, 0, seed) * Math.PI * 2;
+  const phaseZ = hash2(1, 1, seed) * Math.PI * 2;
+  const broad = Math.sin(x / 24 + phaseX) * 0.7 + Math.cos(z / 22 + phaseZ) * 0.3;
+  let desired = broad * amplitude + bias;
+  if (style === 'nether_spires') desired += Math.max(0, Math.sin((x + z) / 30 + phaseZ));
+  const maxRise = Math.floor(distance / TERRAIN_CELL);
+  return Math.max(-maxRise, Math.min(maxRise, Math.round(desired)));
+}
+
+export function createProceduralTerrain({ scene, textures, seed = TERRAIN_SEED }) {
+  const group = new THREE.Group();
+  group.name = 'procedural-terrain';
+  scene.add(group);
+  let activeSeed = seed | 0;
+  let current = null;
+  let cacheKey = null;
+  let disposed = false;
+  let generation = 0;
 
   function disposeCurrent() {
-    if (!currentGroup) return;
-    containerGroup.remove(currentGroup);
-    currentGroup.traverse((child) => {
-      if (child.isMesh) {
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) {
-          if (Array.isArray(child.material)) {
-            child.material.forEach((m) => m && m.dispose());
-          } else {
-            child.material.dispose();
-          }
-        }
-      }
-    });
-    currentGroup = null;
+    if (!current) return;
+    group.remove(current.group);
+    current.geometries.forEach((geometry) => geometry.dispose());
+    current.materials.forEach((m) => m.dispose());
+    current = null;
+    cacheKey = null;
   }
 
-  function buildTerrainForBiome(biome) {
+  function build(biome) {
+    const nextKey = `${activeSeed}:${biome.id}`;
+    if (current && cacheKey === nextKey) return current.surface;
     disposeCurrent();
-
-    const style = biome.mountainStyle || 'hills';
-    if (style === 'none') return;
-
-    currentGroup = new THREE.Group();
-    currentGroup.name = `terrain-${biome.id}`;
-
-    // Select materials matching the biome
-    const topTex = textures[biome.topTexKey] || textures.platGrassTex;
-    const sideTex = textures[biome.sideTexKey] || textures.platDirtTex;
-
-    const topMat = new THREE.MeshStandardMaterial({ map: topTex, roughness: 0.85, metalness: 0 });
-    const sideMat = new THREE.MeshStandardMaterial({ map: sideTex, roughness: 0.9, metalness: 0 });
-    const snowMat = new THREE.MeshStandardMaterial({ map: textures.platSnowTex, roughness: 0.85, metalness: 0 });
-
-    // Grid coordinates for distant background (placed further back on horizon)
-    const X_MIN = -90, X_MAX = 90;
-    const Z_MIN = -85, Z_MAX = -42;
-    const cols = Math.floor((X_MAX - X_MIN) / BLOCK_XZ);
-    const rows = Math.floor((Z_MAX - Z_MIN) / BLOCK_XZ);
-
-    const bodyTransforms = [];
-    const topTransforms = [];
-    const snowCapTransforms = [];
-
-    const m4 = new THREE.Matrix4();
-
-    for (let r = 0; r < rows; r++) {
-      const z = Z_MIN + r * BLOCK_XZ;
-      for (let c = 0; c < cols; c++) {
-        const x = X_MIN + c * BLOCK_XZ;
-
-        let heightLayers = 0;
-        let isSnowPeak = false;
-
-        if (style === 'flat') {
-          // Flat grasslands: low subtle horizon rise
-          const n = Math.sin(x * 0.05) * Math.cos(z * 0.05);
-          heightLayers = n > 0.6 ? 1 : 0;
-        } else if (style === 'hills') {
-          // Rolling home hills: gentle green background hills (1 to 3 layers)
-          const wave = Math.sin(x * 0.06) * Math.cos(z * 0.07) + Math.sin(x * 0.03 + z * 0.03);
-          heightLayers = Math.max(1, Math.floor(1.2 + wave * 1.5));
-        } else if (style === 'forest_mountains') {
-          // Forested mountain range: 2 to 5 layers
-          const wave = Math.sin(x * 0.05) * Math.sin((z + 10) * 0.06) + Math.cos(x * 0.03);
-          heightLayers = Math.max(1, Math.floor(2.0 + wave * 2.2));
-        } else if (style === 'mesas') {
-          // Desert canyon mesas: stepped flat top plateaus
-          const wave = Math.sin(x * 0.05) * Math.cos(z * 0.06);
-          const rawH = Math.floor(2.0 + wave * 3.0);
-          heightLayers = rawH > 3 ? 4 : rawH > 1 ? 2 : 1;
-        } else if (style === 'snow_peaks') {
-          // Towering snow-capped mountain peaks along the horizon
-          const peak1 = Math.max(0, 1 - Math.hypot(x + 50, z + 65) / 35);
-          const peak2 = Math.max(0, 1 - Math.hypot(x + 15, z + 70) / 40);
-          const peak3 = Math.max(0, 1 - Math.hypot(x - 22, z + 60) / 32);
-          const peak4 = Math.max(0, 1 - Math.hypot(x - 55, z + 68) / 36);
-          const maxPeak = Math.max(peak1, peak2, peak3, peak4);
-
-          const ridgeNoise = (Math.sin(x * 0.1) * Math.cos(z * 0.1) + 1) * 0.15;
-          const hVal = (maxPeak + ridgeNoise) * 8.0;
-          heightLayers = Math.max(1, Math.floor(hVal));
-          if (heightLayers >= 4) isSnowPeak = true;
-        } else if (style === 'nether_spires') {
-          // Nether jagged spires
-          const spire = Math.abs(Math.sin(x * 0.12) * Math.cos(z * 0.12));
-          heightLayers = spire > 0.5 ? Math.floor(spire * 6) : 1;
-        } else if (style === 'end_void') {
-          // Floating end stone island peaks
-          const island = Math.sin(x * 0.06) * Math.cos(z * 0.06);
-          heightLayers = island > 0.25 ? Math.floor(island * 5) : 0;
-        }
-
-        if (heightLayers <= 0) continue;
-
-        // Build continuous column from ground Y=-3.2 up to heightLayers
-        for (let y = 0; y < heightLayers; y++) {
-          const posY = y * BLOCK_Y - 3.2;
-          m4.makeTranslation(x, posY, z);
-
-          const isTop = (y === heightLayers - 1);
-          if (isTop) {
-            if (style === 'snow_peaks' && isSnowPeak && y >= 3) {
-              snowCapTransforms.push(m4.clone());
-            } else {
-              topTransforms.push(m4.clone());
-            }
-          } else {
-            bodyTransforms.push(m4.clone());
-          }
-        }
+    disposed = false;
+    const terrainGroup = new THREE.Group();
+    terrainGroup.name = `terrain-${biome.id}`;
+    const topMaterial = new THREE.MeshStandardMaterial({ map: textures[biome.topTexKey] || textures.platGrassTex, roughness: 0.9 });
+    const sideMaterial = new THREE.MeshStandardMaterial({ map: textures[biome.sideTexKey] || textures.platDirtTex, roughness: 1 });
+    const surfaceGeometry = new THREE.PlaneGeometry(TERRAIN_CELL, TERRAIN_CELL);
+    surfaceGeometry.rotateX(-Math.PI / 2);
+    const columns = [];
+    for (let z = TERRAIN_MIN_Z; z <= TERRAIN_MAX_Z; z += TERRAIN_CELL) {
+      for (let x = -TERRAIN_X_RADIUS; x <= TERRAIN_X_RADIUS; x += TERRAIN_CELL) {
+        columns.push({ x, z, height: sampleTerrainHeight(x, z, { seed: activeSeed, style: biome.mountainStyle }) });
       }
     }
-
-    const boxGeo = new THREE.BoxGeometry(BLOCK_XZ, BLOCK_Y, BLOCK_XZ);
-    // Multi-material geometry: top face uses topMat/snowMat, sides & bottom use sideMat
-    const topBoxMaterials = [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
-    const snowBoxMaterials = [sideMat, sideMat, snowMat, sideMat, sideMat, sideMat];
-
-    // 1. Body blocks
-    if (bodyTransforms.length > 0) {
-      const bodyMesh = new THREE.InstancedMesh(boxGeo, sideMat, bodyTransforms.length);
-      bodyTransforms.forEach((mat, i) => bodyMesh.setMatrixAt(i, mat));
-      bodyMesh.instanceMatrix.needsUpdate = true;
-      bodyMesh.castShadow = false;
-      bodyMesh.receiveShadow = false;
-      currentGroup.add(bodyMesh);
+    const surface = new THREE.InstancedMesh(surfaceGeometry, topMaterial, columns.length);
+    surface.name = 'terrain-surface';
+    surface.receiveShadow = true;
+    const matrix = new THREE.Matrix4();
+    const rotation = new THREE.Quaternion();
+    columns.forEach(({ x, z, height }, index) => {
+      matrix.compose(new THREE.Vector3(x, height, z), rotation, new THREE.Vector3(1, 1, 1));
+      surface.setMatrixAt(index, matrix);
+    });
+    surface.instanceMatrix.needsUpdate = true;
+    // Emit only exposed vertical faces, rather than drawing buried cube faces.
+    const heightAt = new Map(columns.map((c) => [`${c.x},${c.z}`, c.height]));
+    const sidePositions = [];
+    const sideUvs = [];
+    const addSide = (a, b, bottom) => {
+      sidePositions.push(...a, ...b, b[0], bottom, b[2], ...a, b[0], bottom, b[2], a[0], bottom, a[2]);
+      sideUvs.push(0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0);
+    };
+    for (const { x, z, height } of columns) {
+      const half = TERRAIN_CELL / 2;
+      const neighbours = [
+        { key: `${x + TERRAIN_CELL},${z}`, a: [x + half, height, z - half], b: [x + half, height, z + half] },
+        { key: `${x - TERRAIN_CELL},${z}`, a: [x - half, height, z + half], b: [x - half, height, z - half] },
+        { key: `${x},${z + TERRAIN_CELL}`, a: [x + half, height, z + half], b: [x - half, height, z + half] },
+        { key: `${x},${z - TERRAIN_CELL}`, a: [x - half, height, z - half], b: [x + half, height, z - half] },
+      ];
+      for (const neighbour of neighbours) {
+        const adjacent = heightAt.has(neighbour.key) ? heightAt.get(neighbour.key) : TERRAIN_BASE_Y;
+        if (adjacent < height) addSide(neighbour.a, neighbour.b, adjacent);
+      }
     }
+    const sideGeometry = new THREE.BufferGeometry();
+    sideGeometry.setAttribute('position', new THREE.Float32BufferAttribute(sidePositions, 3));
+    sideGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(sideUvs, 2));
+    sideGeometry.computeVertexNormals();
+    const sides = new THREE.Mesh(sideGeometry, sideMaterial);
+    sides.name = 'terrain-sides';
+    terrainGroup.add(sides, surface);
+    group.add(terrainGroup);
+    current = { group: terrainGroup, surface, geometries: [surfaceGeometry, sideGeometry], materials: [topMaterial, sideMaterial], columns };
+    cacheKey = nextKey;
+    generation += 1;
+    return surface;
+  }
 
-    // 2. Top surface blocks
-    if (topTransforms.length > 0) {
-      const topMesh = new THREE.InstancedMesh(boxGeo, topBoxMaterials, topTransforms.length);
-      topTransforms.forEach((mat, i) => topMesh.setMatrixAt(i, mat));
-      topMesh.instanceMatrix.needsUpdate = true;
-      topMesh.castShadow = false;
-      topMesh.receiveShadow = false;
-      currentGroup.add(topMesh);
-    }
+  function setSeed(nextSeed, biome) {
+    const normalized = Number.isFinite(nextSeed) ? nextSeed | 0 : TERRAIN_SEED;
+    if (normalized === activeSeed) return current && current.surface;
+    activeSeed = normalized;
+    return biome ? build(biome) : null;
+  }
 
-    // 3. Snow-capped peak blocks
-    if (snowCapTransforms.length > 0) {
-      const snowCapMesh = new THREE.InstancedMesh(boxGeo, snowBoxMaterials, snowCapTransforms.length);
-      snowCapTransforms.forEach((mat, i) => snowCapMesh.setMatrixAt(i, mat));
-      snowCapMesh.instanceMatrix.needsUpdate = true;
-      snowCapMesh.castShadow = false;
-      snowCapMesh.receiveShadow = false;
-      currentGroup.add(snowCapMesh);
-    }
-
-    containerGroup.add(currentGroup);
+  function dispose() {
+    if (disposed) return;
+    disposeCurrent();
+    scene.remove(group);
+    disposed = true;
   }
 
   return {
-    group: containerGroup,
-    updateBiome: (biome) => buildTerrainForBiome(biome),
-    dispose: disposeCurrent,
+    group, build, setSeed, dispose,
+    surface: () => current && current.surface,
+    inspect: () => ({ seed: activeSeed, biomeKey: cacheKey, disposed,
+      dimensions: { cell: TERRAIN_CELL, columnsX: TERRAIN_X_RADIUS + 1,
+        columnsZ: (TERRAIN_MAX_Z - TERRAIN_MIN_Z) / TERRAIN_CELL + 1 },
+      coverage: { minX: -TERRAIN_X_RADIUS - TERRAIN_CELL / 2, maxX: TERRAIN_X_RADIUS + TERRAIN_CELL / 2,
+        minZ: TERRAIN_MIN_Z - TERRAIN_CELL / 2, maxZ: TERRAIN_MAX_Z + TERRAIN_CELL / 2 },
+      bounds: { protected: PROTECTED_BOUNDS, envelope: ENVELOPE_BOUNDS },
+      generation, columnCount: current ? current.columns.length : 0,
+      meshCount: current ? current.group.children.length : 0,
+      groundName: current ? current.surface.name : null }),
   };
 }
