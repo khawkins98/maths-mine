@@ -48,8 +48,6 @@ const bolt = createBolt({ scene: engine.scene, camera: engine.camera, textures, 
 // not to any one game, so it survives every game switch.
 const worldFeel = createWorldFeel({ engine, audio, textures });
 
-let usingSensors = false;
-
 // ---------- the shared game context ----------
 // Everything a game module needs. A game adds its objects to a group it owns
 // and fully tears them down; it never reaches into the DOM or the engine
@@ -70,7 +68,9 @@ const ctx = {
   wallet,        // bolts (🔩): shared across games AND sessions
   sensors,       // tilt input
   worldFeel,     // parallax + ground spring: worldFeel.impulse(strength, x, z)
-  get usingSensors() { return usingSensors; },
+  // Permission alone is not proof that the device is sending usable motion.
+  // Report tilt mode only after a real orientation sample has arrived.
+  get usingSensors() { return sensors.enabled && sensors.available; },
   onExit: null,  // set by the host (hub/main) so a game can request to leave
 };
 
@@ -121,6 +121,13 @@ window.__bolt = bolt;
 window.__audio = audio;
 window.__speech = speech;
 window.__referenceTray = referenceTray;
+window.__sensors = () => ({
+  enabled: sensors.enabled,
+  available: sensors.available,
+  usingSensors: ctx.usingSensors,
+  x: sensors.x,
+  y: sensors.y,
+});
 
 // ---------- debug terrain switching ([ and ]) ----------
 function cycleBiome(delta) {
@@ -186,6 +193,10 @@ if (ui.els.btnVoice) ui.els.btnVoice.addEventListener('click', () => {
 
 // Unlock audio/speech on first user gesture anywhere
 document.addEventListener('pointerdown', () => {
+  // Keep this call in the gesture task: iOS rejects motion permission requests
+  // deferred through a timer or another interaction. requestAndStart handles
+  // unsupported, denied, and thrown permission paths as a silent fallback.
+  sensors.requestAndStart();
   audio.init();
   audio.resume();
   speech.prime();
