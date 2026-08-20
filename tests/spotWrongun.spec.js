@@ -44,6 +44,10 @@ async function bootWith(page, save) {
 }
 
 const saved = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('mastery.v1')));
+const factRecord = (save, a, b) => {
+  const key = a <= b ? `${a}x${b}` : `${b}x${a}`;
+  return save.facts.find(([candidate]) => candidate === key)[1];
+};
 
 test.describe("Spot the Wrong'un — division claims", () => {
   test('a villager can claim a division fact, and it can be judged correctly', async ({ page }) => {
@@ -118,6 +122,108 @@ test.describe("Spot the Wrong'un — division claims", () => {
     expect(r.op).toBe('mul');
     for (const n of r.crew) expect(n.claimText).toContain('×');
     expect(errors).toEqual([]);
+  });
+});
+
+test.describe("Spot the Wrong'un — first-try scoring", () => {
+  test('a first-tap fibber earns one canonical correct record and full reward', async ({ page }) => {
+    const errors = await bootWith(page, ledger(2, KEYS));
+    await pick(page, 'spot-the-wrongun', '__stw');
+    await page.evaluate(() => { window.__stwOp('mul'); window.__stwTier('imposter'); });
+    await waitForState(page, '__stw', "s.phase === 'accusing'");
+
+    const round = await state(page, '__stw');
+    const imp = round.crew[round.imposterIndex];
+    const before = await saved(page);
+    const beforeFact = factRecord(before, imp.a, imp.b);
+    const boltsBefore = round.bolts;
+
+    await page.evaluate((i) => window.__accuse(i), round.imposterIndex);
+    await waitForState(page, '__stw', "s.phase === 'ejecting' || s.phase === 'done'");
+
+    const after = await saved(page);
+    const afterFact = factRecord(after, imp.a, imp.b);
+    expect(afterFact.attempts).toBe(beforeFact.attempts + 1);
+    expect(afterFact.correct).toBe(beforeFact.correct + 1);
+    expect(after.totalCorrect).toBe(before.totalCorrect + 1);
+    expect((await state(page, '__stw')).bolts).toBe(boltsBefore + imp.answer);
+    expect(errors).toEqual([]);
+  });
+
+  test('an innocent clue makes the eventual finish assisted, not mastered', async ({ page }) => {
+    const errors = await bootWith(page, ledger(2, KEYS));
+    await pick(page, 'spot-the-wrongun', '__stw');
+    await page.evaluate(() => { window.__stwOp('mul'); window.__stwTier('imposter'); });
+    await waitForState(page, '__stw', "s.phase === 'accusing'");
+
+    const round = await state(page, '__stw');
+    const innocentIndex = round.crew.findIndex((n) => !n.imposter);
+    const innocent = round.crew[innocentIndex];
+    const imp = round.crew[round.imposterIndex];
+    const before = await saved(page);
+    const innocentBefore = factRecord(before, innocent.a, innocent.b);
+    const impBefore = factRecord(before, imp.a, imp.b);
+
+    await page.evaluate((i) => window.__accuse(i), innocentIndex);
+    let browsing = await state(page, '__stw');
+    expect(browsing.phase).toBe('accusing');
+    expect(browsing.assisted).toBe(true);
+    expect(browsing.mistakes).toBe(1);
+
+    // Re-tapping a sign already proved true must not create another miss.
+    await page.evaluate((i) => window.__accuse(i), innocentIndex);
+    const afterRepeat = await saved(page);
+    expect(factRecord(afterRepeat, innocent.a, innocent.b).attempts).toBe(innocentBefore.attempts + 1);
+
+    await page.evaluate((i) => window.__accuse(i), round.imposterIndex);
+    await waitForState(page, '__stw', "s.phase === 'ejecting' || s.phase === 'done'");
+
+    const after = await saved(page);
+    const innocentAfter = factRecord(after, innocent.a, innocent.b);
+    const impAfter = factRecord(after, imp.a, imp.b);
+    expect(innocentAfter.attempts).toBe(innocentBefore.attempts + 1);
+    expect(innocentAfter.correct).toBe(innocentBefore.correct);
+    expect(impAfter.attempts).toBe(impBefore.attempts);
+    expect(impAfter.correct).toBe(impBefore.correct);
+    expect(after.totalCorrect).toBe(before.totalCorrect);
+    expect((await state(page, '__stw')).bolts).toBe(round.bolts);
+
+    // Completion ends the question: consulting the tray cannot roll the
+    // already-recorded innocent miss back as though the crew were still live.
+    await page.evaluate(() => { window.__refTray.open(); window.__refTray.close(); });
+    expect(factRecord(await saved(page), innocent.a, innocent.b).attempts).toBe(innocentBefore.attempts + 1);
+
+    await waitForState(page, '__stw', "s.phase === 'done'", 40_000);
+    await page.locator('#btn-confirm').click();
+    await waitForState(page, '__stw', "s.phase === 'accusing'");
+    browsing = await state(page, '__stw');
+    expect(browsing.assisted).toBe(false);
+    expect(browsing.mistakes).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('assisted division preserves canonical factors without crediting elimination', async ({ page }) => {
+    await bootWith(page, ledger(2, KEYS));
+    await pick(page, 'spot-the-wrongun', '__stw');
+    await page.evaluate(() => { window.__stwOp('div'); window.__stwTier('imposter'); });
+    await waitForState(page, '__stw', "s.phase === 'accusing'");
+
+    const round = await state(page, '__stw');
+    const innocentIndex = round.crew.findIndex((n) => !n.imposter);
+    const innocent = round.crew[innocentIndex];
+    const imp = round.crew[round.imposterIndex];
+    const before = await saved(page);
+    const innocentBefore = factRecord(before, innocent.a, innocent.b);
+    const impBefore = factRecord(before, imp.a, imp.b);
+
+    await page.evaluate((i) => window.__accuse(i), innocentIndex);
+    await page.evaluate((i) => window.__accuse(i), round.imposterIndex);
+    await waitForState(page, '__stw', "s.phase === 'ejecting' || s.phase === 'done'");
+
+    const after = await saved(page);
+    expect(factRecord(after, innocent.a, innocent.b).attempts).toBe(innocentBefore.attempts + 1);
+    expect(factRecord(after, imp.a, imp.b).attempts).toBe(impBefore.attempts);
+    expect(after.totalCorrect).toBe(before.totalCorrect);
   });
 });
 

@@ -42,6 +42,8 @@ export function createImposterTier(ctx, stage, facts) {
   let hovered = -1;
   let inspecting = -1; // seat currently under a held finger, -1 when not scrubbing
   let accuseT = 0;
+  let assisted = false; // an innocent reveal makes later elimination non-independent
+  let mistakes = 0;
   let forcedSize = 0;  // debug: pin a crew size
   let forcedOp = null; // debug: pin × or ÷
 
@@ -75,6 +77,7 @@ export function createImposterTier(ctx, stage, facts) {
     stage.clearRound();
     crew = [];
     hovered = -1; inspecting = -1;
+    assisted = false; mistakes = 0;
     roundNo++;
 
     const size = forcedSize || facts.crewSize();
@@ -209,7 +212,11 @@ export function createImposterTier(ctx, stage, facts) {
     if (n.imposter) {
       state.phase = 'ejecting';
       stage.ring.visible = false;
-      mastery.record(n.a, n.b, true, ms);
+      // Once an innocent sign has been proved, the remaining fibber can be
+      // found by elimination. Let the child finish the story warmly, but do
+      // not turn a clue supplied by the game into evidence of independent
+      // fact knowledge or a correctness reward.
+      if (!assisted) mastery.record(n.a, n.b, true, ms);
       mastery.endQuestion();
       bolt.setOxidation(mastery.overallProgress());
 
@@ -218,15 +225,21 @@ export function createImposterTier(ctx, stage, facts) {
       stage.ejectSfx();
       for (const other of crew) if (other !== n && !other.imposter) other.cheerT = 1.3;
 
-      ctx.wallet.add(n.reward);
-      ui.showToast(`+${n.reward} 🔩`, 'good');
+      if (!assisted) {
+        ctx.wallet.add(n.reward);
+        ui.showToast(`+${n.reward} 🔩`, 'good');
+      } else {
+        ui.showToast('Found it with a clue!');
+      }
       // title card stays the mode name — never feedback.
-      ui.setStatus(`Spotted! ${n.truthText}`);
-      bolt.say(`Gotcha! ${n.truthText}!`, 'happy');
-      speak(pickPhrase([
-        `That’s right! ${words(n, n.answer)}!`,
-        `You spotted the fibber! ${words(n, n.answer)}!`,
-      ]));
+      ui.setStatus(assisted ? `Found it with a clue! ${n.truthText}` : `Spotted! ${n.truthText}`);
+      bolt.say(assisted ? `Found it! ${n.truthText}!` : `Gotcha! ${n.truthText}!`, 'happy');
+      speak(assisted
+        ? `Found it with a clue! ${words(n, n.answer)}.`
+        : pickPhrase([
+          `That’s right! ${words(n, n.answer)}!`,
+          `You spotted the fibber! ${words(n, n.answer)}!`,
+        ]));
 
       later(() => proveTruth(n, () => {
         stage.celebrate();
@@ -242,6 +255,8 @@ export function createImposterTier(ctx, stage, facts) {
     } else {
       if (!n.proven) {
         n.proven = true;
+        assisted = true;
+        mistakes++;
         mastery.record(n.a, n.b, false, ms);
       }
       proveInnocent(n);
@@ -472,11 +487,14 @@ export function createImposterTier(ctx, stage, facts) {
       crewSize: crew.length,
       op: crew.length ? crew[0].op : null,
       imposterIndex,
-      hovered, inspecting,
+      hovered, inspecting, assisted, mistakes,
     };
   }
 
-  function reset() { crew = []; hovered = -1; inspecting = -1; }
+  function reset() {
+    crew = []; hovered = -1; inspecting = -1;
+    assisted = false; mistakes = 0;
+  }
   // Debug/test override. Still clamped: CREW_MAX is a legibility limit on what
   // a child can be shown, so nothing — not a hook, not a future ramp — is
   // allowed to put more signs on the stage than fit.
