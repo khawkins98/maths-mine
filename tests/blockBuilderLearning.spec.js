@@ -99,8 +99,13 @@ test.describe('Block Builder evidence and retrieval', () => {
     const errors = await boot(page);
     await pick(page, 'block-builder', '__bb');
     const round = await forceBuiltRound(page, 3, 2, 'div');
+    expect(round).toMatchObject({
+      a: 3, b: 2, dividend: 6, divisor: 2, quotient: 3, answer: 3,
+    });
+    await expect(page.locator('#askeq')).toHaveText('6 ÷ 2 = ?');
     const before = await saved(page);
-    const recordBefore = factRecord(before, round.a, round.b);
+    const canonicalKey = '2x3'; // the persisted identity for the 3 × 2 fact family
+    const recordBefore = before.facts.find(([key]) => key === canonicalKey)[1];
 
     await miss(page, round);
     await waitForState(page, '__bb', "s.phase === 'retrying'");
@@ -108,7 +113,7 @@ test.describe('Block Builder evidence and retrieval', () => {
     await waitForState(page, '__bb', "s.phase === 'next' && s.divisionGap > 0");
 
     const after = await saved(page);
-    const recordAfter = factRecord(after, round.a, round.b);
+    const recordAfter = after.facts.find(([key]) => key === canonicalKey)[1];
     expect(recordAfter.attempts).toBe(recordBefore.attempts + 1);
     expect(recordAfter.correct).toBe(recordBefore.correct);
     expect(after.totalCorrect).toBe(before.totalCorrect);
@@ -121,16 +126,28 @@ test.describe('Block Builder evidence and retrieval', () => {
     expect(errors).toEqual([]);
   });
 
-  test('leaving during an assisted retry tears down and re-enters cleanly', async ({ page }) => {
+  test('leaving mid-proof cancels the reveal chain and re-enters cleanly', async ({ page }) => {
     const errors = await boot(page);
     await pick(page, 'block-builder', '__bb');
     const round = await forceBuiltRound(page, 2, 3);
     await miss(page, round);
-    await waitForState(page, '__bb', "s.phase === 'retrying'");
+    await waitForState(page, '__bb', "s.phase === 'revealing'");
 
+    // Leave while recursive countReveal plus its fade/retry timers are pending.
     await page.locator('#btn-back').click();
     await expect(page.locator('#hub')).toBeVisible();
     expect(await page.evaluate(() => typeof window.__bb)).toBe('undefined');
+    await expect(page.locator('#choices')).toBeHidden();
+    await expect(page.locator('#choices .choice')).toHaveCount(0);
+    await expect(page.locator('#askeq')).toBeHidden();
+
+    // The complete abandoned chain would have reached its retry by now.
+    await page.waitForTimeout(3_000);
+    await expect(page.locator('#hub')).toBeVisible();
+    expect(await page.evaluate(() => typeof window.__bb)).toBe('undefined');
+    await expect(page.locator('#choices')).toBeHidden();
+    await expect(page.locator('#choices .choice')).toHaveCount(0);
+    await expect(page.locator('#askeq')).toBeHidden();
 
     await pick(page, 'block-builder', '__bb');
     await waitForState(page, '__bb', "s.phase === 'building' && !s.assisted");
