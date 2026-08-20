@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { boot, pick, state } from './helpers.js';
+import { boot, pick, state, answer, waitForState } from './helpers.js';
 
 async function openRound(page, C, R, biome) {
   await page.evaluate((id) => window.__biome(id), biome);
@@ -42,12 +42,71 @@ test.describe('Block Builder target and material clarity', () => {
     expect(dirt.renderedBodyMap).not.toBe(wood.renderedBodyMap);
   });
 
+  test('reduced motion uses a static restrained guided-cell highlight', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await boot(page);
+    await openRound(page, 2, 2, 'flat');
+    await page.waitForFunction(() => window.__bb().targetStyle.fillOpacity === 0.52);
+    const samples = [];
+    for (let i = 0; i < 4; i++) {
+      samples.push((await state(page, '__bb')).targetStyle.fillOpacity);
+      await page.waitForTimeout(120);
+    }
+    expect(samples).toEqual([0.52, 0.52, 0.52, 0.52]);
+  });
+
+  test('wood maps survive multiplication rotation and division separation', async ({ page }) => {
+    await boot(page);
+    await openRound(page, 2, 2, 'flat');
+    const finishWoodRound = async () => {
+      await page.evaluate(() => { for (let c = 0; c < 2; c++) for (let r = 0; r < 2; r++) window.__place(c, r); });
+      await waitForState(page, '__bb', "s.phase === 'asking'");
+      await answer(page, (await state(page, '__bb')).answer);
+    };
+
+    await finishWoodRound();
+    await waitForState(page, '__bb', "s.phase === 'rotate'");
+    await page.locator('#btn-confirm').click();
+    await waitForState(page, '__bb', "s.phase === 'next'");
+    let identity = (await state(page, '__bb')).materialIdentity;
+    expect(identity.renderedBodyMaps).toEqual(Array(4).fill(identity.expectedBodyMap));
+    expect(identity.renderedCapMaps.every((map) => [identity.expectedBodyMap, identity.expectedCapMap].includes(map))).toBe(true);
+    expect(identity.renderedCapMaps.filter((map) => map === identity.expectedCapMap)).toHaveLength(2);
+
+    await page.evaluate(() => window.__bbForceRound(2, 2, 'div'));
+    await finishWoodRound();
+    await waitForState(page, '__bb', "s.phase === 'next'");
+    identity = (await state(page, '__bb')).materialIdentity;
+    expect(identity.renderedBodyMaps).toEqual(Array(4).fill(identity.expectedBodyMap));
+    expect(identity.renderedCapMaps).toEqual(Array(4).fill(identity.expectedCapMap));
+  });
+
+  test('per-round block geometry has exactly-once ownership through empty switches and teardown', async ({ page }) => {
+    await boot(page);
+    await openRound(page, 2, 2, 'flat');
+    const inspect = await page.evaluateHandle(() => window.__bb);
+    for (const [C, R] of [[3, 3], [8, 3], [4, 5], [2, 2]]) {
+      const lifecycle = await page.evaluate(([cols, rows]) => {
+        window.__bbForceRound(cols, rows, 'mul');
+        return window.__bb().roundKitLifecycle;
+      }, [C, R]);
+      expect(lifecycle.disposed).toBe(lifecycle.created - 1);
+    }
+
+    await page.evaluate(() => window.__pick('spot-the-wrongun'));
+    const afterTeardown = await inspect.evaluate((getState) => getState().roundKitLifecycle);
+    expect(afterTeardown.disposed).toBe(afterTeardown.created);
+  });
+
   for (const sample of [
     { name: 'desktop-flat', width: 1440, height: 900, biome: 'flat' },
     { name: 'phone-nether', width: 390, height: 844, biome: 'nether' },
   ]) {
     test(`${sample.name} target remains visible beside a placed wood block`, async ({ page }) => {
       await page.setViewportSize({ width: sample.width, height: sample.height });
+      // Static reduced-motion guidance makes image pixels independent of rAF
+      // pulse phase while retaining the same high-contrast visual contract.
+      await page.emulateMedia({ reducedMotion: 'reduce' });
       // Texture flecks are intentionally organic in production; seed them in
       // this visual contract so only the target/material treatment can move it.
       await page.addInitScript(() => {
