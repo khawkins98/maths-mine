@@ -166,8 +166,12 @@ export function createEngine({ textures }) {
     const distance = origin.distanceTo(target);
     const ray = new THREE.Raycaster(origin, target.clone().sub(origin).normalize(), 0, distance - 0.05);
     const groves = scene.children.filter((object) => object.name === 'background-grove');
+    const terrainHits = ground ? ray.intersectObject(ground, false) : [];
+    const groveHits = ray.intersectObjects(groves, true);
     const projected = target.clone().project(camera);
-    return { clear: ray.intersectObjects(groves, true).length === 0, depth: projected.z };
+    return { clear: terrainHits.length === 0 && groveHits.length === 0,
+      terrainClear: terrainHits.length === 0, groveClear: groveHits.length === 0,
+      checkedTerrain: !!ground, depth: projected.z };
   };
   window.__terrainRender = () => { renderer.render(scene, camera); return { ...renderer.info.memory }; };
   window.__terrainDispose = () => { terrain.dispose(); terrain.dispose(); return terrain.inspect(); };

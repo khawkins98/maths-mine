@@ -72,6 +72,8 @@ export function createBolt({ scene, camera, textures, characterAssets, nowT, bub
   function resetPlacement() {
     bolt.userData.scale = BOLT_SCALE;
     home.copy(BOLT_HOME);
+    walkOn = false;
+    walkT = 0;
   }
 
   function placeAt(x, z, scale = 1) {
@@ -126,7 +128,7 @@ export function createBolt({ scene, camera, textures, characterAssets, nowT, bub
   function debugState() {
     return { home: { x: home.x, y: home.y, z: home.z },
       position: { x: bolt.position.x, y: bolt.position.y, z: bolt.position.z },
-      walking: walkOn, action, hasTranslationPath: false };
+      visible: bolt.visible, walking: walkOn, action, hasTranslationPath: false };
   }
 
   // Reset every joint to its neutral pose, then re-apply the layered anims. This

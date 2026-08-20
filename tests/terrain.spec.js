@@ -132,7 +132,8 @@ test.describe('continuous procedural terrain', () => {
     await playMultiplication(10, 6);
 
     const round = await page.evaluate(() => window.__bbForceRound(10, 6, 'div'));
-    expect(round).toMatchObject({ C: 10, R: 6, op: 'div', phase: 'building' });
+    expect(round).toMatchObject({ C: 10, R: 6, op: 'div', phase: 'building',
+      a: 10, b: 6, dividend: 60, divisor: 6, quotient: 10 });
     await page.evaluate(({ C, R }) => { for (let c = 0; c < C; c++) for (let r = 0; r < R; r++) window.__place(c, r); }, round);
     await waitForState(page, '__bb', "s.phase === 'asking'");
     await answer(page, (await state(page, '__bb')).answer);
@@ -161,15 +162,19 @@ test.describe('continuous procedural terrain', () => {
           window.__biome(nextBiome);
           engine.resize();
           engine.resetCamera();
+          window.__bolt.playWalk(true);
           window.__bolt.resetPlacement();
         }, { nextStage: stage, nextBiome: biome });
-        await page.waitForTimeout(80);
         const view = await page.evaluate(() => {
           const engine = window.__engine();
           const house = engine.projectBoundsToScreen(engine.house.group);
           const bolt = engine.projectBoundsToScreen(window.__bolt.group);
-          return { house, bolt, terrain: window.__terrain() };
+          const boltState = window.__bolt.debugState();
+          return { house, bolt, boltVisible: boltState.visible, boltWalking: boltState.walking,
+            terrain: window.__terrain() };
         });
+        expect(view.boltVisible, `${width}x${height} stage ${stage} Bolt visibility`).toBe(true);
+        expect(view.boltWalking, `${width}x${height} stage ${stage} synchronous Bolt reset`).toBe(false);
         for (const [kind, bounds] of [['house', view.house], ['bolt', view.bolt]]) {
           const margin = 6; // keeps silhouettes off the crop and touch-safe HUD edges
           expect(bounds.minX, `${width}x${height} stage ${stage} ${kind}`).toBeGreaterThanOrEqual(margin);
@@ -187,7 +192,8 @@ test.describe('continuous procedural terrain', () => {
       }
       const sightlines = await page.evaluate(() => [[-12, 0.1, -8], [8, 0.1, 6], [0, 0.1, 0]]
         .map(([x, y, z]) => window.__terrainSightline(x, y, z)));
-      expect(sightlines.every((line) => line.clear && line.depth >= -1 && line.depth <= 1)).toBe(true);
+      expect(sightlines.every((line) => line.checkedTerrain && line.terrainClear && line.groveClear
+        && line.clear && line.depth >= -1 && line.depth <= 1)).toBe(true);
       await page.locator('#btn-back').click();
       await page.waitForFunction(() => window.__hub().open);
     }
@@ -220,7 +226,6 @@ test.describe('continuous procedural terrain', () => {
     await page.waitForTimeout(150);
     await page.locator('#btn-back').click(); // tear the game down while the golem is mid-patrol
     await page.waitForFunction(() => window.__hub().open);
-    await page.waitForTimeout(1250);
     const resetBolt = await page.evaluate(() => window.__bolt.debugState());
     expect(resetBolt.home).toEqual({ x: -4.8, y: 0, z: 1.8 });
     expect(resetBolt.hasTranslationPath).toBe(false);
@@ -230,7 +235,7 @@ test.describe('continuous procedural terrain', () => {
   });
 
   test('stabilizes renderer resources and grove ownership through 20 world/game cycles', async ({ page }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(240_000);
     const errors = await boot(page);
     const cycle = async (index) => {
       await page.evaluate((i) => {
@@ -245,12 +250,23 @@ test.describe('continuous procedural terrain', () => {
       await page.waitForTimeout(80);
       return page.evaluate(() => window.__terrainRender());
     };
-    // Warm every biome twice and the largest house before measuring; this
-    // removes legitimate lazy WebGL registrations from the measured window.
+    // Warm every biome and the largest house until two complete, identically
+    // ordered biome passes end on the same renderer counts. This proves the
+    // async/lazy WebGL vocabulary has reached a plateau before measurement.
     await page.evaluate(() => window.__engine().house.setStage(8));
-    for (let i = 0; i < 14; i++) await cycle(i);
+    let nextCycle = 0;
+    let previousEndpoint = null;
+    let plateau = null;
+    for (let epoch = 0; epoch < 3 && !plateau; epoch++) {
+      let endpoint;
+      for (let i = 0; i < 14; i++) endpoint = await cycle(nextCycle++);
+      if (previousEndpoint && endpoint.geometries === previousEndpoint.geometries
+        && endpoint.textures === previousEndpoint.textures) plateau = endpoint;
+      previousEndpoint = endpoint;
+    }
+    expect(plateau, 'renderer counts must plateau across complete biome passes').not.toBeNull();
     const counts = [];
-    for (let i = 14; i < 34; i++) counts.push(await cycle(i));
+    for (let i = 0; i < 20; i++) counts.push(await cycle(nextCycle++));
     const final = await page.evaluate(() => window.__terrain());
     expect(final.groveCount).toBeLessThanOrEqual(1);
     const geometries = counts.map((entry) => entry.geometries);

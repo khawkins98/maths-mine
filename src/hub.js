@@ -200,8 +200,8 @@ export function createHub(ctx) {
     ui.showHub();
     bolt.resetPlacement();
     bolt.show(true);
-    // Bolt walks in, then greets the child with a wave.
-    if (bolt.playWalk) { bolt.playWalk(true); timers.later(() => bolt.playWalk(false), 1100); }
+    // Game teardown must leave no latent locomotion state; greet from the
+    // restored home pose rather than scheduling a walk timer across scenes.
     bolt.say('Pick a game!', '');
     if (bolt.playWave) timers.later(() => bolt.playWave(), 1150);
     speech.speak('Pick a game to play!');

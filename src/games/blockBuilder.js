@@ -198,7 +198,7 @@ export function createBlockBuilder(ctx) {
     if (forcedDimensions) {
       const { C, R, op } = forcedDimensions;
       q = op === 'div'
-        ? { op, a: C * R, b: R, dividend: C * R, divisor: R, quotient: C }
+        ? { op, a: C, b: R, dividend: C * R, divisor: R, quotient: C }
         : { op: 'mul', a: C, b: R };
       forcedDimensions = null;
     }
@@ -823,6 +823,8 @@ export function createBlockBuilder(ctx) {
     window.__bb = () => ({
       placed: round?.placed, groupsDone: round?.groupsDone, phase,
       C: round?.C, R: round?.R, answer: round?.answer,
+      a: round?.a, b: round?.b,
+      dividend: round?.dividend, divisor: round?.divisor, quotient: round?.quotient,
       visualC: round?.visualC, visualR: round?.visualR,
       op: round?.op, mode: round?.op,
       divisionGap: round?.divisionGap || 0,
