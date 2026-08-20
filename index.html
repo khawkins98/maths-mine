@@ -70,6 +70,8 @@
           inset 0 0 0 3px var(--stone-edge),
           inset 4px 4px 0 3px rgba(255,255,255,0.20),
           inset -4px -4px 0 3px rgba(0,0,0,0.32);
+        --surface-ring: 0 0 0 1px rgba(255,255,255,0.12);
+        --surface-lift: 0 12px 28px rgba(10,8,4,0.34);
         font-family: var(--body);
       }
       /* The pixel face is reserved for large decorative text. */
@@ -82,6 +84,11 @@
         font-family: var(--num);
       }
       * { box-sizing: border-box; }
+      html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+      h1, h2, h3, .hc-title { text-wrap: balance; }
+      p, .status, .hc-desc { text-wrap: pretty; }
+      .tally, #bigtotal, #bolts-count, #house-stage-text, #house-cost-text,
+      button.choice, .askeq, .claim { font-variant-numeric: tabular-nums; }
       :focus-visible {
         outline: 4px solid #fff;
         outline-offset: 4px;
@@ -156,10 +163,10 @@
           inset -3px -3px 0 rgba(120,80,15,0.4),
           0 6px 0 var(--gold-dark), 0 12px 16px rgba(30,20,5,0.22);
         image-rendering: pixelated;
-        transition: transform 0.07s steps(2), box-shadow 0.07s steps(2), opacity 0.15s ease;
+        transition: transform 110ms cubic-bezier(.2,0,0,1), box-shadow 110ms ease-out, opacity 150ms ease;
       }
-      button.big:active {
-        transform: translateY(4px);
+      button.big:not(:disabled):active {
+        transform: translateY(4px) scale(0.96);
         box-shadow:
           inset 3px 3px 0 rgba(255,245,205,0.5),
           inset -3px -3px 0 rgba(120,80,15,0.4),
@@ -189,9 +196,9 @@
         text-shadow: 0 2px 0 rgba(0,0,0,0.4);
         box-shadow: var(--frame), 0 5px 0 var(--wood-drop);
         image-rendering: pixelated;
-        transition: transform 0.07s steps(2), box-shadow 0.07s steps(2);
+        transition: transform 110ms cubic-bezier(.2,0,0,1), box-shadow 110ms ease-out, opacity 150ms ease;
       }
-      #btn-voice:active, #btn-back:active { transform: translateY(3px); box-shadow: var(--frame), 0 2px 0 var(--wood-drop); }
+      #btn-voice:active, #btn-back:active { transform: translateY(3px) scale(0.96); box-shadow: var(--frame), 0 2px 0 var(--wood-drop); }
 
       #btn-voice { top: max(70px, calc(env(safe-area-inset-top) + 62px)); right: 16px; }
       /* Muted: dim the speaker AND draw an unambiguous red slash across it. */
@@ -216,12 +223,12 @@
         position: fixed; inset: 0; z-index: 20;
         display: flex; flex-direction: column;
         align-items: center; justify-content: center;
-        gap: 18px; text-align: center; color: var(--ink-light);
+        gap: clamp(12px, 2.4vh, 22px); text-align: center; color: var(--ink-light);
         background:
           radial-gradient(1200px 800px at 50% 40%, rgba(10,8,4,0.28) 0%, rgba(10,8,4,0.55) 100%);
         /* Bolt walks on at the bottom-left and greets the child from there, so
            the card row is lifted clear of him rather than sitting on his head. */
-        padding: 24px 24px clamp(24px, 16vh, 165px);
+        padding: max(28px, env(safe-area-inset-top)) 24px max(40px, calc(env(safe-area-inset-bottom) + 18px));
         overflow-y: auto;
         overscroll-behavior: contain;
         touch-action: pan-y;
@@ -234,16 +241,23 @@
       body:has(#hub:not(.hidden)) #bubble { display: none; }
       /* Title on a big wooden sign */
       #hub h1 {
-        font-size: clamp(30px, 8vw, 54px); margin: 0 0 6px;
+        font-size: clamp(34px, 8vw, 58px); margin: 0;
         padding: 0; color: var(--readout-ink);
         text-shadow: var(--readout-edge);
         letter-spacing: 1px;
       }
-      #hub-cards { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+      .hub-kicker {
+        margin: -8px 0 2px; color: #fff4d6; font: 700 clamp(14px, 3vw, 19px)/1.35 var(--body);
+        text-shadow: 0 2px 8px rgba(0,0,0,.75);
+      }
+      #hub-cards {
+        width: min(900px, 100%); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: clamp(12px, 2.4vw, 22px); justify-content: center;
+      }
       /* wooden signpost cards */
       button.hub-card {
         pointer-events: auto; cursor: pointer;
-        width: min(44vw, 260px); min-height: 200px;
+        width: 100%; min-height: clamp(176px, 28vh, 230px);
         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
         border: 4px solid var(--wood-dark); border-radius: 0;
         padding: 22px 18px;
@@ -251,41 +265,58 @@
         color: var(--ink-light);
         box-shadow: var(--frame), 0 9px 0 var(--wood-drop), 0 16px 22px rgba(10,8,4,0.4);
         image-rendering: pixelated;
-        transition: transform 0.08s steps(2), box-shadow 0.08s steps(2);
+        transform: translateY(0) scale(1);
+        transition: transform 150ms cubic-bezier(.2,0,0,1), box-shadow 150ms ease-out, filter 150ms ease-out;
       }
-      button.hub-card:active { transform: translateY(5px); box-shadow: var(--frame), 0 4px 0 var(--wood-drop); }
+      @media (hover: hover) { button.hub-card:hover { transform: translateY(-4px); box-shadow: var(--frame), 0 12px 0 var(--wood-drop), var(--surface-lift); filter: brightness(1.07); } }
+      button.hub-card:active { transform: translateY(5px) scale(0.96); box-shadow: var(--frame), 0 4px 0 var(--wood-drop); }
+      button.hub-card[data-material="emerald"] { box-shadow: var(--frame), inset 0 0 0 7px rgba(48,166,92,.16), 0 9px 0 var(--wood-drop), 0 16px 22px rgba(10,8,4,.4); }
+      button.hub-card[data-material="obsidian"] { box-shadow: var(--frame), inset 0 0 0 7px rgba(92,70,139,.2), 0 9px 0 var(--wood-drop), 0 16px 22px rgba(10,8,4,.4); }
       .hub-card .hc-icon {
         width: clamp(56px, 13vw, 84px); height: auto; display: block;
         image-rendering: pixelated;
         filter: drop-shadow(0 4px 0 rgba(0,0,0,0.28));
+        outline: 1px solid rgba(255,255,255,0.1); outline-offset: -1px;
       }
       .hub-card .hc-title { font-weight: 700; font-size: clamp(20px, 5vw, 28px); color: var(--ink-light); text-shadow: 0 2px 0 rgba(0,0,0,0.4); }
       .hub-card .hc-desc { font-family: var(--body); font-weight: 600; font-size: clamp(13px, 3.4vw, 16px); color: #f2e6cc; max-width: 22ch; line-height: 1.35; }
 
       #house-bar {
         display: flex; gap: 14px; align-items: center; justify-content: center;
-        margin-top: 16px; flex-wrap: wrap; pointer-events: auto;
+        width: min(760px, 100%); margin-top: clamp(2px, 2vh, 14px); flex-wrap: wrap; pointer-events: auto;
+        padding: 12px; background: rgba(22,16,8,.72); box-shadow: var(--surface-ring), var(--surface-lift);
       }
       #bolts-chip {
-        font-family: var(--readout-font); font-weight: 700; font-size: clamp(16px, 4vw, 22px);
+        min-height: 48px; display: inline-flex; align-items: center; gap: 6px;
+        font-family: var(--num); font-weight: 700; font-size: clamp(17px, 4vw, 23px);
         color: #ffdf70; text-shadow: 0 2px 0 rgba(0,0,0,0.6);
-        background: rgba(0, 0, 0, 0.45); border: 3px solid var(--wood-dark);
-        border-radius: 8px; padding: 8px 16px;
+        background: #2a2115; border: 0; box-shadow: var(--surface-ring), inset 0 -3px 0 rgba(0,0,0,.35);
+        border-radius: 0; padding: 8px 16px;
       }
       button.hub-build-btn {
         pointer-events: auto; cursor: pointer;
-        font-family: var(--readout-font); font-weight: 700; font-size: clamp(15px, 3.8vw, 20px);
-        border: 3px solid var(--wood-dark); border-radius: 8px;
-        padding: 10px 20px;
-        background: #388e3c; color: #ffffff;
+        min-height: 52px; flex: 1 1 360px;
+        font-family: var(--num); font-weight: 700; font-size: clamp(15px, 3.4vw, 20px);
+        border: 3px solid #183f20; border-radius: 0;
+        padding: 10px 18px;
+        background: repeating-linear-gradient(0deg, rgba(0,0,0,.1) 0 3px, transparent 3px 22px), linear-gradient(#55aa61, #348843); color: #ffffff;
         box-shadow: var(--frame), 0 5px 0 #1b5e20;
         text-shadow: 0 2px 0 rgba(0,0,0,0.5);
-        transition: transform 0.08s steps(2), background 0.12s ease;
+        transition: transform 110ms cubic-bezier(.2,0,0,1), background-color 120ms ease, box-shadow 110ms ease-out, filter 120ms ease;
       }
-      button.hub-build-btn:hover { background: #43a047; }
-      button.hub-build-btn:active { transform: translateY(3px); box-shadow: var(--frame), 0 2px 0 #1b5e20; }
-      button.hub-build-btn.disabled { opacity: 0.5; pointer-events: none; background: #616161; }
+      button.hub-build-btn:hover:not(:disabled) { filter: brightness(1.1); }
+      button.hub-build-btn:active:not(:disabled) { transform: translateY(3px) scale(0.96); box-shadow: var(--frame), 0 2px 0 #1b5e20; }
+      button.hub-build-btn.disabled {
+        opacity: 1; pointer-events: none; color: #fff9df; border-color: #493b28;
+        background: repeating-linear-gradient(0deg, rgba(0,0,0,.12) 0 3px, transparent 3px 22px), linear-gradient(#75664e, #594c3a);
+        box-shadow: inset 3px 3px 0 rgba(255,255,255,.12), inset -3px -3px 0 rgba(0,0,0,.3), 0 4px 0 #352c20;
+      }
       button.hub-build-btn:disabled { cursor: not-allowed; }
+      .hub-build-btn .cta-detail {
+        display: inline-block; margin-left: 7px; padding: 2px 7px;
+        color: #fff2bb; background: rgba(0,0,0,.22); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14);
+        font-size: .8em; font-variant-numeric: tabular-nums; white-space: nowrap;
+      }
 
       /* ---- cheap vignette (no post-processing) ---- */
       #vignette {
@@ -394,9 +425,11 @@
         background: var(--wood-fill);
         box-shadow: var(--frame), 0 7px 0 var(--wood-drop), 0 12px 16px rgba(20,14,6,0.2);
         image-rendering: pixelated;
-        transition: transform 0.07s steps(2), box-shadow 0.07s steps(2), background 0.15s ease;
+        transform: translateY(0) scale(1);
+        transition: transform 110ms cubic-bezier(.2,0,0,1), box-shadow 110ms ease-out, background-color 150ms ease, filter 150ms ease;
       }
-      button.choice:active { transform: translateY(4px); box-shadow: var(--frame), 0 3px 0 var(--wood-drop); }
+      @media (hover: hover) { button.choice:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-2px); } }
+      button.choice:active:not(:disabled), button.choice.selected { transform: translateY(4px) scale(0.96); box-shadow: var(--frame), 0 3px 0 var(--wood-drop); }
       button.choice:disabled { cursor: default; }
       button.choice.right {
         color: #fff;
@@ -447,6 +480,15 @@
          so suppress the duplicate instead of covering a villager/sign. */
       @media (orientation: portrait) { #bubble { display: none; } }
 
+      @media (max-width: 680px) and (orientation: portrait) {
+        #hub { justify-content: flex-start; padding-inline: 16px; }
+        #hub-cards { grid-template-columns: 1fr; gap: 12px; }
+        button.hub-card { min-height: 118px; flex-direction: row; justify-content: flex-start; text-align: left; padding: 14px 18px; }
+        .hub-card .hc-icon { width: 66px; flex: 0 0 auto; }
+        .hub-card .hc-title, .hub-card .hc-desc { max-width: none; }
+        #house-bar { margin-top: auto; }
+      }
+
       /* ---- big surviving-total badge for commutativity ---- */
       #bigtotal {
         position: fixed; left: 50%; top: 32%;
@@ -481,8 +523,8 @@
       @media (max-height: 600px) and (orientation: landscape) {
         #hub { justify-content: flex-start; gap: 10px; padding: max(10px, env(safe-area-inset-top)) 72px max(12px, env(safe-area-inset-bottom)); }
         #hub h1 { font-size: clamp(26px, 8vh, 40px); }
-        #hub-cards { gap: 12px; flex-wrap: nowrap; }
-        button.hub-card { width: min(27vw, 230px); min-height: 126px; padding: 10px 12px; gap: 4px; }
+        #hub-cards { gap: 12px; }
+        button.hub-card { width: 100%; min-height: 126px; padding: 10px 12px; gap: 4px; }
         .hub-card .hc-icon { width: clamp(42px, 12vh, 58px); }
         .hub-card .hc-title { font-size: clamp(17px, 5vh, 24px); }
         .hub-card .hc-desc { font-size: clamp(12px, 3.2vh, 15px); }
@@ -694,7 +736,7 @@
         border: 2px solid var(--wood-dark);
         color: #2a1a08; font-family: var(--num); font-size: 20px; font-weight: 800;
         cursor: pointer; display: flex; align-items: center; justify-content: center;
-        transition: all 0.1s ease;
+        transition: transform 100ms ease, background-color 100ms ease, box-shadow 100ms ease, border-color 100ms ease;
         border-radius: 4px;
       }
       .ref-rail-btn.active {
@@ -803,6 +845,7 @@
     <!-- Hub: the game picker (shown after the wake gate) -->
     <div id="hub" class="hidden" role="main" aria-labelledby="hub-title">
       <h1 id="hub-title">The Maths Mine</h1>
+      <p class="hub-kicker">Choose an adventure. Solve facts. Build your village.</p>
       <div id="hub-cards"></div>
       <div id="house-bar">
         <div id="bolts-chip">🔩 <span id="bolts-count">0</span></div>

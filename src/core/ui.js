@@ -103,7 +103,11 @@ export function createUI() {
       b.type = 'button';
       b.className = 'choice';
       b.textContent = v;
-      b.addEventListener('click', () => onPick(v, b));
+      b.addEventListener('click', () => {
+        choiceButtons().forEach((choice) => choice.classList.remove('selected'));
+        b.classList.add('selected');
+        onPick(v, b);
+      });
       els.choices.appendChild(b);
     }
     els.choices.classList.remove('hidden');
