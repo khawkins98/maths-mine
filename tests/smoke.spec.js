@@ -31,8 +31,8 @@ test.describe('boot + hub', () => {
   test('gate leads to a hub listing available games', async ({ page }) => {
     const errors = await boot(page);
     const { games } = await page.evaluate(() => window.__hub());
-    expect(games).toEqual(['block-builder', 'spot-the-wrongun']);
-    await expect(page.locator('.hub-card')).toHaveCount(2);
+    expect(games).toEqual(['block-builder', 'spot-the-wrongun', 'night-defense']);
+    await expect(page.locator('.hub-card')).toHaveCount(3);
     expect(errors).toEqual([]);
   });
 });
