@@ -14,6 +14,9 @@ export function createCombatManager(ctx, stage, facts) {
 
   let activeFact = null;
   let answering = false;
+  let phase = 'idle';
+  let askT = 0;
+  let scored = false;
 
   function startWave(waveNumber = 1) {
     wave = waveNumber;
@@ -34,11 +37,15 @@ export function createCombatManager(ctx, stage, facts) {
     }
 
     answering = true;
+    phase = 'asking';
+    scored = false;
     const mobType = mobProgression[roundIndex % mobProgression.length];
     stage.spawnMob(mobType);
 
     // Pick math challenge
     activeFact = facts.pickFact();
+    mastery.beginQuestion(activeFact);
+    askT = engine.nowT();
 
     // UI Presentation
     ui.setStatus(`Wave ${wave} · Defend against the ${mobType.toUpperCase()}!`);
@@ -52,7 +59,7 @@ export function createCombatManager(ctx, stage, facts) {
     if (speech && speech.speak) {
       const spokenText = activeFact.op === '×'
         ? `What is ${activeFact.a} times ${activeFact.b}?`
-        : `What is ${activeFact.a} divided by ${activeFact.b}?`;
+        : `What is ${activeFact.dividend} divided by ${activeFact.divisor}?`;
       speech.speak(spokenText);
     }
   }
@@ -64,16 +71,20 @@ export function createCombatManager(ctx, stage, facts) {
     const isCorrect = (answer === activeFact.target);
 
     if (isCorrect) {
+      phase = 'victory';
       // ── CORRECT ANSWER: MIGHTY GOLEM UPPERCUT! ──
       if (btnEl) btnEl.classList.add('correct');
       if (audio) {
         audio.beep(440, 0.1, 'square', 0.15);
-        setTimeout(() => audio.beep(880, 0.2, 'triangle', 0.2), 100);
+        timers.later(() => audio.beep(880, 0.2, 'triangle', 0.2), 100);
       }
 
       // Record mastery
-      if (mastery && typeof mastery.record === 'function') {
-        mastery.record(activeFact.a, activeFact.b, activeFact.op, true);
+      if (!scored && mastery && typeof mastery.record === 'function') {
+        mastery.record(activeFact.a, activeFact.b, true, (engine.nowT() - askT) * 1000);
+        scored = true;
+        if (bolt.setOxidation) bolt.setOxidation(mastery.overallProgress());
+        if (engine.updateBiomeFromProgress) engine.updateBiomeFromProgress(mastery.overallProgress());
       }
 
       // Award Bolts
@@ -93,31 +104,45 @@ export function createCombatManager(ctx, stage, facts) {
       });
 
     } else {
+      phase = 'revealing';
       // ── INCORRECT ANSWER: MOB ATTACK DEFLECTION ──
-      if (btnEl) btnEl.classList.add('wrong');
-      if (audio) audio.beep(180, 0.25, 'sawtooth', 0.18);
+      if (audio) audio.beep(220, 0.18, 'triangle', 0.1);
 
       // Record retry
-      if (mastery && typeof mastery.record === 'function') {
-        mastery.record(activeFact.a, activeFact.b, activeFact.op, false);
+      if (!scored && mastery && typeof mastery.record === 'function') {
+        mastery.record(activeFact.a, activeFact.b, false, (engine.nowT() - askT) * 1000);
+        scored = true;
       }
 
-      if (bolt.say) bolt.say(`Ouch! The Golem took damage! Try again!`, 'alert');
-      if (speech && speech.speak) speech.speak(`The mob struck! The Iron Golem absorbed the damage. Try again!`);
-      if (ui.showToast) ui.showToast(`🛡️ Golem took damage!`, 'bad');
+      // A miss becomes instruction, not just damage: show and say the complete
+      // fact before asking the child to use it for the successful counter-hit.
+      ui.lockChoices();
+      ui.choiceButtons().forEach((choice) => {
+        if (Number(choice.textContent) === activeFact.target) choice.classList.add('right');
+      });
+      ui.setAskEq(activeFact.answerText);
+      ui.setStatus(`Remember: ${activeFact.answerText}`);
+      if (bolt.say) bolt.say(`Remember: ${activeFact.answerText}`, '');
+      if (speech && speech.speak) speech.speak(`${activeFact.answerText}. Now use it to block the mob!`);
+      if (ui.showToast) ui.showToast('🛡️ Learn it, then block!');
 
       stage.executeMobAttackDeflection(() => {
-        // Allow player to retry the same challenge
-        answering = true;
-        ui.showChoices(activeFact.choices, (choiceVal, newBtnEl) => {
-          if (!answering) return;
-          handleAnswer(choiceVal, newBtnEl);
-        });
+        timers.later(() => {
+          phase = 'retrying';
+          answering = true;
+          ui.setAskEq(activeFact.text);
+          ui.setStatus('Now block it — what is the answer?');
+          ui.showChoices(activeFact.choices, (choiceVal, newBtnEl) => {
+            if (!answering) return;
+            handleAnswer(choiceVal, newBtnEl);
+          });
+        }, 1400);
       });
     }
   }
 
   function completeWave() {
+    phase = 'complete';
     // ── DAWN BREAKS: VICTORY & REWARD ──
     if (engine.setBiome) engine.setBiome(BIOMES.dawn);
 
@@ -126,8 +151,8 @@ export function createCombatManager(ctx, stage, facts) {
 
     if (audio) {
       audio.beep(523, 0.15, 'triangle', 0.2);
-      setTimeout(() => audio.beep(659, 0.15, 'triangle', 0.2), 150);
-      setTimeout(() => audio.beep(784, 0.3, 'triangle', 0.25), 300);
+      timers.later(() => audio.beep(659, 0.15, 'triangle', 0.2), 150);
+      timers.later(() => audio.beep(784, 0.3, 'triangle', 0.25), 300);
     }
 
     ui.setAskEq(null);
@@ -153,6 +178,7 @@ export function createCombatManager(ctx, stage, facts) {
   function teardown() {
     timers.clearAll();
     answering = false;
+    mastery.endQuestion();
     ui.setAskEq(null);
     if (ui.els.btnConfirm) {
       ui.els.btnConfirm.classList.add('hidden');
@@ -162,6 +188,8 @@ export function createCombatManager(ctx, stage, facts) {
 
   return {
     startWave,
+    state: () => ({ phase, wave, roundIndex, answering, fact: activeFact && { ...activeFact } }),
+    answer: (value) => handleAnswer(value, null),
     teardown,
   };
 }

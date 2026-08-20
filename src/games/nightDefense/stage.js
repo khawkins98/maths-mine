@@ -4,12 +4,14 @@ import * as THREE from 'three';
 import { triggerMobAttack, updateMobAttack } from '../../core/mobs.js';
 import { buildArticulatedGolem } from '../../core/minecraftMobRig.js';
 import { BIOMES } from '../../core/biomes.js';
+import { createTimers } from '../../core/timers.js';
 
 export function createStage(ctx) {
   const { engine, scene, camera, textures, mobFactories } = ctx;
   const root = new THREE.Group();
   root.name = 'night-defense-root';
   scene.add(root);
+  const timers = createTimers();
 
   // Preserve previous biome to restore on teardown
   const previousBiome = engine.currentBiome ? engine.currentBiome() : BIOMES.flat;
@@ -119,7 +121,7 @@ export function createStage(ctx) {
     triggerMobAttack(golemGroup, 'golem');
 
     // 2. Launch Mob into the sky after punch impact (at 280ms)
-    setTimeout(() => {
+    timers.later(() => {
       if (!currentMob) return;
       spawnBurst(currentMob.position.clone().add(new THREE.Vector3(0, 1.2, 0)), 'spark');
       spawnBurst(currentMob.position.clone().add(new THREE.Vector3(0, 0.6, 0)), 'smoke');
@@ -168,7 +170,7 @@ export function createStage(ctx) {
     triggerMobAttack(currentMob, currentMobType);
 
     // 2. At impact moment (280ms), Golem triggers damage flash and hurt reaction
-    setTimeout(() => {
+    timers.later(() => {
       if (!golemGroup) return;
 
       golemHurtT = 0.55; // 550ms damage flash & recoil animation
@@ -184,7 +186,7 @@ export function createStage(ctx) {
       }
 
       // Recover Mob back to ready stance
-      setTimeout(() => {
+      timers.later(() => {
         if (currentMob) currentMob.position.z = 4.6;
         if (onComplete) onComplete();
       }, 500);
@@ -259,6 +261,7 @@ export function createStage(ctx) {
   }
 
   function teardown() {
+    timers.clearAll();
     scene.remove(root);
     particles.forEach(p => {
       root.remove(p.mesh);
