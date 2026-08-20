@@ -159,6 +159,23 @@ export function createEngine({ textures }) {
     const hit = ground && ray.intersectObject(ground, false)[0];
     return hit ? hit.point.y : null;
   };
+  window.__terrainInstanceHeights = () => {
+    if (!ground || !ground.isInstancedMesh) return { all: [], cameraVisible: [] };
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const projected = new THREE.Vector3();
+    const all = [], cameraVisible = [];
+    for (let i = 0; i < ground.count; i++) {
+      ground.getMatrixAt(i, matrix);
+      position.setFromMatrixPosition(matrix);
+      all.push(position.y);
+      projected.copy(position).project(camera);
+      if (Math.abs(projected.x) <= 1 && Math.abs(projected.y) <= 1 && projected.z >= -1 && projected.z <= 1) {
+        cameraVisible.push(position.y);
+      }
+    }
+    return { all, cameraVisible };
+  };
   window.__terrainSightline = (x, y, z) => {
     const target = new THREE.Vector3(x, y, z);
     const origin = new THREE.Vector3();
@@ -247,7 +264,7 @@ export function createEngine({ textures }) {
 
   return {
     renderer, scene, camera, camRig, get ground() { return ground; }, platform, key, fill, clock,
-    VIEW_DIR, house: houseManager,
+    VIEW_DIR, house: houseManager, clouds,
     nowT, worldToScreen, projectToScreen, projectBoundsToScreen,
     placeCamera, resetCamera,
     setBiome, updateBiomeFromProgress, currentBiome: () => activeBiome,
@@ -258,8 +275,13 @@ export function createEngine({ textures }) {
 function buildClouds() {
   const group = new THREE.Group();
   group.name = 'clouds';
+  // Every puff is a scaled instance of this one explicitly cloud-owned unit
+  // cube. Keeping dimensions on Mesh.scale prevents late frustum-dependent
+  // BoxGeometry registration from looking like a resource leak.
+  const geometry = new THREE.BoxGeometry(1, 1, 1);
   const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: true });
   const cloudMeshes = [];
+  let disposed = false;
   const X_MIN = -60, X_MAX = 60, SPAN = X_MAX - X_MIN;
   const rnd = (a, b) => a + Math.random() * (b - a);
   for (let i = 0; i < 7; i++) {
@@ -267,7 +289,9 @@ function buildClouds() {
     const puffs = 3 + ((Math.random() * 3) | 0);
     for (let p = 0; p < puffs; p++) {
       const w = rnd(4, 8), h = rnd(1.4, 2.2), d = rnd(3, 5);
-      const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      const box = new THREE.Mesh(geometry, mat);
+      box.scale.set(w, h, d);
+      box.userData.cloudPuff = true;
       box.position.set(rnd(-5, 5), rnd(-0.6, 0.6), rnd(-4, 4));
       c.add(box);
     }
@@ -282,5 +306,20 @@ function buildClouds() {
       if (c.position.x > X_MAX) c.position.x -= SPAN;
     }
   }
-  return { group, update };
+  // Idempotently dispose only resources created by buildClouds. In particular,
+  // no texture or externally shared material is owned or touched here.
+  function dispose() {
+    if (disposed) return;
+    geometry.dispose();
+    mat.dispose();
+    disposed = true;
+  }
+  function inspect() {
+    const puffs = [];
+    group.traverse((object) => { if (object.userData.cloudPuff) puffs.push(object); });
+    return { disposed, puffCount: puffs.length,
+      geometryUuids: [...new Set(puffs.map((puff) => puff.geometry.uuid))],
+      culling: puffs.map((puff) => puff.frustumCulled) };
+  }
+  return { group, update, dispose, inspect };
 }

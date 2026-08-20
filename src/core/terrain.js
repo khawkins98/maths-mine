@@ -30,11 +30,13 @@ export function isTerrainDecorationAllowed(x, z) {
 
 /** Pure production height model. The distance cap guarantees <= 1:1 slope. */
 export function sampleTerrainHeight(x, z, { seed = TERRAIN_SEED, style = 'hills' } = {}) {
+  // Flat is a true construction plane, not a low-amplitude hill field: even a
+  // small wave rounded to voxel units creates a conspicuous one-block shelf.
+  if (style === 'flat') return 0;
   const distance = distanceFromEnvelope(x, z);
   if (distance === 0) return 0;
   let amplitude = 3, bias = 0.25;
-  if (style === 'flat') { amplitude = 1; bias = 0; }
-  else if (style === 'forest_mountains') { amplitude = 4; bias = 0.7; }
+  if (style === 'forest_mountains') { amplitude = 4; bias = 0.7; }
   else if (style === 'mesas') { amplitude = 3.5; bias = 0.4; }
   else if (style === 'snow_peaks') { amplitude = 5; bias = 1; }
   else if (style === 'nether_spires') { amplitude = 4; bias = 0.2; }
