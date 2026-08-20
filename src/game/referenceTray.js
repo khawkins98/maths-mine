@@ -9,6 +9,8 @@ export function createReferenceTray({ mastery, ui } = {}) {
 
   let activeTable = 2;
   let isOpen = false;
+  let returnFocus = null;
+  const inertedByTray = new Set();
 
   // Track event listeners for clean teardown
   const listeners = [];
@@ -31,8 +33,31 @@ export function createReferenceTray({ mastery, ui } = {}) {
 
   const tray = document.createElement('aside');
   tray.id = 'ref-tray';
-  tray.setAttribute('aria-label', 'Times Tables Reference Tray');
+  tray.setAttribute('role', 'dialog');
+  tray.setAttribute('aria-modal', 'true');
+  tray.setAttribute('aria-labelledby', 'ref-title');
+  tray.setAttribute('aria-hidden', 'true');
   document.body.appendChild(tray);
+
+  function setBackgroundInert(on) {
+    if (on) {
+      for (const node of document.body.children) {
+        if (node === tray || node === backdrop || node.tagName === 'SCRIPT' || node.inert) continue;
+        node.inert = true;
+        inertedByTray.add(node);
+      }
+      return;
+    }
+    for (const node of inertedByTray) {
+      if (node.isConnected) node.inert = false;
+    }
+    inertedByTray.clear();
+  }
+
+  function focusableElements() {
+    return [...tray.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+      .filter((node) => !node.inert && node.getClientRects().length > 0);
+  }
 
   function getTableColor(tableNum) {
     const colors = [
@@ -70,7 +95,7 @@ export function createReferenceTray({ mastery, ui } = {}) {
     const color = getTableColor(tableNum);
     let html = `
       <div class="ref-header">
-        <h2>${tableNum} × Table</h2>
+        <h2 id="ref-title">${tableNum} × Table</h2>
         <button class="ref-close" id="btn-ref-close" aria-label="Close Reference Tray">✕</button>
       </div>
       <div class="ref-rows">
@@ -100,7 +125,7 @@ export function createReferenceTray({ mastery, ui } = {}) {
     for (let n = 1; n <= 12; n++) {
       const isActive = (n === activeTable);
       railHtml += `
-        <button class="ref-rail-btn ${isActive ? 'active' : ''}" data-table="${n}">
+        <button class="ref-rail-btn ${isActive ? 'active' : ''}" data-table="${n}"${isActive ? ' aria-current="true"' : ''}>
           ${n}
         </button>
       `;
@@ -115,6 +140,7 @@ export function createReferenceTray({ mastery, ui } = {}) {
       btn.addEventListener('click', () => {
         activeTable = parseInt(btn.dataset.table, 10);
         render();
+        tray.querySelector(`.ref-rail-btn[data-table="${activeTable}"]`)?.focus({ preventScroll: true });
       });
     });
 
@@ -128,6 +154,7 @@ export function createReferenceTray({ mastery, ui } = {}) {
   function open() {
     if (isOpen) return;
     isOpen = true;
+    returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
     // Void the current live question in mastery ledger as per the spec
     if (mastery && typeof mastery.voidCurrentQuestion === 'function') {
@@ -144,17 +171,25 @@ export function createReferenceTray({ mastery, ui } = {}) {
     }
 
     render();
+    setBackgroundInert(true);
     backdrop.classList.add('open');
     tray.classList.add('open');
+    tray.setAttribute('aria-hidden', 'false');
     tab.classList.add('active');
+    tray.querySelector('#btn-ref-close')?.focus({ preventScroll: true });
   }
 
-  function close() {
+  function close({ restoreFocus = true } = {}) {
     if (!isOpen) return;
     isOpen = false;
     backdrop.classList.remove('open');
     tray.classList.remove('open');
+    tray.setAttribute('aria-hidden', 'true');
     tab.classList.remove('active');
+    setBackgroundInert(false);
+    const target = returnFocus;
+    returnFocus = null;
+    if (restoreFocus && target?.isConnected && !target.inert) target.focus({ preventScroll: true });
   }
 
   function toggle() {
@@ -170,6 +205,17 @@ export function createReferenceTray({ mastery, ui } = {}) {
     if (e.key === 'Escape' && isOpen) {
       e.preventDefault();
       close();
+    } else if (e.key === 'Tab' && isOpen) {
+      const focusable = focusableElements();
+      if (!focusable.length) { e.preventDefault(); return; }
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !tray.contains(document.activeElement))) {
+        e.preventDefault();
+        last.focus({ preventScroll: true });
+      } else if (!e.shiftKey && (document.activeElement === last || !tray.contains(document.activeElement))) {
+        e.preventDefault();
+        first.focus({ preventScroll: true });
+      }
     }
   });
 
@@ -189,6 +235,9 @@ export function createReferenceTray({ mastery, ui } = {}) {
     toggle,
     isOpen: () => isOpen,
     teardown: () => {
+      close({ restoreFocus: false });
+      if (tray.contains(document.activeElement)) document.activeElement.blur();
+      setBackgroundInert(false);
       while (listeners.length) {
         const { target, type, fn, opts } = listeners.pop();
         target.removeEventListener(type, fn, opts);

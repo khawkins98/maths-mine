@@ -86,14 +86,21 @@ test.describe('cottage construction reveal', () => {
       build: document.activeElement === document.querySelector('#btn-build-house'),
     }));
     expect(focusedDuringReveal).toEqual({ game: null, build: false });
+
+    await page.evaluate(() => document.activeElement?.blur());
+    const blockBuilder = page.locator('.hub-card[data-game="block-builder"]');
+    await blockBuilder.focus();
+    await expect(blockBuilder).not.toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page.locator('#hub')).toBeVisible();
     expect(await page.evaluate(() => typeof window.__bb)).toBe('undefined');
+    await expect(page.locator('#ref-tray')).not.toHaveClass(/open/);
 
     await page.waitForFunction(() => !window.__hub().building);
     await expect(page.locator('#hub-cards')).not.toHaveAttribute('inert');
     await expect(page.locator('#house-bar')).not.toHaveAttribute('inert');
-    await page.locator('.hub-card[data-game="block-builder"]').focus();
+    await blockBuilder.focus();
+    await expect(blockBuilder).toBeFocused();
     await page.keyboard.press('Enter');
     await page.waitForFunction(() => typeof window.__bb === 'function');
   });
