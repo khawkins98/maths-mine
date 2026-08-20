@@ -47,8 +47,9 @@ export function createBlockBuilder(ctx) {
   const capTex = activeBiome && activeBiome.blockCapKey ? textures[activeBiome.blockCapKey] : textures.grassTex;
   const blocks = createBlockKit(ctx.textures, { body: bodyTex, cap: capTex });
   const { makeBlock, setCapGrass } = blocks;
-  const slotGeo = new THREE.PlaneGeometry(CELL * 0.94, CELL * 0.94);
-  const sharedGeos = new Set([...blocks.sharedGeos, slotGeo]);
+  const slotFrameGeo = new THREE.PlaneGeometry(CELL * 0.96, CELL * 0.96);
+  const slotFillGeo = new THREE.PlaneGeometry(CELL * 0.82, CELL * 0.82);
+  const sharedGeos = new Set([...blocks.sharedGeos, slotFrameGeo, slotFillGeo]);
 
   // ---- the game's own scene subtree ----
   const root = new THREE.Group();
@@ -146,10 +147,25 @@ export function createBlockBuilder(ctx) {
     const tiles = Array.from({ length: C }, () => new Array(R).fill(null));
     for (let c = 0; c < C; c++) {
       for (let r = 0; r < R; r++) {
-        const tile = new THREE.Mesh(
-          slotGeo,
-          new THREE.MeshBasicMaterial({ map: slotTex, transparent: true, opacity: 0.28, depthWrite: false })
+        // Two-tone silhouette stays legible on both snow/endstone and the
+        // darkest Nether/End surfaces. The textured centre is deliberately
+        // restrained: an empty blueprint cell, never a placed block.
+        const tile = new THREE.Group();
+        const frame = new THREE.Mesh(
+          slotFrameGeo,
+          new THREE.MeshBasicMaterial({ color: 0x17130d, transparent: true, opacity: 0.82, depthWrite: false })
         );
+        const fill = new THREE.Mesh(
+          slotFillGeo,
+          new THREE.MeshBasicMaterial({ map: slotTex, color: 0xfff0b5, transparent: true, opacity: 0.34, depthWrite: false })
+        );
+        frame.position.z = 0;
+        fill.position.z = 0.012;
+        frame.renderOrder = 1;
+        fill.renderOrder = 2;
+        tile.add(frame, fill);
+        tile.userData.frame = frame;
+        tile.userData.fill = fill;
         tile.position.copy(cellPos(c, r, C, R));
         tile.position.z = -0.2;
         g.add(tile);
@@ -162,13 +178,13 @@ export function createBlockBuilder(ctx) {
   }
 
   function updateMoldPulse() {
-    if (pulsedTile) { pulsedTile.material.opacity = 0.28; pulsedTile = null; }
+    if (pulsedTile) { pulsedTile.userData.fill.material.opacity = 0.34; pulsedTile = null; }
     if (!round || phase !== 'building' || !moldGroup) return;
     for (let c = 0; c < round.C; c++) {
       const r = round.cells[c].indexOf(false);
       if (r !== -1) {
         pulsedTile = moldGroup.userData.tiles[c][r];
-        pulsedTile.material.opacity = 0.4 + 0.2 * Math.sin(nowT() * 3);
+        pulsedTile.userData.fill.material.opacity = 0.48 + 0.14 * Math.sin(nowT() * 3);
         return;
       }
     }
@@ -820,20 +836,40 @@ export function createBlockBuilder(ctx) {
 
   // ---------- debug hooks for the headless smoke test ----------
   function installDebug() {
-    window.__bb = () => ({
-      placed: round?.placed, groupsDone: round?.groupsDone, phase,
-      C: round?.C, R: round?.R, answer: round?.answer,
-      a: round?.a, b: round?.b,
-      dividend: round?.dividend, divisor: round?.divisor, quotient: round?.quotient,
-      visualC: round?.visualC, visualR: round?.visualR,
-      op: round?.op, mode: round?.op,
-      divisionGap: round?.divisionGap || 0,
-      rowYs: round?.op === 'div' && round.blocks[0]
-        ? round.blocks[0].map((block) => block?.position.y)
-        : [],
-      choices: ui.currentChoiceValues(),
-      bolts: wallet.bolts,
-    });
+    window.__bb = () => {
+      const firstBlock = round?.blocks.flat().find(Boolean);
+      const bodyMap = firstBlock?.children[0]?.material?.map;
+      const capMap = firstBlock?.children[1]?.material?.map;
+      return ({
+        placed: round?.placed, groupsDone: round?.groupsDone, phase,
+        C: round?.C, R: round?.R, answer: round?.answer,
+        a: round?.a, b: round?.b,
+        dividend: round?.dividend, divisor: round?.divisor, quotient: round?.quotient,
+        visualC: round?.visualC, visualR: round?.visualR,
+        op: round?.op, mode: round?.op,
+        divisionGap: round?.divisionGap || 0,
+        rowYs: round?.op === 'div' && round.blocks[0]
+          ? round.blocks[0].map((block) => block?.position.y)
+          : [],
+        choices: ui.currentChoiceValues(),
+        bolts: wallet.bolts,
+        targetStyle: moldGroup ? {
+          frameOpacity: moldGroup.userData.tiles[0][0].userData.frame.material.opacity,
+          fillOpacity: moldGroup.userData.tiles[0][0].userData.fill.material.opacity,
+          frameColor: moldGroup.userData.tiles[0][0].userData.frame.material.color.getHexString(),
+          fillColor: moldGroup.userData.tiles[0][0].userData.fill.material.color.getHexString(),
+        } : null,
+        materialIdentity: round?.blockKit ? {
+          blueprintMaterialKey: round.blueprint?.materialKey,
+          blueprintCapKey: round.blueprint?.capKey,
+          renderedBodyMap: bodyMap?.uuid || null,
+          renderedCapMap: capMap?.uuid || null,
+          expectedBodyMap: textures[round.blueprint?.materialKey]?.uuid || null,
+          expectedCapMap: textures[round.blueprint?.capKey]?.uuid || null,
+          dirtMap: textures.dirtTex.uuid,
+        } : null,
+      });
+    };
     window.__place = (c, r) => placeInCell(c, r);
     window.__cellXY = (c, r) => { const p = cellPos(c, r, round.C, round.R); return engine.worldToScreen(p.x + wall.position.x, p.y + wall.position.y); };
     window.__nextMode = (op) => { forcedOp = (op === 'div' || op === 'mul') ? op : null; }; // test: force next round's ×/÷
@@ -879,7 +915,7 @@ export function createBlockBuilder(ctx) {
       if (Array.isArray(mm)) mm.forEach((x) => x.dispose?.());
       else mm?.dispose?.();
     });
-    blocks.dispose(); slotGeo.dispose();
+    blocks.dispose(); slotFrameGeo.dispose(); slotFillGeo.dispose();
     ui.els.btnRecenter.style.display = ''; // restore what start() hid
     engine.resetCamera();
     round = null; phase = 'idle';
