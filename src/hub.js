@@ -19,6 +19,7 @@ const META = {
   'spot-the-wrongun': { icon: 'emerald', desc: 'Find the player who’s fibbing!' },
   'night-defense': { icon: 'obsidian', desc: 'Defend your cottage against nighttime mobs!' },
 };
+const NIGHT_UNLOCK_STAGE = 4;
 
 export function createHub(ctx) {
   const { ui, bolt, speech } = ctx;
@@ -27,6 +28,37 @@ export function createHub(ctx) {
   // first 1150ms left him walking on the spot into the round and waving in the
   // middle of the first question.
   const timers = createTimers();
+  let building = false;
+  let revealPhase = 'idle';
+
+  const revealClasses = ['house-reveal-build', 'house-reveal-static'];
+  function setRevealInert(on) {
+    if (!ui.els.hub) return;
+    const chrome = [
+      ui.els.hub.querySelector('h1'),
+      ui.els.hub.querySelector('.hub-kicker'),
+      ui.els.hubCards,
+      ui.els.hub.querySelector('#house-bar'),
+    ];
+    for (const node of chrome) if (node) node.toggleAttribute('inert', on);
+  }
+  function clearReveal({ restoreFocus = false } = {}) {
+    building = false;
+    revealPhase = 'idle';
+    if (ui.els.hub) ui.els.hub.classList.remove(...revealClasses);
+    setRevealInert(false);
+    const button = ui.els.btnBuildHouse;
+    if (button) {
+      button.removeAttribute('aria-busy');
+      updateHouseUI();
+      if (restoreFocus && hubVisible()) {
+        const target = button.disabled
+          ? ui.els.hubCards && ui.els.hubCards.querySelector('.hub-card:not(.locked)')
+          : button;
+        if (target) target.focus({ preventScroll: true });
+      }
+    }
+  }
 
   // Drawn once and reused: the cards are rebuilt every time the hub opens.
   const iconCache = {};
@@ -52,8 +84,10 @@ export function createHub(ctx) {
     // overallProgress(), and a fully verdigris mascot on a blank ledger is the
     // app contradicting itself in front of the next child.
     onChange: () => {
+      if (ctx.engine.house && ctx.engine.house.reset) ctx.engine.house.reset();
       if (bolt.setOxidation) bolt.setOxidation(ctx.mastery.overallProgress());
       if (ctx.engine.updateBiomeFromProgress) ctx.engine.updateBiomeFromProgress(ctx.mastery.overallProgress());
+      renderCards();
     },
   });
   const hubVisible = () => !!ui.els.hub && !ui.els.hub.classList.contains('hidden');
@@ -108,7 +142,7 @@ export function createHub(ctx) {
     ui.els.btnBuildHouse.addEventListener('click', () => {
       const house = ctx.engine && ctx.engine.house;
       const wallet = ctx.wallet;
-      if (!house || !wallet) return;
+      if (!house || !wallet || building) return;
 
       const stage = house.getStage();
       if (stage >= 8) {
@@ -117,10 +151,34 @@ export function createHub(ctx) {
         return;
       }
 
-      const res = house.upgrade(wallet);
-      if (res.success) {
-        if (ctx.audio) ctx.audio.beep(520, 0.15, 'square', 0.1);
-        updateHouseUI();
+      const button = ui.els.btnBuildHouse;
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      building = true;
+      revealPhase = reducedMotion ? 'static' : 'fading';
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      ui.els.hub.classList.add(reducedMotion ? 'house-reveal-static' : 'house-reveal-build');
+      if (!reducedMotion) setRevealInert(true);
+
+      const build = () => {
+        if (!building) return;
+        const res = house.upgrade(wallet);
+        if (!res.success) { clearReveal({ restoreFocus: true }); return; }
+        revealPhase = 'showing';
+        renderCards();
+        // renderCards refreshes the CTA after the spend; keep it inert until
+        // the reveal completes so rapid taps cannot buy a second stage.
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+        if (!reducedMotion && ctx.worldFeel) {
+          const { x, z } = house.group.position;
+          ctx.worldFeel.puff(x, z, 16);
+          ctx.worldFeel.impulse(0.24, x, z);
+        }
+        if (ctx.audio) {
+          ctx.audio.thunk(res.newStage);
+          ctx.audio.groupChime(Math.min(res.newStage, 4));
+        }
         if (res.newStage === 4) {
           ui.showToast('🛡️ Iron Golem summoned! Night mode unlocked!', 'good');
           speech.speak('You summoned the Iron Golem to guard your village!');
@@ -140,7 +198,14 @@ export function createHub(ctx) {
           ui.showToast(`🎉 Village upgraded to Stage ${res.newStage}!`, 'good');
           speech.speak(`You built stage ${res.newStage} of your village!`);
         }
-      }
+        timers.later(() => clearReveal({ restoreFocus: true }), reducedMotion ? 280 : 1450);
+      };
+
+      // Normal motion gives the chrome one short transition to clear before
+      // the mesh swaps. Reduced motion changes state immediately and retains
+      // only a brief static highlight.
+      if (reducedMotion) build();
+      else timers.later(build, 180);
     });
   }
 
@@ -156,11 +221,23 @@ export function createHub(ctx) {
       card.className = 'hub-card';
       card.dataset.game = id;
       card.dataset.material = meta.icon;
+      const houseStage = ctx.engine.house ? ctx.engine.house.getStage() : 0;
+      const locked = id === 'night-defense' && houseStage < NIGHT_UNLOCK_STAGE;
+      if (locked) {
+        card.classList.add('locked');
+        card.setAttribute('aria-disabled', 'true');
+        card.setAttribute('aria-label', `Night Defence locked. Build the Iron Golem. Village stage ${houseStage} of ${NIGHT_UNLOCK_STAGE}.`);
+      }
       card.innerHTML =
         `<img class="hc-icon" alt="" src="${iconFor(meta.icon)}">` +
         `<div class="hc-title">${(factory && factory.title) || title}</div>` +
-        `<div class="hc-desc">${meta.desc}</div>`;
-      card.addEventListener('click', () => play(id));
+        `<div class="hc-desc">${locked
+          ? `🔒 Build the Iron Golem · Stage ${houseStage} of ${NIGHT_UNLOCK_STAGE}`
+          : meta.desc}</div>`;
+      // Keep the locked card focusable and self-explanatory, but give it no
+      // production play handler. window.__pick remains the deliberate debug
+      // bypass used by Night Defence's isolated browser tests.
+      if (!locked) card.addEventListener('click', () => play(id));
       wrap.appendChild(card);
     }
     updateHouseUI();
@@ -169,6 +246,7 @@ export function createHub(ctx) {
   // Launch a game by id; wire its exit (a back button / ctx.onExit) to the hub.
   function play(id, opts) {
     timers.clearAll(); // the greeting must not follow the child into the game
+    clearReveal();
     dash.close();      // never let the parent view survive into a round
     ui.hideHub();
     ui.showGameHud();
@@ -180,9 +258,15 @@ export function createHub(ctx) {
   // Show the picker: stop the current game (clean slate behind the overlay),
   // reset the shared HUD bits, render cards, and let Bolt invite the child.
   function open() {
+    timers.clearAll();
+    clearReveal();
     speech.reset(); // the menu greeting should not queue behind a dead round
     if (ctx.stopGame) ctx.stopGame();
     if (ctx.engine.updateBiomeFromProgress) ctx.engine.updateBiomeFromProgress(ctx.mastery.overallProgress());
+    // Reuse the engine's established village framing. Without this reset the
+    // first hub inherited the generic origin camera (and later hubs inherited
+    // whichever game ran last), leaving the cottage off-screen in portrait.
+    if (ctx.engine.resetCamera) ctx.engine.resetCamera();
     ui.hideBack();
     ui.hideChoices();
     ui.hideConfirm();
@@ -208,7 +292,10 @@ export function createHub(ctx) {
   }
 
   // debug hooks so a headless test can drive the hub
-  window.__hub = () => ({ open: ui.els.hub ? !ui.els.hub.classList.contains('hidden') : false, games: list() });
+  window.__hub = () => ({
+    open: ui.els.hub ? !ui.els.hub.classList.contains('hidden') : false,
+    games: list(), building, revealPhase,
+  });
   window.__pick = (id) => play(id);
 
   return { id: 'hub', title: 'The Maths Mine', open, play, list, start: open };
