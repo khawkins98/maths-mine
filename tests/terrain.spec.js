@@ -242,13 +242,29 @@ test.describe('continuous procedural terrain', () => {
         const biomes = ['flat', 'hills', 'forest', 'desert', 'snow', 'nether', 'end'];
         window.__biome(biomes[i % biomes.length]);
         window.__terrainSetSeed(1000 + i);
+        window.__terrainRender(); // deterministically register this biome state
         window.__pick('block-builder');
       }, index);
       await page.waitForFunction(() => typeof window.__bb === 'function');
+      await page.evaluate(() => window.__terrainRender()); // register game-owned geometry before teardown
       await page.evaluate(() => document.querySelector('#btn-back').click());
       await page.waitForFunction(() => window.__hub().open);
       await page.waitForTimeout(80);
-      return page.evaluate(() => window.__terrainRender());
+      return page.evaluate(() => {
+        const memory = window.__terrainRender();
+        const geometryClasses = {};
+        const geometryIds = new Set();
+        window.__engine().scene.traverse((object) => {
+          if (!object.geometry || geometryIds.has(object.geometry.uuid)) return;
+          geometryIds.add(object.geometry.uuid);
+          const kind = object.geometry.type || object.type;
+          geometryClasses[kind] = (geometryClasses[kind] || 0) + 1;
+        });
+        return { ...memory, biome: window.__terrain().biome,
+          stage: window.__engine().house.getStage(), hubOpen: window.__hub().open,
+          gameActive: typeof window.__bb === 'function', groveCount: window.__terrain().groveCount,
+          liveGeometries: geometryIds.size, geometryClasses };
+      });
     };
     // Warm every biome and the largest house until two complete, identically
     // ordered biome passes end on the same renderer counts. This proves the
@@ -260,6 +276,7 @@ test.describe('continuous procedural terrain', () => {
     for (let epoch = 0; epoch < 3 && !plateau; epoch++) {
       let endpoint;
       for (let i = 0; i < 14; i++) endpoint = await cycle(nextCycle++);
+      console.log(`terrain resource epoch ${epoch + 1}: ${JSON.stringify(endpoint)}`);
       if (previousEndpoint && endpoint.geometries === previousEndpoint.geometries
         && endpoint.textures === previousEndpoint.textures) plateau = endpoint;
       previousEndpoint = endpoint;
