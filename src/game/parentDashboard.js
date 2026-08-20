@@ -268,7 +268,7 @@ export function createParentDashboard({ mastery, wallet = null, onChange = null 
       return `
         <h3>Start again</h3>
         <div class="pd-danger" role="alertdialog" aria-label="Confirm erasing all progress">
-          <p><b>Erase every fact, level and bolt?</b> This cannot be undone, and the games will
+          <p><b>Erase every fact, level, bolt and village upgrade?</b> This cannot be undone, and the games will
           start again from the 2, 5 and 10 tables as if the tablet were new.</p>
           <div class="pd-row">
             <button class="pd-btn pd-btn-danger" id="pd-reset-yes">Yes, erase everything</button>
@@ -308,7 +308,7 @@ export function createParentDashboard({ mastery, wallet = null, onChange = null 
     if (wallet && wallet.reset) wallet.reset();
     if (onChange) onChange();
     confirming = false;
-    flash = 'Progress erased. The games will start from the 2, 5 and 10 tables again.';
+    flash = 'Progress erased. The tables and village will start again.';
     render();
     // The confirmation should not sit there forever pretending to be a heading.
     timers.later(() => { flash = ''; render(); }, 6000);

@@ -19,6 +19,7 @@ const META = {
   'spot-the-wrongun': { icon: 'emerald', desc: 'Find the player who’s fibbing!' },
   'night-defense': { icon: 'obsidian', desc: 'Defend your cottage against nighttime mobs!' },
 };
+const NIGHT_UNLOCK_STAGE = 4;
 
 export function createHub(ctx) {
   const { ui, bolt, speech } = ctx;
@@ -52,8 +53,10 @@ export function createHub(ctx) {
     // overallProgress(), and a fully verdigris mascot on a blank ledger is the
     // app contradicting itself in front of the next child.
     onChange: () => {
+      if (ctx.engine.house && ctx.engine.house.reset) ctx.engine.house.reset();
       if (bolt.setOxidation) bolt.setOxidation(ctx.mastery.overallProgress());
       if (ctx.engine.updateBiomeFromProgress) ctx.engine.updateBiomeFromProgress(ctx.mastery.overallProgress());
+      renderCards();
     },
   });
   const hubVisible = () => !!ui.els.hub && !ui.els.hub.classList.contains('hidden');
@@ -120,7 +123,7 @@ export function createHub(ctx) {
       const res = house.upgrade(wallet);
       if (res.success) {
         if (ctx.audio) ctx.audio.beep(520, 0.15, 'square', 0.1);
-        updateHouseUI();
+        renderCards();
         if (res.newStage === 4) {
           ui.showToast('🛡️ Iron Golem summoned! Night mode unlocked!', 'good');
           speech.speak('You summoned the Iron Golem to guard your village!');
@@ -156,11 +159,23 @@ export function createHub(ctx) {
       card.className = 'hub-card';
       card.dataset.game = id;
       card.dataset.material = meta.icon;
+      const houseStage = ctx.engine.house ? ctx.engine.house.getStage() : 0;
+      const locked = id === 'night-defense' && houseStage < NIGHT_UNLOCK_STAGE;
+      if (locked) {
+        card.classList.add('locked');
+        card.setAttribute('aria-disabled', 'true');
+        card.setAttribute('aria-label', `Night Defence locked. Build the Iron Golem. Village stage ${houseStage} of ${NIGHT_UNLOCK_STAGE}.`);
+      }
       card.innerHTML =
         `<img class="hc-icon" alt="" src="${iconFor(meta.icon)}">` +
         `<div class="hc-title">${(factory && factory.title) || title}</div>` +
-        `<div class="hc-desc">${meta.desc}</div>`;
-      card.addEventListener('click', () => play(id));
+        `<div class="hc-desc">${locked
+          ? `🔒 Build the Iron Golem · Stage ${houseStage} of ${NIGHT_UNLOCK_STAGE}`
+          : meta.desc}</div>`;
+      // Keep the locked card focusable and self-explanatory, but give it no
+      // production play handler. window.__pick remains the deliberate debug
+      // bypass used by Night Defence's isolated browser tests.
+      if (!locked) card.addEventListener('click', () => play(id));
       wrap.appendChild(card);
     }
     updateHouseUI();
