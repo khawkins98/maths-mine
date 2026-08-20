@@ -20,7 +20,7 @@ test.describe('shared UI transitions', () => {
   });
 
   test('an old choices fade cannot erase a replacement row', async ({ page }) => {
-    await page.goto('/');
+    const errors = await boot(page);
     const visible = await page.evaluate(async () => {
       const { createUI } = await import('/src/core/ui.js');
       const ui = createUI();
@@ -34,6 +34,7 @@ test.describe('shared UI transitions', () => {
       };
     });
     expect(visible).toEqual({ values: [7, 8, 9], hidden: false });
+    expect(errors).toEqual([]);
   });
 
   test('locked choices cannot be activated by keyboard', async ({ page }) => {
