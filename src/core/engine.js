@@ -75,7 +75,6 @@ export function createEngine({ textures }) {
   // ---- dynamic biome management ----
   let activeBiome = BIOMES.flat;
   let groveGroup = null;
-  let activeDecorations = [];
 
   const defaultGrovePositions = [
     { x: -28, z: -22 }, { x: 28, z: -22 },
@@ -112,7 +111,6 @@ export function createEngine({ textures }) {
     if (groveGroup) disposeTrees(scene, groveGroup);
     const positions = biome.treeType === 'dense_oak' ? forestGrovePositions : defaultGrovePositions;
     const safePositions = positions.filter(({ x, z }) => isTerrainDecorationAllowed(x, z));
-    activeDecorations = safePositions.map(({ x, z }) => ({ x, z, type: biome.treeType }));
     groveGroup = plantTrees(scene, safePositions.map((p) => ({ ...p,
       y: sampleTerrainHeight(p.x, p.z, { seed: terrain.inspect().seed, style: biome.mountainStyle }),
     })), textures, biome.treeType);
@@ -133,7 +131,20 @@ export function createEngine({ textures }) {
   window.__terrain = () => ({ ...terrain.inspect(), biome: activeBiome.id,
     sample: (x, z) => sampleTerrainHeight(x, z, { seed: terrain.inspect().seed, style: activeBiome.mountainStyle }),
     decorationAllowed: isTerrainDecorationAllowed,
-    treeCells: activeDecorations.map((p) => ({ ...p })), fluidCells: [],
+    treeCells: (() => {
+      const cells = [];
+      scene.traverse((object) => {
+        if (!object.userData.decorationType) return;
+        const world = new THREE.Vector3();
+        object.getWorldPosition(world);
+        cells.push({ x: world.x, y: world.y, z: world.z,
+          radius: object.userData.decorationRadius || 0, type: object.userData.decorationType });
+      });
+      return cells;
+    })(),
+    groveCount: scene.children.filter((object) => object.name === 'background-grove').length,
+    rendererMemory: { ...renderer.info.memory },
+    fluidCells: [],
   });
   window.__terrainSetSeed = (seed) => {
     ground = terrain.setSeed(seed, activeBiome);
@@ -159,14 +170,30 @@ export function createEngine({ textures }) {
     obj3d.getWorldPosition(_proj); _proj.project(camera);
     return { x: (_proj.x * 0.5 + 0.5) * window.innerWidth, y: (-_proj.y * 0.5 + 0.5) * window.innerHeight };
   }
+  function projectBoundsToScreen(obj3d) {
+    const box = new THREE.Box3().setFromObject(obj3d);
+    if (box.isEmpty()) return null;
+    const points = [];
+    for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) {
+      for (const z of [box.min.z, box.max.z]) {
+        const point = new THREE.Vector3(x, y, z).project(camera);
+        points.push({ x: (point.x * 0.5 + 0.5) * window.innerWidth,
+          y: (-point.y * 0.5 + 0.5) * window.innerHeight });
+      }
+    }
+    return { minX: Math.min(...points.map((p) => p.x)), maxX: Math.max(...points.map((p) => p.x)),
+      minY: Math.min(...points.map((p) => p.y)), maxY: Math.max(...points.map((p) => p.y)) };
+  }
 
   function placeCamera(centerY, dist, viewDir = VIEW_DIR) {
-    camera.position.copy(viewDir).multiplyScalar(dist);
+    const portraitFit = Math.max(1, Math.min(1.45, 0.72 / camera.aspect));
+    camera.position.copy(viewDir).multiplyScalar(dist * portraitFit);
     camera.position.y += centerY;
     camera.lookAt(0, centerY, 0);
   }
   function resetCamera() {
-    camera.position.set(0, 5.6, 15.5);
+    const portraitFit = Math.max(1, Math.min(1.45, 0.72 / camera.aspect));
+    camera.position.set(0, 5.6 * portraitFit, 15.5 * portraitFit);
     camera.lookAt(0, 2.0, 0);
   }
 
@@ -195,7 +222,7 @@ export function createEngine({ textures }) {
   return {
     renderer, scene, camera, camRig, get ground() { return ground; }, platform, key, fill, clock,
     VIEW_DIR, house: houseManager,
-    nowT, worldToScreen, projectToScreen,
+    nowT, worldToScreen, projectToScreen, projectBoundsToScreen,
     placeCamera, resetCamera,
     setBiome, updateBiomeFromProgress, currentBiome: () => activeBiome,
     onFrame, start, resize,

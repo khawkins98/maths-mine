@@ -22,7 +22,6 @@ import { createPointerInput } from '../core/pointer.js';
 import { buildChoiceSet } from '../core/choices.js';
 import { easeOutBack, easeOutBounce, easeOutCubic } from '../core/ease.js';
 import { createBlockKit, CELL, BLOCK, CAP_H, BODY_H } from '../core/blocks.js';
-import { plantTrees, disposeTrees } from '../core/trees.js';
 import { getBlueprint } from './blueprints.js';
 
 const DROP_INTERVAL = 0.16;    // seconds between poured blocks (full pour)
@@ -54,13 +53,6 @@ export function createBlockBuilder(ctx) {
   // ---- the game's own scene subtree ----
   const root = new THREE.Group();
   scene.add(root);
-
-  // Minecraft oak trees around the clearing edges for atmosphere.
-  // Positions are behind/beside the play area so they never obstruct blocks.
-  const treesGroup = plantTrees(scene, [
-    { x: -13, z: -7 }, { x: -7, z: -10 },
-    { x: 7, z: -10 }, { x: 13, z: -7 },
-  ], textures);
 
   let wall = new THREE.Group();
   root.add(wall);
@@ -866,7 +858,6 @@ export function createBlockBuilder(ctx) {
       else mm?.dispose?.();
     });
     blocks.dispose(); slotGeo.dispose();
-    disposeTrees(scene, treesGroup);
     ui.els.btnRecenter.style.display = ''; // restore what start() hid
     engine.resetCamera();
     round = null; phase = 'idle';

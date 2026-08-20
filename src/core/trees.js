@@ -6,6 +6,7 @@ const BLOCK = 0.72; // scenery scale: readable, but subordinate to the lesson
 
 const _gLog = new THREE.BoxGeometry(BLOCK, BLOCK, BLOCK);
 const _gLeaf = new THREE.BoxGeometry(BLOCK, BLOCK, BLOCK);
+const _gEndCrystal = new THREE.OctahedronGeometry(BLOCK * 0.6);
 
 export function makeTree({ trunkHeight = 4, seed = 0, materials, isBirch = false } = {}) {
   const g = new THREE.Group();
@@ -147,7 +148,7 @@ export function makeEndPillar({ height = 5, materials }) {
   }
   // Floating End Crystal on top
   const crystal = new THREE.Mesh(
-    new THREE.OctahedronGeometry(BLOCK * 0.6),
+    _gEndCrystal,
     materials.crystal,
   );
   crystal.position.set(0, (height + 0.8) * BLOCK, 0);
@@ -221,6 +222,8 @@ export function plantTrees(scene, positions, textures, treeType = 'oak') {
       tree = makeTree({ trunkHeight: trunkHeight ?? (4 + (i % 2)), seed: i * 137, materials });
     }
     tree.position.set(x, y, z);
+    tree.userData.decorationRadius = (treeType === 'cactus' || treeType === 'end_pillar') ? BLOCK : BLOCK * 2;
+    tree.userData.decorationType = treeType;
     group.add(tree);
   });
 
