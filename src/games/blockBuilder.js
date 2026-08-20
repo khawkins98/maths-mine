@@ -28,6 +28,8 @@ const DROP_INTERVAL = 0.16;    // seconds between poured blocks (full pour)
 const DROP_TIME = 0.25;        // seconds for the drop-and-bounce of a placed block
 const DIV_SPLIT_TIME = 0.55;   // seconds to separate the equal groups on reveal
 const COLS = [0xff6b6b, 0xffd24a, 0x58e08a, 0x6ad2ff, 0xb98bff, 0xff9f5a, 0x7ef0d0, 0xf78fb3]; // confetti
+const SLOT_IDLE_OPACITY = 0.34;
+const SLOT_GUIDED_OPACITY = 0.52;
 
 
 
@@ -37,6 +39,7 @@ export function createBlockBuilder(ctx) {
   const speak = speech.speak, eqWords = speech.eqWords, divWords = speech.divWords, pickPhrase = speech.pickPhrase;
   const nowT = engine.nowT;
   const dom = ctx.renderer.domElement;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   // 3/4 iso view direction lives in the engine
   const VIEW_DIR = engine.VIEW_DIR;
@@ -47,8 +50,9 @@ export function createBlockBuilder(ctx) {
   const capTex = activeBiome && activeBiome.blockCapKey ? textures[activeBiome.blockCapKey] : textures.grassTex;
   const blocks = createBlockKit(ctx.textures, { body: bodyTex, cap: capTex });
   const { makeBlock, setCapGrass } = blocks;
-  const slotGeo = new THREE.PlaneGeometry(CELL * 0.94, CELL * 0.94);
-  const sharedGeos = new Set([...blocks.sharedGeos, slotGeo]);
+  const slotFrameGeo = new THREE.PlaneGeometry(CELL * 0.96, CELL * 0.96);
+  const slotFillGeo = new THREE.PlaneGeometry(CELL * 0.82, CELL * 0.82);
+  const sharedGeos = new Set([...blocks.sharedGeos, slotFrameGeo, slotFillGeo]);
 
   // ---- the game's own scene subtree ----
   const root = new THREE.Group();
@@ -84,6 +88,8 @@ export function createBlockBuilder(ctx) {
   // finishRound() fire against a null round.
   const timers = createTimers();
   let round = null;
+  const disposedRoundKits = new WeakSet();
+  let roundKitsCreated = 0, roundKitsDisposed = 0;
   let phase = 'idle';    // 'building' | 'asking' | 'rotate' | 'rotating' | 'next'
   let firstRound = true;
   let moldGroup = null, pulsedTile = null;
@@ -126,13 +132,20 @@ export function createBlockBuilder(ctx) {
   }
 
   function clearWall() {
+    const ownedRoundKit = round?.blockKit;
+    const ownedRoundGeos = ownedRoundKit?.sharedGeos;
     root.remove(wall);
     wall.traverse((o) => {
-      if (o.geometry && !sharedGeos.has(o.geometry)) o.geometry.dispose?.();
+      if (o.geometry && !sharedGeos.has(o.geometry) && !ownedRoundGeos?.has(o.geometry)) o.geometry.dispose?.();
       const mm = o.material;
       if (Array.isArray(mm)) mm.forEach((x) => x.dispose?.());
       else mm?.dispose?.(); // shared textures are NOT disposed by material.dispose
     });
+    if (ownedRoundKit && !disposedRoundKits.has(ownedRoundKit)) {
+      ownedRoundKit.dispose();
+      disposedRoundKits.add(ownedRoundKit);
+      roundKitsDisposed++;
+    }
     wall = new THREE.Group();
     root.add(wall);
     falling.length = 0;
@@ -146,10 +159,25 @@ export function createBlockBuilder(ctx) {
     const tiles = Array.from({ length: C }, () => new Array(R).fill(null));
     for (let c = 0; c < C; c++) {
       for (let r = 0; r < R; r++) {
-        const tile = new THREE.Mesh(
-          slotGeo,
-          new THREE.MeshBasicMaterial({ map: slotTex, transparent: true, opacity: 0.28, depthWrite: false })
+        // Two-tone silhouette stays legible on both snow/endstone and the
+        // darkest Nether/End surfaces. The textured centre is deliberately
+        // restrained: an empty blueprint cell, never a placed block.
+        const tile = new THREE.Group();
+        const frame = new THREE.Mesh(
+          slotFrameGeo,
+          new THREE.MeshBasicMaterial({ color: 0x17130d, transparent: true, opacity: 0.82, depthWrite: false })
         );
+        const fill = new THREE.Mesh(
+          slotFillGeo,
+          new THREE.MeshBasicMaterial({ map: slotTex, color: 0xfff0b5, transparent: true, opacity: SLOT_IDLE_OPACITY, depthWrite: false })
+        );
+        frame.position.z = 0;
+        fill.position.z = 0.012;
+        frame.renderOrder = 1;
+        fill.renderOrder = 2;
+        tile.add(frame, fill);
+        tile.userData.frame = frame;
+        tile.userData.fill = fill;
         tile.position.copy(cellPos(c, r, C, R));
         tile.position.z = -0.2;
         g.add(tile);
@@ -162,13 +190,15 @@ export function createBlockBuilder(ctx) {
   }
 
   function updateMoldPulse() {
-    if (pulsedTile) { pulsedTile.material.opacity = 0.28; pulsedTile = null; }
+    if (pulsedTile) { pulsedTile.userData.fill.material.opacity = SLOT_IDLE_OPACITY; pulsedTile = null; }
     if (!round || phase !== 'building' || !moldGroup) return;
     for (let c = 0; c < round.C; c++) {
       const r = round.cells[c].indexOf(false);
       if (r !== -1) {
         pulsedTile = moldGroup.userData.tiles[c][r];
-        pulsedTile.material.opacity = 0.4 + 0.2 * Math.sin(nowT() * 3);
+        pulsedTile.userData.fill.material.opacity = reducedMotion.matches
+          ? SLOT_GUIDED_OPACITY
+          : 0.48 + 0.14 * Math.sin(nowT() * 3);
         return;
       }
     }
@@ -231,6 +261,7 @@ export function createBlockBuilder(ctx) {
     const roundBody = textures[bp.materialKey] || bodyTex;
     const roundCap = textures[bp.capKey] || capTex;
     const roundBlockKit = createBlockKit(textures, { body: roundBody, cap: roundCap });
+    roundKitsCreated++;
 
     round = {
       op: q.op, a: factA, b: factB, C, R, answer,
@@ -518,7 +549,7 @@ export function createBlockBuilder(ctx) {
       for (let r = 0; r < round.R; r++) {
         const block = round.blocks[c][r];
         if (!block) continue;
-        setCapGrass(block, true);
+        round.blockKit.setCapGrass(block, true);
         blocksToMove.push({
           block,
           fromY: block.position.y,
@@ -624,7 +655,7 @@ export function createBlockBuilder(ctx) {
         const b = round.blocks[c][r];
         if (!b) continue;
         b.position.copy(cellPos(r, C - 1 - c, R, C));
-        setCapGrass(b, c === 0);
+        round.blockKit.setCapGrass(b, c === 0);
       }
     }
     round.visualC = R;
@@ -820,20 +851,43 @@ export function createBlockBuilder(ctx) {
 
   // ---------- debug hooks for the headless smoke test ----------
   function installDebug() {
-    window.__bb = () => ({
-      placed: round?.placed, groupsDone: round?.groupsDone, phase,
-      C: round?.C, R: round?.R, answer: round?.answer,
-      a: round?.a, b: round?.b,
-      dividend: round?.dividend, divisor: round?.divisor, quotient: round?.quotient,
-      visualC: round?.visualC, visualR: round?.visualR,
-      op: round?.op, mode: round?.op,
-      divisionGap: round?.divisionGap || 0,
-      rowYs: round?.op === 'div' && round.blocks[0]
-        ? round.blocks[0].map((block) => block?.position.y)
-        : [],
-      choices: ui.currentChoiceValues(),
-      bolts: wallet.bolts,
-    });
+    window.__bb = () => {
+      const firstBlock = round?.blocks.flat().find(Boolean);
+      const bodyMap = firstBlock?.children[0]?.material?.map;
+      const capMap = firstBlock?.children[1]?.material?.map;
+      return ({
+        placed: round?.placed, groupsDone: round?.groupsDone, phase,
+        C: round?.C, R: round?.R, answer: round?.answer,
+        a: round?.a, b: round?.b,
+        dividend: round?.dividend, divisor: round?.divisor, quotient: round?.quotient,
+        visualC: round?.visualC, visualR: round?.visualR,
+        op: round?.op, mode: round?.op,
+        divisionGap: round?.divisionGap || 0,
+        rowYs: round?.op === 'div' && round.blocks[0]
+          ? round.blocks[0].map((block) => block?.position.y)
+          : [],
+        choices: ui.currentChoiceValues(),
+        bolts: wallet.bolts,
+        targetStyle: moldGroup ? {
+          frameOpacity: moldGroup.userData.tiles[0][0].userData.frame.material.opacity,
+          fillOpacity: moldGroup.userData.tiles[0][0].userData.fill.material.opacity,
+          frameColor: moldGroup.userData.tiles[0][0].userData.frame.material.color.getHexString(),
+          fillColor: moldGroup.userData.tiles[0][0].userData.fill.material.color.getHexString(),
+        } : null,
+        materialIdentity: round?.blockKit ? {
+          blueprintMaterialKey: round.blueprint?.materialKey,
+          blueprintCapKey: round.blueprint?.capKey,
+          renderedBodyMap: bodyMap?.uuid || null,
+          renderedCapMap: capMap?.uuid || null,
+          expectedBodyMap: textures[round.blueprint?.materialKey]?.uuid || null,
+          expectedCapMap: textures[round.blueprint?.capKey]?.uuid || null,
+          dirtMap: textures.dirtTex.uuid,
+          renderedBodyMaps: round.blocks.flat().filter(Boolean).map((block) => block.children[0].material.map?.uuid || null),
+          renderedCapMaps: round.blocks.flat().filter(Boolean).map((block) => block.children[1].material.map?.uuid || null),
+        } : null,
+        roundKitLifecycle: { created: roundKitsCreated, disposed: roundKitsDisposed },
+      });
+    };
     window.__place = (c, r) => placeInCell(c, r);
     window.__cellXY = (c, r) => { const p = cellPos(c, r, round.C, round.R); return engine.worldToScreen(p.x + wall.position.x, p.y + wall.position.y); };
     window.__nextMode = (op) => { forcedOp = (op === 'div' || op === 'mul') ? op : null; }; // test: force next round's ×/÷
@@ -879,7 +933,7 @@ export function createBlockBuilder(ctx) {
       if (Array.isArray(mm)) mm.forEach((x) => x.dispose?.());
       else mm?.dispose?.();
     });
-    blocks.dispose(); slotGeo.dispose();
+    blocks.dispose(); slotFrameGeo.dispose(); slotFillGeo.dispose();
     ui.els.btnRecenter.style.display = ''; // restore what start() hid
     engine.resetCamera();
     round = null; phase = 'idle';

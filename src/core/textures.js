@@ -123,6 +123,16 @@ export function createTextures() {
   // textures, but follow the same 16px resource-pack discipline as the player
   // skin so bark and leaves read as authored assets rather than flat colours.
   const logTex = pixelTex('#6f4324', ['#543019', '#87552e', '#9b6235', '#422514'], { size: 16, cell: 2, bias: 0.58 });
+  // End grain for Block Builder's oak structural timbers. A square ring and
+  // central heartwood make the exposed face read as a cut log, not brown dirt.
+  const logTopTex = makeCanvasTex(16, (ctx) => {
+    ctx.fillStyle = '#b7834c'; ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#70431f'; ctx.fillRect(1, 1, 14, 2); ctx.fillRect(1, 13, 14, 2);
+    ctx.fillRect(1, 1, 2, 14); ctx.fillRect(13, 1, 2, 14);
+    ctx.fillStyle = '#8d5a2b'; ctx.fillRect(4, 4, 8, 2); ctx.fillRect(4, 10, 8, 2);
+    ctx.fillRect(4, 4, 2, 8); ctx.fillRect(10, 4, 2, 8);
+    ctx.fillStyle = '#5d3519'; ctx.fillRect(7, 7, 2, 2);
+  }, { nearest: true });
   const birchLogTex = pixelTex('#d8d6cd', ['#bab8af', '#e8e6dc', '#383632', '#282622'], { size: 16, cell: 2, bias: 0.7 });
   const leafTex = pixelTex('#3f7c2d', ['#2d6121', '#4f9237', '#65a744', '#244f1b'], { size: 16, cell: 2, bias: 0.5 });
   const cactusTex = pixelTex('#2e7a32', ['#236326', '#3b943f', '#1b4d1e'], { size: 16, cell: 2 });
@@ -167,7 +177,7 @@ export function createTextures() {
 
   return {
     dirtTex, grassTex, stoneTex, emeraldTex, emeraldTopTex, groundTex, puffTex, slotTex, skyTex, woodTex,
-    logTex, birchLogTex, leafTex, cactusTex, netherStemTex, netherCapTex,
+    logTex, logTopTex, birchLogTex, leafTex, cactusTex, netherStemTex, netherCapTex,
     plankTex, cobbleTex, glassTex, ironBlockTex, ironGolemTex, pumpkinTex,
     obsidianTex, diamondTex, goldTex, redstoneTex, brickTex, hayTex, lavaTex, portalTex,
     platGrassTex, platForestGrassTex, platDirtTex, platSandTex, platSandstoneTex, platSnowTex, platNetherrackTex, platEndstoneTex, platObsidianTex,
