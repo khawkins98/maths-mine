@@ -1,75 +1,35 @@
-// games/nightDefense/facts.js — Math fact challenge generator for Night Defence.
-// Prioritises the child's unmastered facts from the shared mastery ledger.
+// games/nightDefense/facts.js — adaptive challenges for Night Defence.
+
+import { buildChoiceSet } from '../../core/choices.js';
 
 export function createFactPicker(mastery) {
-  function generateChoices(target, a, b, op) {
-    const choices = new Set([target]);
-    const offsets = [-1, 1, -2, 2, -b, b, -a, a];
-
-    // Shuffle candidate offsets
-    const shuffledOffsets = offsets.sort(() => Math.random() - 0.5);
-    for (const off of shuffledOffsets) {
-      const candidate = target + off;
-      if (candidate > 0 && candidate !== target) {
-        choices.add(candidate);
-      }
-      if (choices.size >= 4) break;
-    }
-
-    // Fallbacks if not enough unique positive distractors
-    let fallback = 1;
-    while (choices.size < 4) {
-      if (target + fallback > 0 && target + fallback !== target) choices.add(target + fallback);
-      fallback++;
-    }
-
-    return Array.from(choices).sort(() => Math.random() - 0.5);
-  }
-
   function pickFact() {
-    // 1. Check mastery for active/weak facts
-    let a, b, op;
-    const isDivision = Math.random() < 0.35; // 35% chance of division if unlocked
-
-    if (mastery && typeof mastery.pickFact === 'function') {
-      const picked = mastery.pickFact();
-      if (picked) {
-        a = picked.a;
-        b = picked.b;
-      }
-    }
-
-    if (!a || !b) {
-      // Default tables: 2, 3, 4, 5, 6, 7, 8, 9, 10
-      const tables = [2, 3, 4, 5, 6, 7, 8, 9, 10];
-      a = tables[Math.floor(Math.random() * tables.length)];
-      b = Math.floor(Math.random() * 9) + 2; // 2..10
-    }
-
-    if (isDivision) {
-      const product = a * b;
-      const target = a;
+    // Use the same scheduler as every other game. This keeps a new child on
+    // small 2/5/10-table facts and only introduces division once its
+    // multiplication sibling is known.
+    const q = mastery.nextQuestion();
+    if (q.op === 'div') {
       return {
-        a: product,
-        b,
+        a: q.a,
+        b: q.b,
         op: '÷',
-        target,
-        text: `${product} ÷ ${b} = ?`,
-        claimText: `${product} ÷ ${b} = ${target}`,
-        choices: generateChoices(target, a, b, '÷'),
-      };
-    } else {
-      const target = a * b;
-      return {
-        a,
-        b,
-        op: '×',
-        target,
-        text: `${a} × ${b} = ?`,
-        claimText: `${a} × ${b} = ${target}`,
-        choices: generateChoices(target, a, b, '×'),
+        dividend: q.dividend,
+        divisor: q.divisor,
+        target: q.answer,
+        text: `${q.dividend} ÷ ${q.divisor} = ?`,
+        answerText: `${q.dividend} ÷ ${q.divisor} = ${q.answer}`,
+        choices: buildChoiceSet(q.answer, 1),
       };
     }
+    return {
+      a: q.a,
+      b: q.b,
+      op: '×',
+      target: q.answer,
+      text: `${q.a} × ${q.b} = ?`,
+      answerText: `${q.a} × ${q.b} = ${q.answer}`,
+      choices: buildChoiceSet(q.answer, q.b),
+    };
   }
 
   return { pickFact };

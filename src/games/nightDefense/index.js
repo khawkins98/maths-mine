@@ -33,6 +33,9 @@ export function createNightDefense(ctx) {
       facts = createFactPicker(ctx.mastery);
       combat = createCombatManager(ctx, stage, facts);
 
+      window.__night = () => combat ? combat.state() : null;
+      window.__nightAnswer = (value) => { if (combat) combat.answer(value); };
+
       stage.frameCamera();
       combat.startWave(opts.wave || 1);
     },
@@ -48,6 +51,9 @@ export function createNightDefense(ctx) {
       stage = null;
       facts = null;
       combat = null;
+
+      delete window.__night;
+      delete window.__nightAnswer;
 
       if (ui.hideBack) ui.hideBack();
       if (ui.els.btnRecenter) ui.els.btnRecenter.classList.remove('hidden');
