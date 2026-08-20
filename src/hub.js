@@ -32,10 +32,21 @@ export function createHub(ctx) {
   let revealPhase = 'idle';
 
   const revealClasses = ['house-reveal-build', 'house-reveal-static'];
+  function setRevealInert(on) {
+    if (!ui.els.hub) return;
+    const chrome = [
+      ui.els.hub.querySelector('h1'),
+      ui.els.hub.querySelector('.hub-kicker'),
+      ui.els.hubCards,
+      ui.els.hub.querySelector('#house-bar'),
+    ];
+    for (const node of chrome) if (node) node.toggleAttribute('inert', on);
+  }
   function clearReveal({ restoreFocus = false } = {}) {
     building = false;
     revealPhase = 'idle';
     if (ui.els.hub) ui.els.hub.classList.remove(...revealClasses);
+    setRevealInert(false);
     const button = ui.els.btnBuildHouse;
     if (button) {
       button.removeAttribute('aria-busy');
@@ -147,6 +158,7 @@ export function createHub(ctx) {
       button.disabled = true;
       button.setAttribute('aria-busy', 'true');
       ui.els.hub.classList.add(reducedMotion ? 'house-reveal-static' : 'house-reveal-build');
+      if (!reducedMotion) setRevealInert(true);
 
       const build = () => {
         if (!building) return;

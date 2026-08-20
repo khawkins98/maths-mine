@@ -60,6 +60,42 @@ test.describe('cottage construction reveal', () => {
     expect(await page.evaluate(() => window.__hub())).toMatchObject({ open: false, building: false, revealPhase: 'idle' });
     expect(await page.locator('#hub').evaluate((hub) => [...hub.classList]
       .filter((name) => name.startsWith('house-reveal')))).toEqual([]);
+    await expect(page.locator('#hub-cards')).not.toHaveAttribute('inert');
+    await expect(page.locator('#house-bar')).not.toHaveAttribute('inert');
+  });
+
+  test('hidden hub controls cannot receive keyboard focus or activate a game', async ({ page }) => {
+    await seedBuild(page);
+    await boot(page);
+    const build = page.locator('#btn-build-house');
+    await build.focus();
+    const hiddenState = await build.evaluate((node) => {
+      node.click();
+      return {
+        cards: document.querySelector('#hub-cards').hasAttribute('inert'),
+        houseBar: document.querySelector('#house-bar').hasAttribute('inert'),
+        phase: window.__hub().revealPhase,
+        reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
+      };
+    });
+    expect(hiddenState).toEqual({ cards: true, houseBar: true, phase: 'fading', reduced: false });
+
+    await page.keyboard.press('Tab');
+    const focusedDuringReveal = await page.evaluate(() => ({
+      game: document.activeElement && document.activeElement.closest('[data-game]')?.dataset.game || null,
+      build: document.activeElement === document.querySelector('#btn-build-house'),
+    }));
+    expect(focusedDuringReveal).toEqual({ game: null, build: false });
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#hub')).toBeVisible();
+    expect(await page.evaluate(() => typeof window.__bb)).toBe('undefined');
+
+    await page.waitForFunction(() => !window.__hub().building);
+    await expect(page.locator('#hub-cards')).not.toHaveAttribute('inert');
+    await expect(page.locator('#house-bar')).not.toHaveAttribute('inert');
+    await page.locator('.hub-card[data-game="block-builder"]').focus();
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => typeof window.__bb === 'function');
   });
 
   test('returning from every game restores the village camera', async ({ page }) => {
