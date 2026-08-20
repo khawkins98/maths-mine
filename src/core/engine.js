@@ -137,13 +137,16 @@ export function createEngine({ textures }) {
         if (!object.userData.decorationType) return;
         const world = new THREE.Vector3();
         object.getWorldPosition(world);
+        const box = new THREE.Box3().setFromObject(object);
         cells.push({ x: world.x, y: world.y, z: world.z,
-          radius: object.userData.decorationRadius || 0, type: object.userData.decorationType });
+          bounds: { minX: box.min.x, maxX: box.max.x, minY: box.min.y, maxY: box.max.y,
+            minZ: box.min.z, maxZ: box.max.z }, type: object.userData.decorationType });
       });
       return cells;
     })(),
     groveCount: scene.children.filter((object) => object.name === 'background-grove').length,
     rendererMemory: { ...renderer.info.memory },
+    seedPersistence: 'ephemeral-debug; reload resets the default seed',
     fluidCells: [],
   });
   window.__terrainSetSeed = (seed) => {
@@ -156,6 +159,17 @@ export function createEngine({ textures }) {
     const hit = ground && ray.intersectObject(ground, false)[0];
     return hit ? hit.point.y : null;
   };
+  window.__terrainSightline = (x, y, z) => {
+    const target = new THREE.Vector3(x, y, z);
+    const origin = new THREE.Vector3();
+    camera.getWorldPosition(origin);
+    const distance = origin.distanceTo(target);
+    const ray = new THREE.Raycaster(origin, target.clone().sub(origin).normalize(), 0, distance - 0.05);
+    const groves = scene.children.filter((object) => object.name === 'background-grove');
+    const projected = target.clone().project(camera);
+    return { clear: ray.intersectObjects(groves, true).length === 0, depth: projected.z };
+  };
+  window.__terrainRender = () => { renderer.render(scene, camera); return { ...renderer.info.memory }; };
   window.__terrainDispose = () => { terrain.dispose(); terrain.dispose(); return terrain.inspect(); };
 
   const clock = new THREE.Clock();
@@ -171,7 +185,13 @@ export function createEngine({ textures }) {
     return { x: (_proj.x * 0.5 + 0.5) * window.innerWidth, y: (-_proj.y * 0.5 + 0.5) * window.innerHeight };
   }
   function projectBoundsToScreen(obj3d) {
-    const box = new THREE.Box3().setFromObject(obj3d);
+    obj3d.updateWorldMatrix(true, true);
+    const box = new THREE.Box3();
+    obj3d.traverse((object) => {
+      if (!object.geometry || object.userData.ignoreProjectionBounds) return;
+      if (!object.geometry.boundingBox) object.geometry.computeBoundingBox();
+      box.union(object.geometry.boundingBox.clone().applyMatrix4(object.matrixWorld));
+    });
     if (box.isEmpty()) return null;
     const points = [];
     for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) {
@@ -186,15 +206,17 @@ export function createEngine({ textures }) {
   }
 
   function placeCamera(centerY, dist, viewDir = VIEW_DIR) {
-    const portraitFit = Math.max(1, Math.min(1.45, 0.72 / camera.aspect));
+    const portraitFit = Math.max(1, Math.min(3.2, 1.45 / camera.aspect));
     camera.position.copy(viewDir).multiplyScalar(dist * portraitFit);
     camera.position.y += centerY;
     camera.lookAt(0, centerY, 0);
   }
   function resetCamera() {
-    const portraitFit = Math.max(1, Math.min(1.45, 0.72 / camera.aspect));
-    camera.position.set(0, 5.6 * portraitFit, 15.5 * portraitFit);
-    camera.lookAt(0, 2.0, 0);
+    const portraitFit = Math.max(1, Math.min(3.2, 1.45 / camera.aspect));
+    // The persistent village and Steve both live left of the lesson origin;
+    // centre the hub framing between them and the build plot.
+    camera.position.set(-4.5, 5.6 * portraitFit, 15.5 * portraitFit);
+    camera.lookAt(-4.5, 2.0, 0);
   }
 
   const frameCbs = [];

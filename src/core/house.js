@@ -294,6 +294,7 @@ export function createHouseManager({ scene, textures, storage = localStore() } =
         opacity: 0.65,
       });
       beaconBeam = new THREE.Mesh(beamGeo, beamMat);
+      beaconBeam.userData.ignoreProjectionBounds = true; // sky effect, not an interaction silhouette
       beaconBeam.position.set(0, 20, -5 * BLOCK_SIZE);
       group.add(beaconBeam);
     }

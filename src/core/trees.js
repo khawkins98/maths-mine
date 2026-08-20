@@ -222,7 +222,8 @@ export function plantTrees(scene, positions, textures, treeType = 'oak') {
       tree = makeTree({ trunkHeight: trunkHeight ?? (4 + (i % 2)), seed: i * 137, materials });
     }
     tree.position.set(x, y, z);
-    tree.userData.decorationRadius = (treeType === 'cactus' || treeType === 'end_pillar') ? BLOCK : BLOCK * 2;
+    tree.userData.decorationRadius = treeType === 'end_pillar' ? BLOCK
+      : treeType === 'cactus' ? BLOCK * 1.5 : BLOCK * 2.5;
     tree.userData.decorationType = treeType;
     group.add(tree);
   });
