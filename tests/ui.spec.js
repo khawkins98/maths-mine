@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { boot } from './helpers.js';
 
 test.describe('shared UI transitions', () => {
   test('an old claim fade cannot hide replacement content', async ({ page }) => {
@@ -78,7 +79,7 @@ test.describe('shared UI transitions', () => {
 
   test('portrait hub stacks its blocks and keeps the village action readable', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/');
+    const errors = await boot(page);
     const layout = await page.evaluate(() => {
       const cards = document.querySelector('#hub-cards');
       const build = document.querySelector('#btn-build-house');
@@ -96,5 +97,6 @@ test.describe('shared UI transitions', () => {
     expect(layout.buildDisabled).toBe(true);
     expect(layout.buildOpacity).toBe('1');
     expect(layout.buildColor).toBe('rgb(255, 249, 223)');
+    expect(errors).toEqual([]);
   });
 });
