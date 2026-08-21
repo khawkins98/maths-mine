@@ -270,6 +270,7 @@ export function createBlockBuilder(ctx) {
       cells: Array.from({ length: C }, () => new Array(R).fill(false)),
       blocks: Array.from({ length: C }, () => new Array(R).fill(null)),
       placed: 0, groupsDone: 0, askT: 0, answered: false,
+      assisted: false, retryMistakes: 0,
       blueprint: bp,
       blockKit: roundBlockKit,
       visualC: C, visualR: R,
@@ -433,20 +434,84 @@ export function createBlockBuilder(ctx) {
     ui.showChoices(buildChoiceSet(round.answer, step), answerChosen);
   }
 
+  function questionText() {
+    return round.op === 'div'
+      ? `${round.dividend} ÷ ${round.divisor} = ?`
+      : `${round.a} × ${round.b} = ?`;
+  }
+
+  function resolvedText() {
+    return round.op === 'div'
+      ? `${round.dividend} ÷ ${round.divisor} = ${round.answer}`
+      : `${round.a} × ${round.b} = ${round.answer}`;
+  }
+
+  function beginAssistedRetry() {
+    if (!round || !round.assisted) return;
+    phase = 'retrying';
+    round.answered = false;
+    round.askT = nowT();
+    ui.setAskEq(questionText());
+    ui.setStatus(round.op === 'div'
+      ? 'Now you try — how many in each group?'
+      : 'Now you try — how many altogether?');
+    bolt.say('Your turn!', 'happy');
+    speak(round.op === 'div'
+      ? 'Now you try. How many in each group?'
+      : 'Now you try. How many altogether?');
+    buildChoices();
+  }
+
+  function teachThenRetry(eqStr, retrying) {
+    phase = 'revealing';
+    ui.lockChoices();
+    if (retrying) {
+      round.retryMistakes++;
+      bolt.say("Let's look once more!", '');
+      ui.setStatus(round.op === 'div' ? 'Let’s share them once more…' : 'Let’s count the groups once more…');
+      speak("Let's look once more, then you can try again.");
+    } else {
+      bolt.say("Let's count them!", '');
+      ui.setStatus(round.op === 'div' ? 'Let’s share them out together…' : 'Let’s count the groups together…');
+      speak("Let's count them together.");
+    }
+    countReveal(() => {
+      const right = ui.choiceButtons().find((c) => Number(c.textContent) === round.answer);
+      if (right) right.classList.add('right');
+      ui.setAskEq(eqStr);
+      ui.popAskEq();
+      if (round.op === 'div') {
+        ui.setStatus(`${round.dividend} ÷ ${round.divisor} = ${round.answer}. Now you try!`);
+        speak(`${divWords(round.dividend, round.divisor, round.answer)}. Now you try it!`);
+        bolt.say(`It's ${round.answer} each!`, '');
+      } else {
+        ui.setStatus(`${round.a} × ${round.b} = ${round.answer}. Now you try!`);
+        speak(`${eqWords(round.a, round.b, round.answer)}. Now you try it!`);
+        bolt.say(`It's ${round.answer}!`, '');
+      }
+      timers.later(() => ui.fadeChoices(), 700);
+      timers.later(beginAssistedRetry, 1100);
+    });
+  }
+
   function answerChosen(val, btn) {
-    if (phase !== 'asking' || round.answered) return;
+    const retrying = phase === 'retrying';
+    if ((phase !== 'asking' && !retrying) || round.answered) return;
     round.answered = true;
     const correct = val === round.answer;
     const ms = (nowT() - round.askT) * 1000;
     ui.lockChoices();
 
-    mastery.record(round.a, round.b, correct, ms);
-    bolt.setOxidation(mastery.overallProgress()); // weather Bolt as mastery grows
-    if (ctx.engine.updateBiomeFromProgress) ctx.engine.updateBiomeFromProgress(mastery.overallProgress());
+    if (!retrying) {
+      mastery.record(round.a, round.b, correct, ms);
+      // Once the child's independent answer has been scored, reference use is
+      // no longer part of this live question and must not roll the attempt back.
+      mastery.endQuestion();
+      bolt.setOxidation(mastery.overallProgress()); // weather Bolt as mastery grows
+      if (ctx.engine.updateBiomeFromProgress) ctx.engine.updateBiomeFromProgress(mastery.overallProgress());
+    }
 
-    const eqStr = round.op === 'div'
-      ? `${round.dividend} ÷ ${round.divisor} = ${round.answer}`
-      : `${round.a} × ${round.b} = ${round.answer}`;
+    const eqStr = resolvedText();
 
     if (correct) {
       btn.classList.add('right');
@@ -459,25 +524,36 @@ export function createBlockBuilder(ctx) {
 
       const bp = round.blueprint;
       const reward = (bp && bp.bonusBolts) ? bp.bonusBolts : round.blocksTotal;
-      wallet.add(reward);
       audio.chordSound();
       celebrate();
       if (bp && bp.activationVFX) spawnBlueprintVFX(bp.activationVFX);
 
-      if (bp) {
+      if (retrying) {
+        ui.showToast('You used the proof!', 'good');
+      } else if (bp) {
+        wallet.add(reward);
         ui.showToast(`✨ ${bp.icon} ${bp.name} Complete! +${reward} 🔩`, 'good');
       } else {
+        wallet.add(reward);
         ui.showToast(`+${reward} 🔩`, 'good');
       }
 
       if (round.op === 'div') {
-        ui.setStatus(`Yes! ${round.dividend} ÷ ${round.divisor} = ${round.answer} each.`);
-        bolt.say(`YES! +${reward} bolts!`, 'happy');
-        speak(pickPhrase([`That's right! ${divWords(round.dividend, round.divisor, round.answer)}!`, `Yes! Each group gets ${round.answer}!`, `You shared it — ${round.answer} each!`]));
+        ui.setStatus(retrying
+          ? `You used the proof! ${round.dividend} ÷ ${round.divisor} = ${round.answer} each.`
+          : `Yes! ${round.dividend} ÷ ${round.divisor} = ${round.answer} each.`);
+        bolt.say(retrying ? `You got it — ${round.answer} each!` : `YES! +${reward} bolts!`, 'happy');
+        speak(retrying
+          ? `You used the proof. ${divWords(round.dividend, round.divisor, round.answer)}!`
+          : pickPhrase([`That's right! ${divWords(round.dividend, round.divisor, round.answer)}!`, `Yes! Each group gets ${round.answer}!`, `You shared it — ${round.answer} each!`]));
       } else {
-        ui.setStatus(`Yes! ${round.a} × ${round.b} = ${round.answer}.`);
-        bolt.say(bp ? `${bp.icon} ${bp.name} built! +${reward} 🔩!` : `YES! +${reward} bolts!`, 'happy');
-        speak(pickPhrase([`That's right! ${eqWords(round.a, round.b, round.answer)}!`, `Yes! ${eqWords(round.a, round.b, round.answer)}!`, `You got it — ${round.answer}!`, `Nice work! ${round.answer} blocks!`]));
+        ui.setStatus(retrying
+          ? `You used the proof! ${round.a} × ${round.b} = ${round.answer}.`
+          : `Yes! ${round.a} × ${round.b} = ${round.answer}.`);
+        bolt.say(retrying ? `You got it — ${round.answer}!` : (bp ? `${bp.icon} ${bp.name} built! +${reward} 🔩!` : `YES! +${reward} bolts!`), 'happy');
+        speak(retrying
+          ? `You used the proof. ${eqWords(round.a, round.b, round.answer)}!`
+          : pickPhrase([`That's right! ${eqWords(round.a, round.b, round.answer)}!`, `Yes! ${eqWords(round.a, round.b, round.answer)}!`, `You got it — ${round.answer}!`, `Nice work! ${round.answer} blocks!`]));
       }
       // fade the answer slabs ~600ms after the green flash, THEN reveal Rotate/Next
       timers.later(() => ui.fadeChoices(), 600);
@@ -485,27 +561,8 @@ export function createBlockBuilder(ctx) {
     } else {
       btn.classList.add('wrong');
       audio.buzzSound();
-      bolt.say("Let's count them!", '');
-      ui.setStatus(round.op === 'div' ? 'Let’s share them out together…' : 'Let’s count the groups together…');
-      speak("Let's count them together.");
-      countReveal(() => {
-        const right = ui.choiceButtons().find((c) => Number(c.textContent) === round.answer);
-        if (right) right.classList.add('right');
-        ui.setAskEq(eqStr);
-        ui.popAskEq();
-        if (round.op === 'div') {
-          ui.setStatus(`${round.dividend} ÷ ${round.divisor} = ${round.answer}. Now you know it!`);
-          speak(`${divWords(round.dividend, round.divisor, round.answer)}. Now you know it!`);
-          bolt.say(`It's ${round.answer} each!`, '');
-        } else {
-          ui.setStatus(`${round.a} × ${round.b} = ${round.answer}. Now you know it!`);
-          speak(`${eqWords(round.a, round.b, round.answer)}. Now you know it!`);
-          bolt.say(`It's ${round.answer}!`, '');
-        }
-        // clear the answer slabs before the rotate/next state (no dead buttons)
-        timers.later(() => ui.fadeChoices(), 700);
-        timers.later(() => finishRound(), 1100);
-      });
+      round.assisted = true;
+      teachThenRetry(eqStr, retrying);
     }
   }
 
@@ -868,6 +925,8 @@ export function createBlockBuilder(ctx) {
           : [],
         choices: ui.currentChoiceValues(),
         bolts: wallet.bolts,
+        assisted: round?.assisted || false,
+        retryMistakes: round?.retryMistakes || 0,
         targetStyle: moldGroup ? {
           frameOpacity: moldGroup.userData.tiles[0][0].userData.frame.material.opacity,
           fillOpacity: moldGroup.userData.tiles[0][0].userData.fill.material.opacity,

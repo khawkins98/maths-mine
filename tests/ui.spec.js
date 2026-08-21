@@ -3,7 +3,7 @@ import { boot } from './helpers.js';
 
 test.describe('shared UI transitions', () => {
   test('an old claim fade cannot hide replacement content', async ({ page }) => {
-    await page.goto('/');
+    const errors = await boot(page);
     const visible = await page.evaluate(async () => {
       const { createUI } = await import('/src/core/ui.js');
       const ui = createUI();
@@ -17,6 +17,7 @@ test.describe('shared UI transitions', () => {
       };
     });
     expect(visible).toEqual({ text: 'replacement', hidden: false });
+    expect(errors).toEqual([]);
   });
 
   test('an old choices fade cannot erase a replacement row', async ({ page }) => {
@@ -38,7 +39,7 @@ test.describe('shared UI transitions', () => {
   });
 
   test('locked choices cannot be activated by keyboard', async ({ page }) => {
-    await page.goto('/');
+    const errors = await boot(page);
     await page.evaluate(async () => {
       const { createUI } = await import('/src/core/ui.js');
       const ui = createUI();
@@ -51,6 +52,7 @@ test.describe('shared UI transitions', () => {
     await first.focus();
     await page.keyboard.press('Enter');
     expect(await page.evaluate(() => window.__testPicks)).toBe(0);
+    expect(errors).toEqual([]);
   });
 
   test('a tapped choice gets immediate tactile selection state', async ({ page }) => {
