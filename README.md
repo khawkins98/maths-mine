@@ -20,7 +20,7 @@ lesson; answering "how many altogether?" afterwards is the drill.
 
 | | Game | What the child does |
 |---|---|---|
-| 🧱 | **Block Builder** | Tap (or tilt-pour) blocks into a mould to build an `a × b` wall, answer the total, then **rotate** the wall 90° to feel that `6 × 4 = 4 × 6`. Also does division as equal sharing. |
+| 🧱 | **Block Builder** | Tap or drag blocks into a mould to build an `a × b` wall, answer the total, then **rotate** the wall 90° to feel that `6 × 4 = 4 × 6`. Also does division as equal sharing. |
 | 🕵️ | **Spot the Wrong'un** | Check facts instead of producing them. A villager holds a sign claiming `7 × 8 = 54`; the array builds in front of you and you judge it true or false. Once mastery is far enough along, three villagers turn up and one of them is fibbing. |
 
 All three share one ledger, so practising `6 × 7` anywhere moves mastery
@@ -35,26 +35,26 @@ npm run dev
 
 Vite prints a Local URL and a Network URL. On your computer, open the Local URL.
 **On a tablet, open the Network URL** (`http://192.168.x.x:5173`) while it's on
-the same Wi-Fi — that's how you test the real motion sensors.
+the same Wi-Fi.
 
-Tap **"Wake up Bolt!"** to start. On iPad that one tap does three things: grants
-motion-sensor permission, unlocks audio, and begins play.
+Tap **"Wake up Bolt!"** to start — it unlocks audio and begins play.
 
 ```bash
 npm test      # Playwright smoke tests (headless, plays every game)
 npm run build # production build into dist/
 ```
 
-### iOS / iPadOS note
+### A note on tilt
 
-Safari grants `DeviceOrientation` permission only over **HTTPS** and only from a
-user tap. Plain `http://` on the LAN often works for testing, but if the iPad
-refuses motion, serve over HTTPS (`npx vite --https`, or a tunnel like
-`ngrok http 5173`) — or just use the deployed site below, which is HTTPS by
-default and is the easiest way to get real tilt and shake working on an iPad.
+Block Builder used to let you pour blocks by tilting the tablet. It was cut
+after a playtest: aiming and tipping are one continuous motion, so the wall
+filled up while the child was still working out where to point. Everything is
+tapping and dragging now, on tablet and desktop alike.
 
-No sensors, or permission denied? Every game falls back to press-and-drag, which
-is also the desktop path — nothing is sensor-only.
+The one thing still reading the motion sensor is Spot the Wrong'un, whose stage
+leans very slightly with the tablet. That is scenery, not a control. Safari only
+grants `DeviceOrientation` over HTTPS, so on a plain `http://` LAN address the
+lean simply doesn't happen and nothing else changes.
 
 ## The progress report (for grown-ups)
 
@@ -137,7 +137,7 @@ src/
                        timers, blocks, pointer, choices, storage, world feel,
                        ease
   game/                shared game pieces — mastery ledger, Bolts wallet,
-                       tilt input, Bolt
+                       motion reader, Bolt
   games/
     blockBuilder.js
     spotWrongun/       tiered judge/imposter rounds on one shared stage
@@ -152,8 +152,7 @@ and what every core module gives you. New games should be written against it.
 `tests/smoke.spec.js` plays every game through a full round in headless
 Chromium, and checks that leaving mid-round tears down cleanly and that progress
 survives a reload. The games expose `window.__*` debug hooks for exactly this
-reason — a headless browser can't be tilted or shaken, and pixel-hunting a WebGL
-canvas isn't a test.
+reason — pixel-hunting a WebGL canvas isn't a test.
 
 Alongside it: `mastery.spec.js` exercises the ledger and its scheduler as pure
 logic against a fake clock (no browser needed), `spotWrongun.spec.js` covers the

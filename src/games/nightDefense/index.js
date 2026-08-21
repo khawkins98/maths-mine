@@ -25,7 +25,6 @@ export function createNightDefense(ctx) {
       }
 
       // Hide unused HUD elements
-      if (ui.els.btnRecenter) ui.els.btnRecenter.classList.add('hidden');
       if (ui.els.claimEq) ui.els.claimEq.classList.add('hidden');
       if (ui.els.tally) ui.els.tally.classList.remove('show');
 
@@ -56,7 +55,6 @@ export function createNightDefense(ctx) {
       delete window.__nightAnswer;
 
       if (ui.hideBack) ui.hideBack();
-      if (ui.els.btnRecenter) ui.els.btnRecenter.classList.remove('hidden');
     },
   };
 }

@@ -23,7 +23,6 @@ import { easeOutBack, easeOutBounce, easeOutCubic } from '../core/ease.js';
 import { createBlockKit, CELL, BLOCK, CAP_H, BODY_H } from '../core/blocks.js';
 import { getBlueprint } from './blueprints.js';
 
-const DROP_INTERVAL = 0.16;    // seconds between poured blocks (full pour)
 const DROP_TIME = 0.25;        // seconds for the drop-and-bounce of a placed block
 const DIV_SPLIT_TIME = 0.55;   // seconds to separate the equal groups on reveal
 const COLS = [0xff6b6b, 0xffd24a, 0x58e08a, 0x6ad2ff, 0xb98bff, 0xff9f5a, 0x7ef0d0, 0xf78fb3]; // confetti
@@ -33,7 +32,7 @@ const SLOT_GUIDED_OPACITY = 0.52;
 
 
 export function createBlockBuilder(ctx) {
-  const { scene, camera, engine, textures, audio, speech, ui, bolt, mastery, wallet, sensors } = ctx;
+  const { scene, camera, engine, textures, audio, speech, ui, bolt, mastery, wallet } = ctx;
   const { dirtTex, grassTex, slotTex, puffTex } = textures;
   const speak = speech.speak, eqWords = speech.eqWords, pickPhrase = speech.pickPhrase;
   const nowT = engine.nowT;
@@ -60,15 +59,6 @@ export function createBlockBuilder(ctx) {
   let wall = new THREE.Group();
   root.add(wall);
 
-  const spout = new THREE.Mesh(
-    new THREE.ConeGeometry(0.5, 0.7, 4),
-    new THREE.MeshStandardMaterial({ color: 0xffd24a, roughness: 1, metalness: 0, emissive: 0x332200 })
-  );
-  spout.rotation.y = Math.PI / 4;
-  spout.rotation.x = Math.PI; // point down
-  spout.visible = false;
-  root.add(spout);
-
   const highlight = new THREE.Mesh(
     new THREE.BoxGeometry(CELL, CELL, CELL),
     new THREE.MeshBasicMaterial({ color: 0xffc93c, transparent: true, opacity: 0.22, depthWrite: false })
@@ -94,12 +84,9 @@ export function createBlockBuilder(ctx) {
   let moldGroup = null, pulsedTile = null;
   let forcedOp = null;   // test hook: force the next round's operation
   let forcedDimensions = null; // explicit debug/QA round; normal production flow leaves this null
-  let flashT = 0, flashCol = null;
   let spinRAF = 0;    // the commutativity rotate's own animation frame
   let divSplit = null; // the division reveal, advanced by update(dt)
 
-
-  function sensorsLive() { return sensors.enabled && sensors.available; }
 
   // ---------- dust ----------
   function dustPuff(x, y, z) {
@@ -276,7 +263,6 @@ export function createBlockBuilder(ctx) {
     };
     buildMold(C, R);
     frameCamera(C, R);
-    spout.visible = sensorsLive() && q.op !== 'div';
 
     // reset UI
     ui.hideConfirm();
@@ -300,13 +286,12 @@ export function createBlockBuilder(ctx) {
     } else {
       phase = 'building';
       updateTally();
-      ui.setStatus(sensorsLive() ? 'Tilt forward to pour · tilt left/right to aim' : '');
+      ui.setStatus('');
       bolt.say(`${bp.icon} Blueprint: ${bp.name} (${q.a} × ${q.b})!`, '');
       speak(`Let's construct the ${bp.name}: ${q.a} groups of ${q.b}.`);
     }
 
-    if (sensorsLive()) sensors.recenter();
-    if (firstRound && !sensorsLive()) startDemo();
+    if (firstRound) startDemo();
   }
 
   function addBlock(c, r, animate = true) {
@@ -364,14 +349,6 @@ export function createBlockBuilder(ctx) {
       return true;
     }
     return round.cells[c].every(Boolean);
-  }
-
-  function placeInColumn(c) {
-    if (!round || c < 0 || c >= round.C) return;
-    if (round.op === 'div') { removeDivisorGroup(c); return; }
-    const r = round.cells[c].indexOf(false);
-    if (r === -1) { flashSpout(0xff7a7a); return; }
-    placeInCell(c, r);
   }
 
   // What the wall actually holds right now, independent of the order it was
@@ -759,12 +736,12 @@ export function createBlockBuilder(ctx) {
     return { c: Math.round(cf), r: Math.round(rf) };
   }
   function placeFromPointer(clientX, clientY) {
-    if ((phase !== 'building' && phase !== 'removing') || sensorsLive()) return;
+    if (phase !== 'building' && phase !== 'removing') return;
     const cell = pointerToCell(clientX, clientY);
     if (cell) placeInCell(cell.c, cell.r);
   }
   function updateHover(clientX, clientY) {
-    if (!round || (phase !== 'building' && phase !== 'removing') || sensorsLive()) { highlight.visible = false; return; }
+    if (!round || (phase !== 'building' && phase !== 'removing')) { highlight.visible = false; return; }
     const cell = pointerToCell(clientX, clientY);
     const targetAvailable = cell && (phase === 'removing'
       ? round.cells[cell.c].some(Boolean)
@@ -788,28 +765,7 @@ export function createBlockBuilder(ctx) {
   const onUp = () => { pointerDown = false; };
   const input = createPointerInput(dom, { onDown, onMove, onUp });
 
-  // ---------- input: tilt to pour ----------
-  let dropAcc = 0;
-  function updateTiltPour(dt) {
-    if (!round || (phase !== 'building' && phase !== 'removing') || !sensorsLive()) { spout.visible = false; return; }
-    spout.visible = round.op !== 'div';
-    sensors.update();
-    const c = Math.round(Math.max(0, Math.min(1, (sensors.x + 1) / 2)) * (round.C - 1));
-    const target = cellPos(c, 0, round.C, round.R);
-    spout.position.x += (target.x + wall.position.x - spout.position.x) * 0.25;
-    spout.position.y = wall.position.y + (round.R * CELL) / 2 + 2.2;
-    spout.position.z = 0;
-    if (sensors.y > 0.16) {
-      dropAcc += dt;
-      while (dropAcc >= DROP_INTERVAL) { dropAcc -= DROP_INTERVAL; placeInColumn(c); }
-    } else {
-      dropAcc = Math.min(dropAcc, DROP_INTERVAL);
-    }
-  }
-
   // ---------- juice ----------
-  function flashSpout(color) { flashCol = new THREE.Color(color); flashT = 0.25; }
-
   function spawnBlueprintVFX(vfxType) {
     if (!round) return;
     const vfxColors = {
@@ -873,7 +829,6 @@ export function createBlockBuilder(ctx) {
 
   // ---------- per-frame update (called by the engine loop via main) ----------
   function update(dt) {
-    updateTiltPour(dt);
     demoUpdate(dt);
     updateMoldPulse();
     updateDivSplit(dt);
@@ -911,12 +866,6 @@ export function createBlockBuilder(ctx) {
       d.mesh.material.opacity = Math.max(0, (d.life / 0.4)) * 0.75;
       if (d.life <= 0) { root.remove(d.mesh); d.mesh.material.dispose(); dust.splice(i, 1); }
     }
-    if (flashT > 0) {
-      flashT -= dt;
-      spout.material.emissive.copy(flashCol).multiplyScalar(Math.max(0, flashT * 3));
-    } else {
-      spout.material.emissive.setHex(0x332200);
-    }
     for (let i = confetti.length - 1; i >= 0; i--) {
       const c = confetti[i];
       c.life -= dt;
@@ -931,10 +880,6 @@ export function createBlockBuilder(ctx) {
   const onConfirm = () => {
     if (phase === 'rotate') doRotate();
     else if (phase === 'next') newRound();
-  };
-  const onRecenter = () => {
-    if (sensorsLive()) { sensors.recenter(); ui.showToast('Re-centered', 'good'); }
-    else ui.showToast('Drag mode — no need', 'good');
   };
 
   // ---------- debug hooks for the headless smoke test ----------
@@ -1005,8 +950,6 @@ export function createBlockBuilder(ctx) {
   function start(opts = {}) {
     input.attach();
     ui.els.btnConfirm.addEventListener('click', onConfirm);
-    ui.els.btnRecenter.addEventListener('click', onRecenter);
-    ui.els.btnRecenter.style.display = sensorsLive() ? '' : 'none';
     installDebug();
     bolt.setOxidation(mastery.overallProgress());
     newRound();
@@ -1018,7 +961,6 @@ export function createBlockBuilder(ctx) {
     speech.reset(); // a child leaving must not hear the old round finish
     input.detach();
     ui.els.btnConfirm.removeEventListener('click', onConfirm);
-    ui.els.btnRecenter.removeEventListener('click', onRecenter);
     clearDebug();
     timers.clearAll(); // no pending reveal/count-up may outlive the game
     mastery.endQuestion();
@@ -1031,7 +973,6 @@ export function createBlockBuilder(ctx) {
       else mm?.dispose?.();
     });
     blocks.dispose(); slotFrameGeo.dispose(); slotFillGeo.dispose();
-    ui.els.btnRecenter.style.display = ''; // restore what start() hid
     engine.resetCamera();
     round = null; phase = 'idle';
   }

@@ -27,7 +27,7 @@ const GAMES = { 'block-builder': createBlockBuilder, 'my-game': createMyGame };
 ## Lifecycle contract
 
 - `start(opts)` — called once when the game becomes active. Attach input, wire
-  the shared `ui.els.btnConfirm` / `btnRecenter` buttons, frame the camera,
+  the shared `ui.els.btnConfirm` button, frame the camera,
   install debug hooks, begin the first round.
 - `update(dt)` — called every frame (dt seconds, clamped ≤ 0.05) by the engine
   loop **while this game is active**. Bolt and the speech bubble are updated by
@@ -44,7 +44,7 @@ creates and adds to `ctx.scene`, so teardown is `scene.remove(root)` + dispose.
 Bolt is parented to the camera and is shared — never add it to your group.
 
 **Restore what you hid.** The HUD is shared chrome. If your `start()` hides or
-restyles a shared element (`btnRecenter`, the hint overlay), put it back in
+restyles a shared element (the hint overlay, the status line), put it back in
 `teardown()` — the next game inherits whatever you leave.
 
 **Release any `engine.onFrame` subscription.** It returns an unsubscribe

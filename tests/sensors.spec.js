@@ -37,8 +37,12 @@ async function gesture(page) {
   });
 }
 
-test.describe('motion input wiring', () => {
-  test('first gesture grants once and real data enables tilt across routes', async ({ page }) => {
+// Motion is not a control. Tilt used to pour blocks and a real child found it
+// confusing to steer, so the only thing left reading the sensor is Spot the
+// Wrong'un's stage lean. These tests cover the permission wiring, and that a
+// live sensor cannot play the game on the child's behalf.
+test.describe('motion wiring', () => {
+  test('first gesture grants once and real data marks the sensor live across routes', async ({ page }) => {
     await installOrientation(page, 'granted');
     const errors = await boot(page);
 
@@ -73,8 +77,35 @@ test.describe('motion input wiring', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a live sensor never places a block by itself', async ({ page }) => {
+    await installOrientation(page, 'granted');
+    const errors = await boot(page);
+    await gesture(page);
+    await expect.poll(() => page.evaluate(() => window.__sensors().enabled)).toBe(true);
+
+    await pick(page, 'block-builder', '__bb');
+    const before = await page.evaluate(() => window.__bb().placed);
+
+    // Hold the tablet well past what used to be a full pour, for far longer
+    // than it used to take to fill a wall.
+    for (const beta of [40, 45, 50, 45, 40]) {
+      await page.evaluate((b) => window.dispatchEvent(
+        new DeviceOrientationEvent('deviceorientation', { beta: b, gamma: -50 }),
+      ), beta);
+      await page.evaluate(() => new Promise((resolve) => {
+        let left = 30;
+        const step = () => (left-- > 0 ? requestAnimationFrame(step) : resolve());
+        requestAnimationFrame(step);
+      }));
+    }
+
+    expect(await page.evaluate(() => window.__sensors().usingSensors)).toBe(true);
+    expect(await page.evaluate(() => window.__bb().placed)).toBe(before);
+    expect(errors).toEqual([]);
+  });
+
   for (const outcome of ['denied', 'throw', 'unsupported']) {
-    test(`${outcome} permission silently keeps pointer fallback`, async ({ page }) => {
+    test(`${outcome} permission silently leaves the game fully playable`, async ({ page }) => {
       await installOrientation(page, outcome);
       const errors = await boot(page);
       await gesture(page);
