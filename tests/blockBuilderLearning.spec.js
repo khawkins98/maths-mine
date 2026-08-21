@@ -95,7 +95,7 @@ test.describe('Block Builder evidence and retrieval', () => {
     expect(errors).toEqual([]);
   });
 
-  test('assisted division keeps canonical identity and the equal-group reveal', async ({ page }) => {
+  test('assisted division keeps canonical identity and divisor-sized groups', async ({ page }) => {
     const errors = await boot(page);
     await pick(page, 'block-builder', '__bb');
     const round = await forceBuiltRound(page, 3, 2, 'div');
@@ -120,9 +120,10 @@ test.describe('Block Builder evidence and retrieval', () => {
     expect((await state(page, '__bb')).bolts).toBe(round.bolts);
     const revealed = await state(page, '__bb');
     expect(revealed.divisionGap).toBeGreaterThan(0);
-    for (let r = 1; r < revealed.rowYs.length; r++) {
-      expect(revealed.rowYs[r] - revealed.rowYs[r - 1]).toBeGreaterThan(1.15);
+    for (let c = 1; c < revealed.colXs.length; c++) {
+      expect(revealed.colXs[c] - revealed.colXs[c - 1]).toBeGreaterThan(1.15);
     }
+    await expect(page.locator('#status')).toHaveText('3 groups · 2 in each group');
     expect(errors).toEqual([]);
   });
 

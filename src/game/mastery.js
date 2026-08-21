@@ -226,6 +226,10 @@ export class MasteryStore {
     return this._voided.size;
   }
 
+  isCurrentQuestionVoided(a, b) {
+    return this._voided.has(factKey(a, b));
+  }
+
   endQuestion() {
     this._questionKeys.clear();
     this._answeredKeys.clear();

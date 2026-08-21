@@ -93,7 +93,7 @@ test.describe('Block Builder', () => {
     expect((await state(page, '__bb')).placed).toBe(C * R);
   });
 
-  test('division rounds ask how many in each group', async ({ page }) => {
+  test('division rounds ask how many divisor-sized groups', async ({ page }) => {
     await boot(page);
     await pick(page, 'block-builder', '__bb');
 
@@ -117,7 +117,7 @@ test.describe('Block Builder', () => {
 
     const div = await state(page, '__bb');
     expect(div.op).toBe('div');
-    expect(div.answer).toBe(div.C); // ÷ asks how many in each group = column count
+    expect(div.answer).toBe(div.C); // ÷ asks how many divisor-sized columns
 
     await page.evaluate(({ C }) => { for (let c = 0; c < C; c++) window.__place(c, 0); }, div);
     await waitForState(page, '__bb', "s.phase === 'asking'");
@@ -129,8 +129,8 @@ test.describe('Block Builder', () => {
     await waitForState(page, '__bb', "s.phase === 'next'");
     const revealed = await state(page, '__bb');
     expect(revealed.divisionGap).toBeGreaterThan(0);
-    for (let r = 1; r < revealed.rowYs.length; r++) {
-      expect(revealed.rowYs[r] - revealed.rowYs[r - 1]).toBeGreaterThan(1.15);
+    for (let c = 1; c < revealed.colXs.length; c++) {
+      expect(revealed.colXs[c] - revealed.colXs[c - 1]).toBeGreaterThan(1.15);
     }
   });
 });

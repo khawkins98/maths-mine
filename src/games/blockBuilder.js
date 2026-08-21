@@ -35,7 +35,7 @@ const SLOT_GUIDED_OPACITY = 0.52;
 export function createBlockBuilder(ctx) {
   const { scene, camera, engine, textures, audio, speech, ui, bolt, mastery, wallet, sensors } = ctx;
   const { dirtTex, grassTex, slotTex, puffTex } = textures;
-  const speak = speech.speak, eqWords = speech.eqWords, divWords = speech.divWords, pickPhrase = speech.pickPhrase;
+  const speak = speech.speak, eqWords = speech.eqWords, pickPhrase = speech.pickPhrase;
   const nowT = engine.nowT;
   const dom = ctx.renderer.domElement;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -238,9 +238,9 @@ export function createBlockBuilder(ctx) {
     let C, R, groupAxis, groupsTotal, groupSize, answer, factA, factB;
     if (q.op === 'div') {
       // Take divisor-sized stacks from `dividend` → answer = stack count.
-      C = q.quotient; R = q.divisor;            // C cols (per-group size) × R rows (groups)
-      groupAxis = 'row';                        // reveal later separates equal rows
-      groupsTotal = R; groupSize = C;
+      C = q.quotient; R = q.divisor;            // C groups (columns) × R blocks per group
+      groupAxis = 'col';                        // every column is one divisor-sized group
+      groupsTotal = C; groupSize = R;
       answer = q.quotient;
       factA = q.a; factB = q.b;
     } else {
@@ -422,10 +422,10 @@ export function createBlockBuilder(ctx) {
     round.askT = nowT();
     if (round.op === 'div') {
       // title card stays the mode name; the big askeq sign is the question's home
-      ui.setStatus('How many in each group?');
+      ui.setStatus(`How many groups of ${round.divisor}?`);
       ui.setAskEq(`${round.dividend} ÷ ${round.divisor} = ?`);
-      bolt.say('How many in each?!', 'wow');
-      speak(pickPhrase([`How many in each group? ${divWords(round.dividend, round.divisor)}?`, `So, ${divWords(round.dividend, round.divisor)}?`, `How many did each group get?`]));
+      bolt.say(`How many groups of ${round.divisor}?`, 'wow');
+      speak(`How many groups of ${round.divisor} can you take from ${round.dividend}?`);
     } else {
       ui.setStatus('How many blocks altogether?');
       ui.setAskEq(`${round.a} × ${round.b} = ?`);
@@ -460,11 +460,11 @@ export function createBlockBuilder(ctx) {
     round.askT = nowT();
     ui.setAskEq(questionText());
     ui.setStatus(round.op === 'div'
-      ? 'Now you try — how many in each group?'
+      ? `Now you try — how many groups of ${round.divisor}?`
       : 'Now you try — how many altogether?');
     bolt.say('Your turn!', 'happy');
     speak(round.op === 'div'
-      ? 'Now you try. How many in each group?'
+      ? `Now you try. How many groups of ${round.divisor}?`
       : 'Now you try. How many altogether?');
     buildChoices();
   }
@@ -475,11 +475,11 @@ export function createBlockBuilder(ctx) {
     if (retrying) {
       round.retryMistakes++;
       bolt.say("Let's look once more!", '');
-      ui.setStatus(round.op === 'div' ? 'Let’s put the blocks back once more…' : 'Let’s count the groups once more…');
+      ui.setStatus(round.op === 'div' ? `Let’s count groups of ${round.divisor} once more…` : 'Let’s count the groups once more…');
       speak("Let's look once more, then you can try again.");
     } else {
       bolt.say("Let's count them!", '');
-      ui.setStatus(round.op === 'div' ? 'Let’s put all the blocks back…' : 'Let’s count the groups together…');
+      ui.setStatus(round.op === 'div' ? `Let’s count groups of ${round.divisor}…` : 'Let’s count the groups together…');
       speak("Let's count them together.");
     }
     countReveal(() => {
@@ -488,9 +488,9 @@ export function createBlockBuilder(ctx) {
       ui.setAskEq(eqStr);
       ui.popAskEq();
       if (round.op === 'div') {
-        ui.setStatus(`${round.dividend} ÷ ${round.divisor} = ${round.answer}. Now you try!`);
-        speak(`${divWords(round.dividend, round.divisor, round.answer)}. Now you try it!`);
-        bolt.say(`It's ${round.answer} each!`, '');
+        ui.setStatus(`${round.answer} groups of ${round.divisor}. Now you try!`);
+        speak(`${round.dividend} makes ${round.answer} groups of ${round.divisor}. Now you try it!`);
+        bolt.say(`It's ${round.answer} groups!`, '');
       } else {
         ui.setStatus(`${round.a} × ${round.b} = ${round.answer}. Now you try!`);
         speak(`${eqWords(round.a, round.b, round.answer)}. Now you try it!`);
@@ -508,6 +508,8 @@ export function createBlockBuilder(ctx) {
     round.answered = true;
     const correct = val === round.answer;
     const ms = (nowT() - round.askT) * 1000;
+    const referenced = !retrying && Boolean(mastery.isCurrentQuestionVoided?.(round.a, round.b));
+    if (referenced) round.assisted = true;
     ui.lockChoices();
 
     if (!retrying) {
@@ -522,6 +524,9 @@ export function createBlockBuilder(ctx) {
     const eqStr = resolvedText();
 
     if (correct) {
+      // A direct answer can arrive before construction has started or finished.
+      // Resolve the concrete model before celebrating or offering rotation.
+      prepareProofWall();
       btn.classList.add('right');
       updateTally();
       // the resolved equation sign is the hero (with a brief '?'→answer pop). No
@@ -535,8 +540,8 @@ export function createBlockBuilder(ctx) {
       celebrate();
       if (bp && bp.activationVFX) spawnBlueprintVFX(bp.activationVFX);
 
-      if (retrying) {
-        ui.showToast('You used the proof!', 'good');
+      if (retrying || referenced) {
+        ui.showToast(referenced ? 'Reference used — practice complete' : 'You used the proof!', 'good');
       } else if (bp) {
         wallet.add(reward);
         ui.showToast(`✨ ${bp.icon} ${bp.name} Complete! +${reward} 🔩`, 'good');
@@ -546,23 +551,22 @@ export function createBlockBuilder(ctx) {
       }
 
       if (round.op === 'div') {
-        ui.setStatus(retrying
-          ? `You used the proof! ${round.dividend} ÷ ${round.divisor} = ${round.answer} each.`
-          : `Yes! ${round.dividend} ÷ ${round.divisor} = ${round.answer} each.`);
-        bolt.say(retrying ? `You got it — ${round.answer} each!` : `YES! +${reward} bolts!`, 'happy');
-        speak(retrying
-          ? `You used the proof. ${divWords(round.dividend, round.divisor, round.answer)}!`
-          : pickPhrase([`That's right! ${divWords(round.dividend, round.divisor, round.answer)}!`, `Yes! Each group gets ${round.answer}!`, `You shared it — ${round.answer} each!`]));
+        ui.setStatus(retrying || referenced
+          ? `You used help: ${round.answer} groups of ${round.divisor}.`
+          : `Yes! ${round.answer} groups of ${round.divisor} make ${round.dividend}.`);
+        bolt.say(retrying || referenced ? `You got it — ${round.answer} groups!` : `YES! +${reward} bolts!`, 'happy');
+        speak(retrying || referenced
+          ? `You used help. ${round.answer} groups of ${round.divisor} make ${round.dividend}.`
+          : `That's right! ${round.answer} groups of ${round.divisor} make ${round.dividend}.`);
       } else {
-        ui.setStatus(retrying
-          ? `You used the proof! ${round.a} × ${round.b} = ${round.answer}.`
+        ui.setStatus(retrying || referenced
+          ? `${referenced ? 'Reference used:' : 'You used the proof!'} ${round.a} × ${round.b} = ${round.answer}.`
           : `Yes! ${round.a} × ${round.b} = ${round.answer}.`);
-        bolt.say(retrying ? `You got it — ${round.answer}!` : (bp ? `${bp.icon} ${bp.name} built! +${reward} 🔩!` : `YES! +${reward} bolts!`), 'happy');
-        speak(retrying
-          ? `You used the proof. ${eqWords(round.a, round.b, round.answer)}!`
+        bolt.say(retrying || referenced ? `You got it — ${round.answer}!` : (bp ? `${bp.icon} ${bp.name} built! +${reward} 🔩!` : `YES! +${reward} bolts!`), 'happy');
+        speak(retrying || referenced
+          ? `${referenced ? 'You used the reference' : 'You used the proof'}. ${eqWords(round.a, round.b, round.answer)}!`
           : pickPhrase([`That's right! ${eqWords(round.a, round.b, round.answer)}!`, `Yes! ${eqWords(round.a, round.b, round.answer)}!`, `You got it — ${round.answer}!`, `Nice work! ${round.answer} blocks!`]));
       }
-      // fade the answer slabs ~600ms after the green flash, THEN reveal Rotate/Next
       timers.later(() => ui.fadeChoices(), 600);
       timers.later(() => finishRound(), 1000);
     } else {
@@ -607,18 +611,17 @@ export function createBlockBuilder(ctx) {
   function goToDivReveal() {
     phase = 'dividing';
     prepareProofWall();
-    // fact family: divisor × quotient = dividend, so dividend ÷ divisor = quotient.
-    // The resolved askeq sign already states it. Now separate the rows so the
-    // divisor is visible as that many physical, equal groups.
-    bolt.say(`${round.divisor} groups of ${round.answer} make ${round.dividend}!`, 'wow');
-    speak(`${round.divisor} groups of ${round.answer} make ${round.dividend}. So ${divWords(round.dividend, round.divisor, round.answer)}.`);
-    ui.setStatus(`${round.divisor} equal groups · ${round.answer} in each`);
+    // Keep the repeated-subtraction model: quotient columns, each containing
+    // exactly divisor blocks. Separate those columns without changing meaning.
+    bolt.say(`${round.answer} groups of ${round.divisor} make ${round.dividend}!`, 'wow');
+    speak(`${round.answer} groups of ${round.divisor} make ${round.dividend}.`);
+    ui.setStatus(`${round.answer} groups · ${round.divisor} in each group`);
     updateTally();
 
-    // A fixed gap clips large arrays, so cap the total added height while
+    // A fixed gap clips large arrays, so cap the total added width while
     // keeping two- and three-group examples especially easy to distinguish.
-    const gap = round.R > 1
-      ? Math.min(CELL * 0.42, (CELL * 1.8) / (round.R - 1))
+    const gap = round.C > 1
+      ? Math.min(CELL * 0.42, (CELL * 1.8) / (round.C - 1))
       : 0;
     const blocksToMove = [];
     for (let c = 0; c < round.C; c++) {
@@ -628,8 +631,8 @@ export function createBlockBuilder(ctx) {
         round.blockKit.setCapGrass(block, true);
         blocksToMove.push({
           block,
-          fromY: block.position.y,
-          toY: cellPos(c, r, round.C, round.R).y + (r - (round.R - 1) / 2) * gap,
+          fromX: block.position.x,
+          toX: cellPos(c, r, round.C, round.R).x + (c - (round.C - 1) / 2) * gap,
         });
       }
     }
@@ -642,8 +645,8 @@ export function createBlockBuilder(ctx) {
     divSplit.elapsed += dt;
     const k = Math.min(1, divSplit.elapsed / DIV_SPLIT_TIME);
     const eased = easeOutCubic(k);
-    for (const { block, fromY, toY } of divSplit.blocks) {
-      block.position.y = fromY + (toY - fromY) * eased;
+    for (const { block, fromX, toX } of divSplit.blocks) {
+      block.position.x = fromX + (toX - fromX) * eased;
     }
     if (k < 1) return;
     divSplit = null;
@@ -944,6 +947,7 @@ export function createBlockBuilder(ctx) {
         placed: round?.placed, groupsDone: round?.groupsDone, phase,
         removedGroups: round?.removedGroups,
         C: round?.C, R: round?.R, answer: round?.answer,
+        blocksTotal: round?.blocksTotal,
         a: round?.a, b: round?.b,
         dividend: round?.dividend, divisor: round?.divisor, quotient: round?.quotient,
         visualC: round?.visualC, visualR: round?.visualR,
@@ -951,6 +955,9 @@ export function createBlockBuilder(ctx) {
         divisionGap: round?.divisionGap || 0,
         rowYs: round?.op === 'div' && round.blocks[0]
           ? round.blocks[0].map((block) => block?.position.y)
+          : [],
+        colXs: round?.op === 'div'
+          ? round.blocks.map((column) => column[0]?.position.x)
           : [],
         choices: ui.currentChoiceValues(),
         tally: ui.els.tally.textContent,

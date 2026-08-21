@@ -48,10 +48,87 @@ test.describe('Block Builder direct-answer construction flow', () => {
     const before = await saved(page);
     await answer(page, round.answer);
     await waitForState(page, '__bb', "s.phase === 'rotate'");
+    let completed = await state(page, '__bb');
+    expect(completed).toMatchObject({ blocksTotal: 6, placed: 6, visibleBlocks: 6, tally: '6 blocks' });
+    expect(completed.materialIdentity.renderedBodyMaps).toEqual(Array(6).fill(completed.materialIdentity.expectedBodyMap));
+    expect(new Set(completed.materialIdentity.renderedCapMaps)).toEqual(new Set([
+      completed.materialIdentity.expectedBodyMap,
+      completed.materialIdentity.expectedCapMap,
+    ]));
     const after = await saved(page);
     expect(record(after, round.a, round.b).attempts).toBe(record(before, round.a, round.b).attempts + 1);
     expect(record(after, round.a, round.b).correct).toBe(record(before, round.a, round.b).correct + 1);
     expect((await state(page, '__bb')).bolts).toBe(round.bolts + 3);
+    await page.locator('#btn-confirm').click();
+    await waitForState(page, '__bb', "s.phase === 'next'");
+    completed = await state(page, '__bb');
+    expect(completed).toMatchObject({ blocksTotal: 6, placed: 6, visibleBlocks: 6 });
+    expect(completed.materialIdentity.renderedBodyMaps).toEqual(Array(6).fill(completed.materialIdentity.expectedBodyMap));
+    expect(new Set(completed.materialIdentity.renderedCapMaps)).toEqual(new Set([
+      completed.materialIdentity.expectedBodyMap,
+      completed.materialIdentity.expectedCapMap,
+    ]));
+  });
+
+  test('a partial direct multiplication answer restores the whole wall before rotate', async ({ page }) => {
+    await boot(page);
+    await pick(page, 'block-builder', '__bb');
+    const round = await force(page, 3, 2, 'mul');
+    await page.evaluate(() => window.__place(0, 0));
+    expect(await state(page, '__bb')).toMatchObject({ placed: 1, visibleBlocks: 1 });
+    await answer(page, round.answer);
+    await waitForState(page, '__bb', "s.phase === 'rotate'");
+    let completed = await state(page, '__bb');
+    expect(completed).toMatchObject({ blocksTotal: 6, placed: 6, visibleBlocks: 6, tally: '6 blocks' });
+    expect(completed.materialIdentity.renderedBodyMaps).toEqual(Array(6).fill(completed.materialIdentity.expectedBodyMap));
+    expect(new Set(completed.materialIdentity.renderedCapMaps)).toEqual(new Set([
+      completed.materialIdentity.expectedBodyMap,
+      completed.materialIdentity.expectedCapMap,
+    ]));
+    await page.locator('#btn-confirm').click();
+    await waitForState(page, '__bb', "s.phase === 'next'");
+    completed = await state(page, '__bb');
+    expect(completed).toMatchObject({ blocksTotal: 6, placed: 6, visibleBlocks: 6 });
+    expect(completed.materialIdentity.renderedBodyMaps).toEqual(Array(6).fill(completed.materialIdentity.expectedBodyMap));
+    expect(new Set(completed.materialIdentity.renderedCapMaps)).toEqual(new Set([
+      completed.materialIdentity.expectedBodyMap,
+      completed.materialIdentity.expectedCapMap,
+    ]));
+  });
+
+  test('rapid duplicate direct answers create one record, reward, and completion chain', async ({ page }) => {
+    await boot(page);
+    await pick(page, 'block-builder', '__bb');
+    const round = await force(page, 3, 2, 'mul');
+    const before = await saved(page);
+    const choice = page.locator('.choice', { hasText: new RegExp(`^${round.answer}$`) }).first();
+    await choice.evaluate((button) => {
+      button.click();
+      button.click();
+    });
+    await waitForState(page, '__bb', "s.phase === 'rotate'");
+    const after = await saved(page);
+    expect(record(after, round.a, round.b).attempts).toBe(record(before, round.a, round.b).attempts + 1);
+    expect(record(after, round.a, round.b).correct).toBe(record(before, round.a, round.b).correct + 1);
+    expect((await state(page, '__bb')).bolts).toBe(round.bolts + 3);
+    await page.waitForTimeout(1_200);
+    expect(await state(page, '__bb')).toMatchObject({ phase: 'rotate', placed: 6, visibleBlocks: 6 });
+  });
+
+  test('opening the Reference Tray before answering voids mastery and reward', async ({ page }) => {
+    await boot(page);
+    await pick(page, 'block-builder', '__bb');
+    const round = await force(page, 3, 2, 'mul');
+    const before = await saved(page);
+    await page.evaluate(() => { window.__refTray.open(); window.__refTray.close(); });
+    await answer(page, round.answer);
+    await waitForState(page, '__bb', "s.phase === 'rotate'");
+    const after = await saved(page);
+    expect(record(after, round.a, round.b).attempts).toBe(record(before, round.a, round.b).attempts);
+    expect(record(after, round.a, round.b).correct).toBe(record(before, round.a, round.b).correct);
+    expect(after.totalCorrect).toBe(before.totalCorrect);
+    expect(await state(page, '__bb')).toMatchObject({ bolts: round.bolts, assisted: true, placed: 6, visibleBlocks: 6 });
+    await expect(page.locator('#status')).toContainText('Reference used');
   });
 
   test('division starts full and each real tap removes one divisor-sized stack', async ({ page }) => {
