@@ -17,8 +17,8 @@ can see which style of play actually lands for their child while the child makes
 real progress no matter which game they pick.
 
 The anchor game is **Block Builder**, the first one built: the child builds a
-multiplication array out of Minecraft-style blocks — tapping squares (or, on a
-tablet, tilting to pour) — then answers how many blocks they built, then rotates
+multiplication array out of Minecraft-style blocks — tapping and dragging
+squares — then answers how many blocks they built, then rotates
 the wall to *feel* that `a × b = b × a`. It also does division, as sharing the
 same blocks into equal rows. Two more games sit alongside it, and a hub picks
 between them.
@@ -86,8 +86,8 @@ short patience for repetition. Plays on a hand-me-down tablet.
 the child engaged without screens feeling like junk food.
 
 **Device context:** tablet browser (iPad Safari / Android Chrome), landscape,
-held in two hands. Also runnable on a desktop browser for development and as a
-no-sensor fallback.
+held in two hands. Also runnable on a desktop browser: the input is tapping and
+dragging everywhere, so the two are the same game.
 
 ---
 
@@ -99,7 +99,7 @@ ledger, so practising `6 × 7` in any game moves the child's mastery everywhere.
 
 | Game | Metaphor | Primary input | Teaches | Status |
 |---|---|---|---|---|
-| **Block Builder** | Minecraft dirt/grass blocks | Tap squares (or tilt to pour) | Multiplication as an array; division as equal rows | **Built (× and ÷)** |
+| **Block Builder** | Minecraft dirt/grass blocks | Tap and drag squares | Multiplication as an array; division as equal rows | **Built (× and ÷)** |
 | **Shake-a-Batch** | 3D dice | Shake (button + accelerometer) | Multiplication as equal groups | **Built** |
 | **Spot the Wrong'un** | Blocky villager crew (Bolt's cousins) | Tap to accuse | Error-detection / fact-checking | **Built (× only, two tiers)** |
 
@@ -161,9 +161,13 @@ sibling, and only appear once that sibling is known (see §8).
   block goes exactly where the child points. (This replaced an earlier
   drag-to-aim scheme whose aim mapped to the whole screen width, making side
   columns nearly unreachable over a small centered wall — a real playtest fail.)
-- **Tilt-to-pour (sensor path):** tilt left/right to aim a spout across columns,
-  tilt forward to pour. Exercises the tablet's motion sensors.
-- Every mechanic has a no-sensor equivalent; the game is never dead.
+- **Tilt-to-pour: cut after playtest.** Tilting left/right aimed a spout and
+  tilting forward poured. The child could not steer it: aiming and tipping are
+  one continuous motion, so blocks landed in the wrong column while they were
+  still working out where to point, and a small sweep filled or emptied the
+  wall before they could react. Tapping was what they reached for unprompted.
+  Removed rather than tuned — the array is the lesson, and an input that has to
+  be mastered before the maths starts is in the way of it.
 
 ### 6.3 Visuals / art direction
 - **Minecraft-style blocks:** dirt-brown cubes; the topmost block in each column
@@ -188,14 +192,17 @@ sibling, and only appear once that sibling is known (see §8).
   squares to show the child what to do; it disappears on their first real tap.
 
 ### 6.6 Sensor handling (reality check)
+- **No mechanic depends on motion any more.** Everything is played by tapping
+  and dragging. The one remaining reader is Spot the Wrong'un's stage lean,
+  which is scenery.
 - iOS 13+ requires `requestPermission()` for DeviceOrientation/Motion from a
-  user gesture over HTTPS — handled by the wake button.
+  user gesture over HTTPS — handled by the wake button. Because only scenery
+  depends on it now, a denial or a plain `http://` LAN address costs nothing.
 - Sensors are treated as "live" only once real orientation data actually
   arrives (the API merely *existing* is true on desktop Chrome and must not be
-  trusted), otherwise the game runs in tap mode.
-- Tilt uses a neutral-pose calibration, a deadzone, clamping, and a low-pass
-  filter. Thresholds are starting points; **on-device tuning with a real tablet
-  (and a real child) is required before any sensor mechanic is called done.**
+  trusted).
+- The reader keeps its neutral-pose calibration, deadzone, clamping and
+  low-pass filter, which is what makes the lean unobtrusive rather than jittery.
 
 ---
 
@@ -257,7 +264,7 @@ mastery model.
   game the hub (`src/hub.js`) picks. `src/core/` holds the shell services
   (engine, ui, audio, speech, textures, blocks, pointer, timers, choices,
   storage, world feel), `src/game/` the shared pieces (`mastery.js` the
-  adaptive ledger, `wallet.js` the Bolts, `sensors.js` tilt input + iOS
+  adaptive ledger, `wallet.js` the Bolts, `sensors.js` the motion reader + iOS
   permission, `bolt.js` the mascot), and `src/games/` one module per mini-game
   against the contract in `src/games/README.md`. See `README.md` to run.
 - **Verification:** headless-browser smoke tests play every game through a full

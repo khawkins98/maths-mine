@@ -1,7 +1,14 @@
-// sensors.js — DeviceOrientation tilt input with iOS permission handling,
+// sensors.js — DeviceOrientation reader with iOS permission handling,
 // neutral-pose calibration, deadzone, clamping, and a low-pass filter.
-// Falls back gracefully: if no sensor / permission denied, tilt stays at 0
-// and the game uses the pointer-drag fallback in main.js.
+//
+// Tilt is NOT a control. It used to pour blocks in Block Builder, and a real
+// child found steering it confusing: aiming and tipping are one continuous
+// motion, so the wall filled up while they were still working out where to
+// point. Every game is played by tapping and dragging now.
+//
+// What is left is scenery: Spot the Wrong'un leans its stage slightly with the
+// tablet. Nothing the child has to operate depends on this, so if there is no
+// sensor, or permission is denied, the output stays at 0 and no one notices.
 
 export class TiltInput {
   constructor({ deadzoneDeg = 6, rangeDeg = 24, smoothing = 0.18 } = {}) {

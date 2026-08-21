@@ -97,16 +97,15 @@ export function createSpotWrongun(ctx) {
     if (stage.state.phase !== 'done') return;
     active().newRound();
   };
-  const onRecenter = () => ui.showToast(
-    tierName === 'imposter' ? 'Tap the wrong sign — or drag to read them!' : 'Tap True or False!', 'good',
-  );
 
   // ---------- per-frame ----------
   function update(dt) {
     const t = nowT();
     active().update(dt, t);
 
-    // optional tilt parallax — pure juice, only when real sensors are live
+    // Optional tilt parallax. Tilt is no longer an input anywhere -- it was
+    // confusing to steer -- but a stage that leans slightly with the tablet is
+    // scenery the child never has to operate, so it stays.
     if (sensorsLive()) {
       sensors.update();
       stage.root.rotation.y += (sensors.x * (Math.PI / 30) - stage.root.rotation.y) * Math.min(1, dt * 6);
@@ -157,8 +156,6 @@ export function createSpotWrongun(ctx) {
   function start(opts = {}) {
     input.attach();
     ui.els.btnConfirm.addEventListener('click', onConfirm);
-    ui.els.btnRecenter.addEventListener('click', onRecenter);
-    ui.els.btnRecenter.style.display = 'none';
     installDebug();
 
     // default to JUDGE; graduate to IMPOSTER once the child is fluent.
@@ -176,12 +173,10 @@ export function createSpotWrongun(ctx) {
     stopScrub();        // …nor have a lifted finger accuse a torn-down crew
     input.detach();
     ui.els.btnConfirm.removeEventListener('click', onConfirm);
-    ui.els.btnRecenter.removeEventListener('click', onRecenter);
     clearDebug();
     for (const t of Object.values(tiers)) t.reset();
     mastery.endQuestion();
     stage.dispose();
-    ui.els.btnRecenter.style.display = '';
     engine.resetCamera();
     stage.state.phase = 'idle';
   }

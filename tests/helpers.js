@@ -2,9 +2,9 @@ import { expect } from '@playwright/test';
 
 // Boot the app past the "Wake up Bolt!" gate and land in the hub.
 //
-// That single tap is the app's permission/audio gate. Headless Chromium has no
-// motion sensors, so the app falls back to tap mode — which is exactly the path
-// these tests drive.
+// That single tap is the app's permission/audio gate. Every game is played by
+// tapping and dragging, which is exactly the path these tests drive; headless
+// Chromium has no motion sensors, and nothing playable depends on them.
 export async function boot(page) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));

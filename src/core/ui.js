@@ -19,7 +19,6 @@ export function createUI() {
     claimEq: el('claimeq'),
     choices: el('choices'),
     btnConfirm: el('btn-confirm'),
-    btnRecenter: el('btn-recenter'),
     btnVoice: el('btn-voice'),
     btnWake: el('btn-wake'),
     btnBack: el('btn-back'),

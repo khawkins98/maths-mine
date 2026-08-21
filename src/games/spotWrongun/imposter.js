@@ -189,7 +189,6 @@ export function createImposterTier(ctx, stage, facts) {
     ui.setClaim(null);
     ui.hideBigTotal();
     ui.setTally('');
-    ui.els.btnRecenter.style.display = 'none';
     ui.setStatus('Tap the sign that’s wrong.');
     bolt.say('One player is fibbing!', 'wow');
     speak(pickPhrase([

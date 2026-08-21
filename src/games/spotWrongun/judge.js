@@ -135,7 +135,6 @@ export function createJudgeTier(ctx, stage, facts) {
     ui.setClaim(null);
     ui.hideBigTotal();
     ui.setTally('');
-    ui.els.btnRecenter.style.display = 'none';
     ui.setStatus(div
       ? 'Watch them share the emeralds out — is the villager telling the truth?'
       : 'Watch the emeralds — is the villager telling the truth?');
