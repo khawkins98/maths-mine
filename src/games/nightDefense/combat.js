@@ -69,6 +69,12 @@ export function createCombatManager(ctx, stage, facts) {
     answering = false;
 
     const isCorrect = (answer === activeFact.target);
+    // A correct answer that arrives AFTER the fact was shown is a copy, not a
+    // recall. The ledger already refuses to score it; the reward has to agree,
+    // or the cheapest route to bolts is to guess wrong on purpose and read the
+    // answer off the screen. Block Builder and Spot the Wrong'un both withhold
+    // it the same way.
+    const assisted = scored;
 
     if (isCorrect) {
       phase = 'victory';
@@ -87,13 +93,19 @@ export function createCombatManager(ctx, stage, facts) {
         if (engine.updateBiomeFromProgress) engine.updateBiomeFromProgress(mastery.overallProgress());
       }
 
-      // Award Bolts
+      // Award Bolts — the golem still swings either way, so the round never
+      // dead-ends; only the payout distinguishes recall from a read-back.
       const earned = 5;
-      if (wallet) wallet.add(earned);
-      ui.showToast(`💥 UPPERCUT! +${earned} 🔩`, 'good');
-
-      if (bolt.say) bolt.say(`BOOM! Golem smash! +${earned} bolts!`);
-      if (speech && speech.speak) speech.speak(`Smash! Correct! Plus ${earned} bolts!`);
+      if (assisted) {
+        ui.showToast('💥 UPPERCUT! You used the answer', 'good');
+        if (bolt.say) bolt.say('BOOM! Golem smash! You used the answer.');
+        if (speech && speech.speak) speech.speak('Smash! You used the answer that time.');
+      } else {
+        if (wallet) wallet.add(earned);
+        ui.showToast(`💥 UPPERCUT! +${earned} 🔩`, 'good');
+        if (bolt.say) bolt.say(`BOOM! Golem smash! +${earned} bolts!`);
+        if (speech && speech.speak) speech.speak(`Smash! Correct! Plus ${earned} bolts!`);
+      }
 
       // Execute 3D Golem uppercut and launch mob
       stage.executeUppercutVictory(() => {

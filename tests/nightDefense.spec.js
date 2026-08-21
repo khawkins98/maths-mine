@@ -19,6 +19,21 @@ test.describe('Night Defence learning loop', () => {
     expect(fact.choices).toContain(3);
   });
 
+  test('a first-try win still pays the full uppercut reward', async ({ page }) => {
+    const errors = await boot(page);
+    await pick(page, 'night-defense', '__night');
+    await waitForState(page, '__night', "s.phase === 'asking'");
+
+    const first = await state(page, '__night');
+    await page.evaluate((value) => window.__nightAnswer(value), first.fact.target);
+    await waitForState(page, '__night', "s.phase === 'victory'");
+
+    const bolts = await page.evaluate(() => JSON.parse(localStorage.getItem('bolts.v1')));
+    expect(bolts.bolts).toBe(5);
+    expect(await page.locator('#toast').textContent()).toContain('+5');
+    expect(errors).toEqual([]);
+  });
+
   test('starts gently and teaches the fact after a miss before retrying', async ({ page }) => {
     const errors = await boot(page);
     await pick(page, 'night-defense', '__night');
@@ -56,6 +71,15 @@ test.describe('Night Defence learning loop', () => {
     const retryRecord = savedAfterRetry.facts.find(([key]) => key === [first.fact.a, first.fact.b].sort((a, b) => a - b).join('x'))[1];
     expect(retryRecord.attempts).toBe(1);
     expect(retryRecord.correct).toBe(0);
+
+    // ...and is not paid for either. Copying the answer off the screen must not
+    // earn the same bolts as recalling it, or guessing wrong on purpose becomes
+    // the cheapest route to the reward.
+    const bolts = await page.evaluate(() => JSON.parse(localStorage.getItem('bolts.v1')));
+    expect(bolts === null ? 0 : bolts.bolts).toBe(0);
+    const toast = await page.locator('#toast').textContent();
+    expect(toast).toContain('You used the answer');
+    expect(toast).not.toContain('🔩');
     expect(errors).toEqual([]);
   });
 
