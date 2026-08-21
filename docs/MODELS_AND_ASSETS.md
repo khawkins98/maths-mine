@@ -28,13 +28,25 @@ When downloading Minecraft CC-BY models from Sketchfab:
    - If downloaded as a `.zip`, extract it to obtain the `.glb` or `.gltf` + `.bin` + `.png`.
 4. Rename and place in `public/assets/mobs/`:
 
-| Mob | Target Filename | Sketchfab Source (CC-BY 4.0) |
-|---|---|---|
-| 🟤 **Villager** | `public/assets/mobs/villager.glb` | [Villager (Sonic Racing Crossworlds)](https://sketchfab.com/3d-models/villager-minecraft-sonic-racing-crossworlds-f24d56a793e54d60b4ce9e680e8cbe58) |
-| 🟢 **Zombie** | `public/assets/mobs/zombie.glb` | [Zombie (Sonic Racing Crossworlds)](https://sketchfab.com/3d-models/zombie-minecraft-sonic-racing-crossworlds-44bec31939524459ad11e48eb7d1396f) |
-| ⬜ **Ghast** | `public/assets/mobs/ghast.glb` | [Ghast (Sonic Racing Crossworlds)](https://sketchfab.com/3d-models/ghast-minecraft-sonic-racing-crossworlds-5b27f5cfa6034b84b335f696de7e5b64) |
-| ⬛ **Enderman** | `public/assets/mobs/enderman.glb` | [Enderman (Sonic Racing Crossworlds)](https://sketchfab.com/3d-models/enderman-minecraft-sonic-racing-crossworlds-142aa13b035248879b39288dd16c0c2d) |
-| 🪨 **Iron Golem** | `public/assets/mobs/iron_golem.png` | [Minecraft Iron Golem Texture & Model](https://sketchfab.com/3d-models/minecraft-iron-golem-a34d28d5761040559d669e77090cbfaf) |
+| Mob | Target Filename | Author | Sketchfab Source (CC-BY 4.0) |
+|---|---|---|---|
+| 🟩 **Creeper** | `public/assets/mobs/creeper.glb` | keithandmarchant | [Minecraft Creeper](https://sketchfab.com/3d-models/minecraft-creeper-c986450b4d884c2c94c0d3168671c543) |
+| ⬛ **Enderman** | `public/assets/mobs/enderman.glb` | Guilherme Navarro | [Enderman (Sonic Racing Crossworlds)](https://sketchfab.com/3d-models/enderman-minecraft-sonic-racing-crossworlds-142aa13b035248879b39288dd16c0c2d) |
+| ⬜ **Ghast** | `public/assets/mobs/ghast.glb` | Guilherme Navarro | [Ghast (Sonic Racing Crossworlds)](https://sketchfab.com/3d-models/ghast-minecraft-sonic-racing-crossworlds-5b27f5cfa6034b84b335f696de7e5b64) |
+| 🪨 **Iron Golem** | `public/assets/mobs/iron-golem.glb` | Vincent Yanez | [Minecraft - Iron Golem](https://sketchfab.com/3d-models/minecraft-iron-golem-b7f1a9a021654c84a67a1ead67291793) |
+| 🧍 **Steve** | `public/assets/mobs/steve.glb` | Cheese | [Minecraft Steve](https://sketchfab.com/3d-models/minecraft-steve-2938c7d498ab4356b0d6e0f47660ef94) |
+| 🟤 **Villager** | `public/assets/mobs/villager.glb` | Guilherme Navarro | [Villager (Sonic Racing Crossworlds)](https://sketchfab.com/3d-models/villager-minecraft-sonic-racing-crossworlds-f24d56a793e54d60b4ce9e680e8cbe58) |
+| 🟢 **Zombie** | `public/assets/mobs/zombie.glb` | Guilherme Navarro | [Zombie (Sonic Racing Crossworlds)](https://sketchfab.com/3d-models/zombie-minecraft-sonic-racing-crossworlds-44bec31939524459ad11e48eb7d1396f) |
+
+Every author above must be credited: these models are CC-BY 4.0. The canonical
+record is each file's glTF `asset.extras` block, and
+[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) mirrors it.
+
+The `.png` atlases beside the models are a separate question.
+`enderman.png`, `ghast.png`, `villager.png` and `zombie.png` are the textures
+out of their own models. `creeper.png`, `iron_golem.png` and `steve.png` are
+not, and have no recorded source -- treat them as unlicensed until that is
+resolved.
 
 ---
 
