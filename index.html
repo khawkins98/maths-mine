@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>The Maths Mine</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%236ad2ff'/><rect x='9' y='9' width='6' height='6' fill='%230c1020'/><rect x='17' y='9' width='6' height='6' fill='%230c1020'/><rect x='9' y='17' width='6' height='6' fill='%230c1020'/></svg>" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Two display faces, split by job:
+         Fredoka       - every number, equation and answer. Rounded and chunky
+                         enough to suit the blocks, with unambiguous digits.
+                         This matters more here than anywhere else: Pixelify
+                         Sans renders 2, 5 and 8 near-identically at small
+                         sizes, so the jar labels for the 2x/5x/10x tables all
+                         read as "8x", and a 3 on an answer button reads as 8.
+         Pixelify Sans - decorative only, on the big title and hub cards, where
+                         it is large enough to read and carries the voxel feel.
+         Body copy stays in the system stack. -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Pixelify+Sans:wght@600;700&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --bg: #8cc5ef;                 /* flat Minecraft sky */
+        --ink: #241a10;                /* dark wood-burn ink */
+        --ink-light: #f6ecd6;          /* parchment highlight */
+        --muted: #6b5638;
+        /* wood palette */
+        --wood1: #b98a4e; --wood2: #a5743c; --wood-edge: #7a4f26;
+        --wood-dark: #5c3a1c; --wood-drop: #3f2a13;
+        /* stone palette (passive readouts) */
+        --stone1: #9d9d9c; --stone2: #838382; --stone-edge: #6a6a69;
+        --stone-dark: #4c4c4b; --stone-drop: #333332;
+        /* accents */
+        --gold: #ffc93c; --gold-dark: #c98a1f;
+        --good: #54c26a; --good-dark: #2f8a45;
+        --bad: #e0563f; --bad-dark: #a83a28;
+        --brand: #ffce54;              /* loot-fill amber */
+        /* fonts */
+        --pix: "Pixelify Sans", system-ui, sans-serif;   /* decorative only */
+        --num: "Fredoka", system-ui, sans-serif;         /* anything with digits */
+        --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        /* reusable plank fill (planks + faint grain bands) */
+        --wood-fill:
+          repeating-linear-gradient(0deg, rgba(60,38,18,0.18) 0 3px, transparent 3px 26px),
+          repeating-linear-gradient(90deg, rgba(255,225,170,0.05) 0 44px, rgba(60,38,18,0.06) 44px 88px),
+          linear-gradient(180deg, var(--wood1), var(--wood2));
+        --stone-fill:
+          repeating-linear-gradient(0deg, rgba(0,0,0,0.10) 0 3px, transparent 3px 30px),
+          linear-gradient(180deg, var(--stone1), var(--stone2));
+        /* chunky pixel frame (inner bevel highlight + shade) */
+        --frame:
+          inset 0 0 0 3px var(--wood-edge),
+          inset 4px 4px 0 3px rgba(255,228,175,0.22),
+          inset -4px -4px 0 3px rgba(0,0,0,0.30);
+        /* Non-interactive display text. The wooden plank + pixel frame + drop
+           shadow is the language of a CONTROL, so anything you cannot tap wears
+           none of it: heavy cream type with a hard dark outline, which stays
+           readable over both bright grass and open sky. */
+        --readout-ink: #fff6e2;
+        --readout-edge:
+           0 3px 0 rgba(40,26,10,0.55),
+           2px 0 0 rgba(40,26,10,0.45), -2px 0 0 rgba(40,26,10,0.45),
+           0 -2px 0 rgba(40,26,10,0.45), 0 6px 14px rgba(0,0,0,0.4);
+        --frame-stone:
+          inset 0 0 0 3px var(--stone-edge),
+          inset 4px 4px 0 3px rgba(255,255,255,0.20),
+          inset -4px -4px 0 3px rgba(0,0,0,0.32);
+        --surface-ring: 0 0 0 1px rgba(255,255,255,0.12);
+        --surface-lift: 0 12px 28px rgba(10,8,4,0.34);
+        font-family: var(--body);
+      }
+      /* The pixel face is reserved for large decorative text. */
+      h1, .hc-title {
+        font-family: var(--pix);
+      }
+      /* Everything a child has to READ A NUMBER off uses the rounded face. */
+      .tally, button.big, button.choice,
+      #bigtotal, .toast, .askeq, .claim, #btn-back, .hinttext {
+        font-family: var(--num);
+      }
+      * { box-sizing: border-box; }
+      html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+      h1, h2, h3, .hc-title { text-wrap: balance; }
+      p, .status, .hc-desc { text-wrap: pretty; }
+      .tally, #bigtotal, #bolts-count, #house-stage-text, #house-cost-text,
+      button.choice, .askeq, .claim { font-variant-numeric: tabular-nums; }
+      :focus-visible {
+        outline: 4px solid #fff;
+        outline-offset: 4px;
+        box-shadow: 0 0 0 7px #12429e;
+      }
+      html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--ink);
+        -webkit-user-select: none;
+        user-select: none;
+        touch-action: none;
+        overscroll-behavior: none;
+      }
+      #app { position: fixed; inset: 0; }
+      canvas { display: block; touch-action: none; }
+
+      /* ---- HUD ---- */
+      .hud {
+        position: fixed;
+        left: 0; right: 0;
+        pointer-events: none;
+        z-index: 5;
+      }
+      .hud.top { top: 0; padding: max(12px, env(safe-area-inset-top)) 16px 12px; }
+      .hud.bottom { bottom: 0; padding: 12px 16px max(16px, env(safe-area-inset-bottom)); }
+
+      /* During the question hide Bolt's bubble so it can't overlap centre text. */
+      body:has(#askeq:not(.hidden)) #bubble { display: none; }
+      /* Keep helper prose out of the answer layout. The concise block total is
+         intentionally persistent as the child's visual cheat sheet. */
+      body:has(#askeq:not(.hidden)) #status { display: none; }
+
+
+      .status {
+        text-align: center;
+        color: var(--readout-ink);
+        /* Helper/status ~35% of the question. */
+        font-size: clamp(15px, 3.4vw, 24px);
+        font-weight: 700;
+        min-height: 24px;
+        text-shadow: var(--readout-edge);
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        pointer-events: auto;
+      }
+      /* ---- primary action: a chunky wooden button with pressed depth ---- */
+      button.big {
+        pointer-events: auto;
+        border: 3px solid var(--wood-dark);
+        border-radius: 0;
+        padding: 16px 30px;
+        min-height: 72px;
+        /* CTA (Next / Rotate / Shake) ~55–60% of the question; on confirmation
+           screens the answer slabs fade away so this is the largest control. */
+        font-size: clamp(20px, 4.8vw, 40px);
+        font-weight: 700;
+        color: #3a2200;
+        text-shadow: 0 1px 0 rgba(255,235,180,0.5);
+        background:
+          repeating-linear-gradient(0deg, rgba(120,80,20,0.14) 0 3px, transparent 3px 22px),
+          linear-gradient(180deg, #ffd35a, #f0ad2a);
+        box-shadow:
+          inset 3px 3px 0 rgba(255,245,205,0.5),
+          inset -3px -3px 0 rgba(120,80,15,0.4),
+          0 6px 0 var(--gold-dark), 0 12px 16px rgba(30,20,5,0.22);
+        image-rendering: pixelated;
+        transition: transform 110ms cubic-bezier(.2,0,0,1), box-shadow 110ms ease-out, opacity 150ms ease;
+      }
+      button.big:not(:disabled):active {
+        transform: translateY(4px) scale(0.96);
+        box-shadow:
+          inset 3px 3px 0 rgba(255,245,205,0.5),
+          inset -3px -3px 0 rgba(120,80,15,0.4),
+          0 2px 0 var(--gold-dark);
+      }
+      button.big.ghost {
+        color: var(--ink-light);
+        text-shadow: 0 2px 0 rgba(0,0,0,0.35);
+        background: var(--wood-fill);
+        box-shadow: var(--frame), 0 6px 0 var(--wood-drop);
+      }
+      button.big.ghost:active { transform: translateY(4px); box-shadow: var(--frame), 0 2px 0 var(--wood-drop); }
+      button.big[disabled] { opacity: 0.4; }
+
+      /* ---- mastery meters → little wooden CHESTS/JARS that fill with loot ----
+         Passive containers on a right-edge shelf: no button chrome, no pointer
+         events. Each fills with amber "loot" as that table is mastered. */
+ 
+      /* ---- pixel-framed square icon buttons (shared skin for 🔊 and ←) ---- */
+      #btn-voice, #btn-back {
+        position: fixed; z-index: 9; pointer-events: auto;
+        width: 48px; height: 48px; padding: 0;
+        border: 3px solid var(--wood-dark); border-radius: 0;
+        background: var(--wood-fill);
+        color: var(--ink-light);
+        font-size: 22px; line-height: 1; cursor: pointer;
+        text-shadow: 0 2px 0 rgba(0,0,0,0.4);
+        box-shadow: var(--frame), 0 5px 0 var(--wood-drop);
+        image-rendering: pixelated;
+        transition: transform 110ms cubic-bezier(.2,0,0,1), box-shadow 110ms ease-out, opacity 150ms ease;
+      }
+      #btn-voice:active, #btn-back:active { transform: translateY(3px) scale(0.96); box-shadow: var(--frame), 0 2px 0 var(--wood-drop); }
+
+      #btn-voice { top: max(70px, calc(env(safe-area-inset-top) + 62px)); right: 16px; }
+      /* Muted: dim the speaker AND draw an unambiguous red slash across it. */
+      #btn-voice.off { opacity: 0.8; color: #cbb98f; }
+      #btn-voice.off::after {
+        content: ''; position: absolute; left: 50%; top: 50%;
+        width: 34px; height: 4px;
+        background: var(--bad);
+        box-shadow: 0 0 0 1.5px rgba(255,255,255,0.9);
+        transform: translate(-50%, -50%) rotate(-45deg);
+      }
+
+      /* back-to-menu: top-left corner, same pixel skin; the prompt sign is
+         so they never overlap. */
+      #btn-back {
+        top: max(14px, calc(env(safe-area-inset-top) + 8px)); left: 14px;
+        font-weight: 700; font-size: 26px;
+      }
+
+      /* ---- hub (game picker): the voxel world shows through a dim overlay ---- */
+      #hub {
+        position: fixed; inset: 0; z-index: 20;
+        isolation: isolate;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        gap: clamp(12px, 2.4vh, 22px); text-align: center; color: var(--ink-light);
+        background: transparent;
+        /* Bolt walks on at the bottom-left and greets the child from there, so
+           the card row is lifted clear of him rather than sitting on his head. */
+        padding: max(28px, env(safe-area-inset-top)) 24px max(40px, calc(env(safe-area-inset-bottom) + 18px));
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        touch-action: pan-y;
+      }
+      /* Keep the dimmer separate from the chrome so a village upgrade can
+         reveal the existing 3D cottage without moving the world camera. */
+      #hub::before {
+        content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+        background: radial-gradient(1200px 800px at 50% 40%, rgba(10,8,4,0.28) 0%, rgba(10,8,4,0.55) 100%);
+        opacity: 1;
+        transition: opacity 180ms ease-out;
+      }
+      #hub > h1, #hub > .hub-kicker, #hub > #hub-cards, #hub > #house-bar {
+        opacity: 1; transform: translateY(0);
+        transition: opacity 180ms ease-out, transform 180ms cubic-bezier(.2,0,0,1);
+      }
+      #hub.house-reveal-build::before { opacity: .18; }
+      #hub.house-reveal-build > h1,
+      #hub.house-reveal-build > .hub-kicker,
+      #hub.house-reveal-build > #hub-cards,
+      #hub.house-reveal-build > #house-bar {
+        opacity: 0; transform: translateY(-8px); pointer-events: none;
+      }
+      #hub.house-reveal-static::before { opacity: .38; }
+      #hub.house-reveal-static #house-bar {
+        box-shadow: 0 0 0 4px rgba(255,211,90,.9), var(--surface-ring), var(--surface-lift);
+      }
+      /* On the hub, Bolt's bubble said "Pick a game!" directly on top of the
+         first card's description, while the subtitle two lines up already said
+         "Pick a game to play with Bolt!". One message, not two, and no overlap:
+         Bolt still walks on and waves, and still says it out loud. Same
+         treatment the bubble already gets while a question is on screen. */
+      body:has(#hub:not(.hidden)) #bubble { display: none; }
+      body:has(#hub:not(.hidden)) .toast { z-index: 21; }
+      /* Title on a big wooden sign */
+      #hub h1 {
+        font-size: clamp(34px, 8vw, 58px); margin: 0;
+        padding: 0; color: var(--readout-ink);
+        text-shadow: var(--readout-edge);
+        letter-spacing: 1px;
+      }
+      .hub-kicker {
+        margin: -8px 0 2px; color: #fff4d6; font: 700 clamp(14px, 3vw, 19px)/1.35 var(--body);
+        text-shadow: 0 2px 8px rgba(0,0,0,.75);
+      }
+      #hub-cards {
+        width: min(900px, 100%); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: clamp(12px, 2.4vw, 22px); justify-content: center;
+      }
+      /* wooden signpost cards */
+      button.hub-card {
+        pointer-events: auto; cursor: pointer;
+        width: 100%; min-height: clamp(176px, 28vh, 230px);
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+        border: 4px solid var(--wood-dark); border-radius: 0;
+        padding: 22px 18px;
+        background: var(--wood-fill);
+        color: var(--ink-light);
+        box-shadow: var(--frame), 0 9px 0 var(--wood-drop), 0 16px 22px rgba(10,8,4,0.4);
+        image-rendering: pixelated;
+        transform: translateY(0) scale(1);
+        transition: transform 150ms cubic-bezier(.2,0,0,1), box-shadow 150ms ease-out, filter 150ms ease-out;
+      }
+      @media (hover: hover) { button.hub-card:not(.locked):hover { transform: translateY(-4px); box-shadow: var(--frame), 0 12px 0 var(--wood-drop), var(--surface-lift); filter: brightness(1.07); } }
+      button.hub-card:not(.locked):active { transform: translateY(5px) scale(0.96); box-shadow: var(--frame), 0 4px 0 var(--wood-drop); }
+      button.hub-card[data-material="emerald"] { box-shadow: var(--frame), inset 0 0 0 7px rgba(48,166,92,.16), 0 9px 0 var(--wood-drop), 0 16px 22px rgba(10,8,4,.4); }
+      button.hub-card[data-material="obsidian"] { box-shadow: var(--frame), inset 0 0 0 7px rgba(92,70,139,.2), 0 9px 0 var(--wood-drop), 0 16px 22px rgba(10,8,4,.4); }
+      .hub-card .hc-icon {
+        width: clamp(56px, 13vw, 84px); height: auto; display: block;
+        image-rendering: pixelated;
+        filter: drop-shadow(0 4px 0 rgba(0,0,0,0.28));
+        outline: 1px solid rgba(255,255,255,0.1); outline-offset: -1px;
+      }
+      .hub-card .hc-title { font-weight: 700; font-size: clamp(20px, 5vw, 28px); color: var(--ink-light); text-shadow: 0 2px 0 rgba(0,0,0,0.4); }
+      .hub-card .hc-desc { font-family: var(--body); font-weight: 600; font-size: clamp(13px, 3.4vw, 16px); color: #f2e6cc; max-width: 22ch; line-height: 1.35; }
+      button.hub-card.locked {
+        cursor: not-allowed;
+        background: #5f503e;
+        box-shadow: var(--frame), inset 0 0 0 7px rgba(255,255,255,.06), 0 7px 0 #382c20, 0 12px 18px rgba(10,8,4,.35);
+      }
+      .hub-card.locked .hc-icon { filter: grayscale(.72) brightness(.7) drop-shadow(0 3px 0 rgba(0,0,0,.24)); }
+      .hub-card.locked .hc-desc { color: #fff1c7; font-variant-numeric: tabular-nums; }
+
+      #house-bar {
+        display: flex; gap: 14px; align-items: center; justify-content: center;
+        width: min(760px, 100%); margin-top: clamp(2px, 2vh, 14px); flex-wrap: wrap; pointer-events: auto;
+        padding: 12px; background: rgba(22,16,8,.72); box-shadow: var(--surface-ring), var(--surface-lift);
+      }
+      #bolts-chip {
+        min-height: 48px; display: inline-flex; align-items: center; gap: 6px;
+        font-family: var(--num); font-weight: 700; font-size: clamp(17px, 4vw, 23px);
+        color: #ffdf70; text-shadow: 0 2px 0 rgba(0,0,0,0.6);
+        background: #2a2115; border: 0; box-shadow: var(--surface-ring), inset 0 -3px 0 rgba(0,0,0,.35);
+        border-radius: 0; padding: 8px 16px;
+      }
+      button.hub-build-btn {
+        pointer-events: auto; cursor: pointer;
+        min-height: 52px; flex: 1 1 360px;
+        font-family: var(--num); font-weight: 700; font-size: clamp(15px, 3.4vw, 20px);
+        border: 3px solid #183f20; border-radius: 0;
+        padding: 10px 18px;
+        background: repeating-linear-gradient(0deg, rgba(0,0,0,.1) 0 3px, transparent 3px 22px), linear-gradient(#55aa61, #348843); color: #ffffff;
+        box-shadow: var(--frame), 0 5px 0 #1b5e20;
+        text-shadow: 0 2px 0 rgba(0,0,0,0.5);
+        transition: transform 110ms cubic-bezier(.2,0,0,1), background-color 120ms ease, box-shadow 110ms ease-out, filter 120ms ease;
+      }
+      button.hub-build-btn:hover:not(:disabled) { filter: brightness(1.1); }
+      button.hub-build-btn:active:not(:disabled) { transform: translateY(3px) scale(0.96); box-shadow: var(--frame), 0 2px 0 #1b5e20; }
+      button.hub-build-btn.disabled {
+        opacity: 1; pointer-events: none; color: #fff9df; border-color: #493b28;
+        background: repeating-linear-gradient(0deg, rgba(0,0,0,.12) 0 3px, transparent 3px 22px), linear-gradient(#75664e, #594c3a);
+        box-shadow: inset 3px 3px 0 rgba(255,255,255,.12), inset -3px -3px 0 rgba(0,0,0,.3), 0 4px 0 #352c20;
+      }
+      button.hub-build-btn:disabled { cursor: not-allowed; }
+      .hub-build-btn .cta-detail {
+        display: inline-block; margin-left: 7px; padding: 2px 7px;
+        color: #fff2bb; background: rgba(0,0,0,.22); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14);
+        font-size: .8em; font-variant-numeric: tabular-nums; white-space: nowrap;
+      }
+
+      /* ---- cheap vignette (no post-processing) ---- */
+      #vignette {
+        position: fixed; inset: 0; z-index: 4; pointer-events: none;
+        background: radial-gradient(ellipse at 50% 45%, transparent 58%, rgba(20,14,6,0.22) 100%);
+      }
+
+      /* ---- Gate overlay (world shows through a dim overlay) ---- */
+      #gate {
+        position: fixed; inset: 0; z-index: 20;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        gap: 20px; text-align: center;
+        color: var(--ink-light);
+        background: radial-gradient(1200px 800px at 50% 40%, rgba(10,8,4,0.30) 0%, rgba(10,8,4,0.6) 100%);
+        padding: 24px;
+      }
+      #gate h1 {
+        font-size: clamp(30px, 9vw, 54px); margin: 0;
+        padding: 0; color: var(--readout-ink);
+        text-shadow: var(--readout-edge);
+        letter-spacing: 1px;
+      }
+      #gate p { color: #f0e2c4; max-width: 30ch; margin: 0; line-height: 1.5; text-shadow: 0 2px 4px rgba(0,0,0,0.6); }
+      .bolt {
+        width: 120px; height: 120px;
+        image-rendering: pixelated;
+        animation: bob 2.2s ease-in-out infinite;
+      }
+      @keyframes bob { 0%,100%{ transform: translateY(0) rotate(-3deg);} 50%{ transform: translateY(-10px) rotate(3deg);} }
+      .fine { font-size: 12px; color: #d9c9a3; }
+      .hidden { display: none !important; }
+
+      /* ---- toast: a stone plaque ---- */
+      .toast {
+        position: fixed; left: 50%; top: 22%;
+        transform: translate(-50%, -6px);
+        padding: 6px 12px;
+        font-weight: 700; font-size: clamp(18px, 5vw, 26px);
+        color: var(--readout-ink);
+        text-shadow: var(--readout-edge);
+        opacity: 0; transition: opacity .2s ease, transform .2s ease;
+        z-index: 8; pointer-events: none;
+      }
+      .toast.show { opacity: 1; transform: translate(-50%, 0); }
+      .toast.good { color: #b6f0c2; }
+      .toast.bad { color: #ffc2b6; }
+
+      /* ---- skip-count tally (truthful, per group) — a small wooden chip ---- */
+      .tally {
+        text-align: center;
+        color: var(--ink-light);
+        font-weight: 700;
+        font-size: clamp(18px, 4.6vw, 26px);
+        min-height: 30px;
+      }
+      .tally.show {
+        display: table; margin: 2px auto; padding: 2px 8px;
+        color: var(--readout-ink);
+        text-shadow: var(--readout-edge);
+      }
+
+      /* ---- the equation, shown big on a WOODEN SIGN above the answer cards ---- */
+      .askeq, .claim {
+        display: table; margin: 4px auto 10px;
+        text-align: center; color: var(--readout-ink);
+        font-weight: 700;
+        /* The QUESTION / CLAIM = 100%: the single largest text on the screen. */
+        font-size: clamp(40px, 9vw, 68px); line-height: 1.05;
+        padding: 2px 10px;
+        /* No plank. This sat directly above three plank-and-frame answer cards
+           and looked exactly like a fourth one, inviting a tap on the question. */
+        text-shadow: var(--readout-edge);
+      }
+      /* '?' → answer pop on the equation sign when it resolves. */
+      .askeq.pop, .claim.pop { animation: askPop 0.32s ease; }
+      @keyframes askPop {
+        0% { transform: scale(1); }
+        45% { transform: scale(1.16); }
+        100% { transform: scale(1); }
+      }
+      /* the Truth Check claim headline fades out during the reveal beat so the
+         corrected 3D sign becomes the single hero — never both loud at once. */
+      .claim { transition: opacity 0.4s ease, transform 0.4s ease; }
+      .claim.faded { opacity: 0; transform: translateY(-8px) scale(0.9); }
+
+      /* ---- answer choices → wooden plank buttons with pressed depth ---- */
+      .choices { display: flex; gap: 14px; justify-content: center; margin: 2px 0 8px; transition: opacity 0.35s ease; }
+      /* after the green flash the slabs fade away so no dead distractor button
+         lingers into the reveal / rotate state. */
+      .choices.fading { opacity: 0; pointer-events: none; }
+      button.choice {
+        pointer-events: auto;
+        min-width: 92px;
+        /* Keep a BIG tap target (≥88px tall) but a smaller LABEL (~65% of the
+           question) — target size ≠ type size. */
+        min-height: 88px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: 3px solid var(--wood-dark);
+        border-radius: 0;
+        padding: 12px 22px;
+        font-size: clamp(24px, 5.2vw, 44px);
+        font-weight: 700;
+        color: var(--ink-light);
+        text-shadow: 0 2px 0 rgba(0,0,0,0.35);
+        background: var(--wood-fill);
+        box-shadow: var(--frame), 0 7px 0 var(--wood-drop), 0 12px 16px rgba(20,14,6,0.2);
+        image-rendering: pixelated;
+        transform: translateY(0) scale(1);
+        transition: transform 110ms cubic-bezier(.2,0,0,1), box-shadow 110ms ease-out, background-color 150ms ease, filter 150ms ease;
+      }
+      @media (hover: hover) { button.choice:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-2px); } }
+      button.choice:active:not(:disabled), button.choice.selected { transform: translateY(4px) scale(0.96); box-shadow: var(--frame), 0 3px 0 var(--wood-drop); }
+      button.choice:disabled { cursor: default; }
+      button.choice.right {
+        color: #fff;
+        background: repeating-linear-gradient(0deg, rgba(0,0,0,0.10) 0 3px, transparent 3px 22px), linear-gradient(180deg, #6bd47f, var(--good));
+        border-color: var(--good-dark);
+        box-shadow: inset 3px 3px 0 rgba(255,255,255,0.3), inset -3px -3px 0 rgba(0,0,0,0.25), 0 7px 0 var(--good-dark);
+      }
+      button.choice.right::after { content: ' ✓'; }
+      /* the True/False survivor already carries its own ✓/✗ prefix — no double */
+      button.choice.solo::after { content: none; }
+      button.choice.wrong {
+        color: #fff;
+        background: repeating-linear-gradient(0deg, rgba(0,0,0,0.10) 0 3px, transparent 3px 22px), linear-gradient(180deg, #ec7863, var(--bad));
+        border-color: var(--bad-dark);
+        box-shadow: inset 3px 3px 0 rgba(255,255,255,0.25), inset -3px -3px 0 rgba(0,0,0,0.25), 0 7px 0 var(--bad-dark);
+      }
+
+      /* ---- Bolt's speech bubble → a small wooden sign (JS-positioned) ---- */
+      #bubble {
+        position: fixed; z-index: 7; pointer-events: none;
+        transform: translate(-50%, -115%); /* centred above Bolt's head */
+        transform-origin: 50% 100%;
+        /* Speech needs a container, but not a raised wooden one: the pixel
+           frame and drop shadow are what make the buttons look pressable, so
+           the bubble uses a flat dark slab instead and cannot be confused for
+           a control. */
+        background: rgba(28, 20, 10, 0.72);
+        border: 0; border-radius: 10px;
+        color: var(--readout-ink); font-weight: 700;
+        /* Mascot bubble ~40% of the question. */
+        font-size: clamp(16px, 4vw, 27px);
+        padding: 8px 14px; max-width: 34vw;
+        text-align: center;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        animation: bubblePop 0.28s ease;
+      }
+      #bubble::after {
+        content: ''; position: absolute; left: 50%; margin-left: -8px; bottom: -11px;
+        border: 8px solid transparent; border-top-color: var(--wood-dark);
+      }
+      @keyframes bubblePop {
+        0% { transform: translate(-50%, -115%) scale(0.8); }
+        60% { transform: translate(-50%, -115%) scale(1.05); }
+        100% { transform: translate(-50%, -115%) scale(1); }
+      }
+      /* A four-sign portrait layout has no spare horizontal lane for a speech
+         card. The same line is spoken aloud and repeated in the status footer,
+         so suppress the duplicate instead of covering a villager/sign. */
+      @media (orientation: portrait) { #bubble { display: none; } }
+
+      @media (max-width: 680px) and (orientation: portrait) {
+        #hub { justify-content: flex-start; padding-inline: 16px; }
+        #hub-cards { grid-template-columns: 1fr; gap: 12px; }
+        button.hub-card { min-height: 118px; flex-direction: row; justify-content: flex-start; text-align: left; padding: 14px 18px; }
+        .hub-card .hc-icon { width: 66px; flex: 0 0 auto; }
+        .hub-card .hc-title, .hub-card .hc-desc { max-width: none; }
+        #house-bar { margin-top: auto; }
+      }
+
+      /* ---- big surviving-total badge for commutativity ---- */
+      #bigtotal {
+        position: fixed; left: 50%; top: 32%;
+        transform: translate(-50%,-50%) scale(0.4);
+        z-index: 9; pointer-events: none; opacity: 0;
+        font-size: clamp(90px, 30vh, 260px); font-weight: 700;
+        color: var(--gold);
+        -webkit-text-stroke: 4px rgba(90, 55, 15, 0.55);
+        text-shadow: 0 8px 0 rgba(120, 80, 15, 0.5), 0 14px 30px rgba(20,14,6,0.4);
+        transition: opacity 0.2s ease, transform 0.3s cubic-bezier(.2,1.6,.4,1);
+      }
+      #bigtotal.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+      #bigtotal.pulse { animation: pulseBig 0.6s ease 2; }
+      @keyframes pulseBig {
+        0%,100% { transform: translate(-50%,-50%) scale(1); }
+        50% { transform: translate(-50%,-50%) scale(1.18); }
+      }
+
+      /* ---- counter pop when rewarded ---- */
+
+      /* ---- first-touch demo: ghost finger ---- */
+      #hint { position: fixed; inset: 0; z-index: 6; pointer-events: none; }
+      #hint .hinttext {
+        position: absolute; left: 50%; bottom: 30%; transform: translateX(-50%);
+        color: var(--ink-light); font-weight: 700; font-size: clamp(16px, 4.2vw, 22px);
+        text-shadow: 0 2px 0 rgba(0,0,0,0.5), 0 3px 8px rgba(0,0,0,0.4);
+        animation: hintPulse 1.1s ease-in-out infinite;
+      }
+      @keyframes hintPulse { 0%,100%{ opacity: 0.6; } 50%{ opacity: 1; } }
+
+      /* Keep the picker and answer controls usable on short phones in landscape. */
+      @media (max-height: 600px) and (orientation: landscape) {
+        #hub { justify-content: flex-start; gap: 10px; padding: max(10px, env(safe-area-inset-top)) 72px max(12px, env(safe-area-inset-bottom)); }
+        #hub h1 { font-size: clamp(26px, 8vh, 40px); }
+        #hub-cards { gap: 12px; }
+        button.hub-card { width: 100%; min-height: 126px; padding: 10px 12px; gap: 4px; }
+        .hub-card .hc-icon { width: clamp(42px, 12vh, 58px); }
+        .hub-card .hc-title { font-size: clamp(17px, 5vh, 24px); }
+        .hub-card .hc-desc { font-size: clamp(12px, 3.2vh, 15px); }
+        #house-bar { margin-top: 4px; }
+        .hud.bottom { padding-top: 6px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+        .askeq, .claim { font-size: clamp(32px, 11vh, 54px); margin-bottom: 4px; }
+        button.choice { min-height: 64px; padding-block: 6px; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+          scroll-behavior: auto !important;
+        }
+        #hub.house-reveal-build > h1,
+        #hub.house-reveal-build > .hub-kicker,
+        #hub.house-reveal-build > #hub-cards,
+        #hub.house-reveal-build > #house-bar { opacity: 1; transform: none; }
+      }
+      #finger {
+        position: fixed; width: 40px; height: 40px; border-radius: 50%;
+        transform: translate(-50%, -50%);
+        background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.95), rgba(255,255,255,0.35));
+        border: 2px solid rgba(30,20,10,0.55);
+        box-shadow: 0 3px 10px rgba(20,14,6,0.35);
+        transition: left 0.35s cubic-bezier(.4,.1,.3,1), top 0.35s cubic-bezier(.4,.1,.3,1);
+      }
+      #finger.tap { animation: fingerTap 0.4s ease; }
+      @keyframes fingerTap { 0%,100%{ transform: translate(-50%,-50%) scale(1);} 45%{ transform: translate(-50%,-50%) scale(0.6);} }
+
+      /* ---- parent dashboard (src/game/parentDashboard.js) ----
+         Reached only by pressing and holding the hub title, so nothing here is
+         ever on a child's screen. It deliberately does NOT wear the voxel skin:
+         the wooden planks and pixel frames are the child's visual language and
+         they cost contrast, and the legibility audit was about exactly that.
+         This is a document, read by an adult on a tablet in bad light — so:
+         near-black ink on parchment, the system body face (not the display
+         faces), 17px minimum, and nothing whose meaning is carried by colour
+         alone (every level cell also prints its level as a digit). */
+      #parent-dash {
+        position: fixed; inset: 0; z-index: 60;
+        display: flex; align-items: center; justify-content: center;
+        padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+        background: rgba(8, 6, 3, 0.72);
+        font-family: var(--body);
+        /* the rest of the app forbids selection so a child cannot smear a
+           text cursor over the HUD; a parent reading a report may well want to
+           copy a number out of it. */
+        -webkit-user-select: text; user-select: text;
+      }
+      #parent-dash .pd-panel {
+        width: min(960px, 100%); max-height: 100%;
+        display: flex; flex-direction: column;
+        background: #fbf5e6; color: #1d160c;
+        border: 4px solid var(--wood-dark);
+        box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+        font-size: 17px; line-height: 1.5;
+      }
+      #parent-dash :focus-visible { outline: 3px solid #12429e; outline-offset: 2px; }
+      .pd-head {
+        display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+        padding: 14px 18px; border-bottom: 3px solid #d8ccae; background: #f2e6c9;
+      }
+      .pd-head h2 { margin: 0; font-size: 26px; letter-spacing: 0.2px; }
+      .pd-sub { margin: 2px 0 0; font-size: 15px; color: #5a4a30; }
+      .pd-scroll {
+        overflow-y: auto; overscroll-behavior: contain;
+        /* body sets touch-action:none for the 3D scene; without this the panel
+           cannot be scrolled by a finger at all, which on a tablet means the
+           bottom half of the report does not exist. */
+        touch-action: pan-y;
+        padding: 16px 18px 26px;
+      }
+      .pd-scrollx { overflow-x: auto; touch-action: pan-x pan-y; }
+      #parent-dash h3 {
+        margin: 26px 0 8px; font-size: 20px;
+        border-bottom: 2px solid #e0d4b6; padding-bottom: 4px;
+      }
+      #parent-dash p { margin: 8px 0; }
+      .pd-fine { font-size: 15px; color: #52422a; }
+      .pd-warn {
+        border-left: 6px solid #b3541e; background: #fdeedd;
+        padding: 10px 14px; font-size: 16px;
+      }
+      .pd-flash { border-left: 6px solid var(--good-dark); background: #e6f6e9; padding: 10px 14px; }
+      .pd-sr {
+        position: absolute; width: 1px; height: 1px; overflow: hidden;
+        clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+      }
+
+      /* headline numbers */
+      .pd-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 14px 0 4px; }
+      .pd-tile { border: 2px solid #ddd0b0; background: #fff; padding: 10px 12px; display: flex; flex-direction: column; }
+      .pd-tile .pd-tk { font-size: 14px; text-transform: uppercase; letter-spacing: 0.6px; color: #5a4a30; }
+      .pd-tile b { font-family: var(--num); font-size: 34px; line-height: 1.1; }
+      .pd-note { font-size: 14px; color: #52422a; }
+
+      /* per-fact grid */
+      table.pd-grid, table.pd-list { border-collapse: collapse; width: 100%; }
+      table.pd-grid th, table.pd-list th, table.pd-list td { text-align: left; padding: 6px 8px; }
+      table.pd-grid th, table.pd-list thead th { font-size: 15px; color: #3d3120; }
+      table.pd-list tbody th, table.pd-list td { border-top: 1px solid #e3d8bd; font-size: 16px; }
+      table.pd-list tbody th { font-family: var(--num); white-space: nowrap; }
+      .pd-thin { color: #8a3d13; font-size: 14px; }
+      .pd-cell, .pd-swatch {
+        position: relative;
+        font-family: var(--num); font-weight: 700; font-size: 17px;
+        text-align: center; color: #1d160c;
+        border: 2px solid #fbf5e6; min-width: 38px; padding: 8px 4px;
+      }
+      /* Colour is a fast scan aid, never the message: the digit in the cell is
+         the level, and the cell's aria-label spells the whole fact out. */
+      .pd-unseen { background: repeating-linear-gradient(45deg, #e6ddca 0 4px, #dcd2bb 4px 8px); color: #6a5c44; }
+      .pd-l0 { background: #f3b2a0; }
+      .pd-l1 { background: #f8cd97; }
+      .pd-l2 { background: #f3e394; }
+      .pd-l3 { background: #b6e2a1; }
+      .pd-l4 { background: #7fcb92; }
+      .pd-due::after {
+        content: ''; position: absolute; top: 3px; right: 3px;
+        width: 8px; height: 8px; border-radius: 50%;
+        background: #1d160c;
+      }
+      .pd-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 10px 0 0; padding: 0; font-size: 15px; }
+      .pd-legend li { display: flex; align-items: center; gap: 6px; }
+      .pd-swatch { display: inline-block; min-width: 30px; padding: 4px 2px; border-color: #cfc4a8; }
+
+      /* per-table jar meters */
+      /* the flex row lives in a wrapper, not on the cell: a display:flex <td>
+         drops out of the table's column sizing and drags the columns after it
+         out of alignment with their own headers. */
+      .pd-barcell { width: 34%; min-width: 170px; }
+      .pd-barwrap { display: flex; align-items: center; gap: 10px; }
+      .pd-bar { flex: 1; height: 16px; background: #e3d8bd; border: 1px solid #c9bd9c; display: block; }
+      .pd-bar::before { content: ''; display: block; height: 100%; width: var(--fill); background: var(--brand); }
+      .pd-barnum { font-family: var(--num); font-weight: 700; min-width: 46px; text-align: right; }
+
+      /* controls */
+      .pd-btn {
+        font-family: var(--body); font-size: 17px; font-weight: 700;
+        min-height: 48px; padding: 10px 18px; cursor: pointer;
+        color: #3a2200; border: 3px solid var(--wood-dark); border-radius: 0;
+        background: linear-gradient(180deg, #ffd35a, #f0ad2a);
+      }
+      .pd-btn:active { transform: translateY(2px); }
+      .pd-close { white-space: nowrap; }
+      .pd-danger { border: 3px solid #8f2f1c; background: #fdeae5; padding: 12px 14px; }
+      .pd-row { display: flex; flex-wrap: wrap; gap: 10px; }
+      .pd-btn-danger { background: #b3341c; color: #fff; border-color: #6d1e0f; }
+
+      /* ---- Reference Tray ("Cheat Sheet") (src/game/referenceTray.js) ---- */
+      #btn-ref-tab {
+        position: fixed; top: 50%; right: 0; transform: translateY(-50%);
+        z-index: 25; pointer-events: auto;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 4px; padding: 10px 8px;
+        background: var(--wood-fill);
+        color: var(--ink-light);
+        border: 3px solid var(--wood-dark); border-right: none;
+        box-shadow: -3px 3px 0 var(--wood-drop);
+        cursor: pointer; font-family: var(--num); font-size: 13px; font-weight: 700;
+        transition: transform 0.2s ease, background 0.1s ease;
+      }
+      #btn-ref-tab:hover { background: #b0824b; }
+      #btn-ref-tab.active { transform: translateY(-50%) translateX(100%); opacity: 0; pointer-events: none; }
+      #btn-ref-tab .ref-tab-icon { font-size: 20px; }
+
+      #ref-backdrop {
+        position: fixed; inset: 0; z-index: 29;
+        background: rgba(10, 8, 4, 0.55);
+        backdrop-filter: blur(2px);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s ease;
+      }
+      #ref-backdrop.open {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      #ref-tray {
+        position: fixed; top: 0; right: 0; bottom: 0;
+        width: min(96vw, 920px); z-index: 30;
+        display: flex;
+        background: #e8dcbf;
+        color: #2a1a08;
+        border-left: 4px solid var(--wood-dark);
+        box-shadow: -8px 0 36px rgba(0,0,0,0.65);
+        font-family: var(--num);
+        transform: translateX(100%);
+        transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+        pointer-events: none;
+        visibility: hidden;
+      }
+      #ref-tray.open {
+        transform: translateX(0);
+        pointer-events: auto;
+        visibility: visible;
+      }
+
+      .ref-rail {
+        width: 68px;
+        background: var(--wood-fill);
+        border-right: 3px solid var(--wood-dark);
+        display: flex; flex-direction: column;
+        overflow-y: auto; padding: 10px 6px; gap: 8px;
+      }
+      .ref-rail-btn {
+        width: 100%; height: 48px;
+        background: #c59b63;
+        border: 2px solid var(--wood-dark);
+        color: #2a1a08; font-family: var(--num); font-size: 20px; font-weight: 800;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
+        transition: transform 100ms ease, background-color 100ms ease, box-shadow 100ms ease, border-color 100ms ease;
+        border-radius: 4px;
+      }
+      .ref-rail-btn.active {
+        background: #ffd35a;
+        border-color: #8c5a1e;
+        box-shadow: inset 0 2px 0 rgba(255,255,255,0.7), 0 2px 4px rgba(0,0,0,0.25);
+        transform: scale(1.06);
+      }
+
+      .ref-content {
+        flex: 1; display: flex; flex-direction: column;
+        overflow-y: auto; padding: 18px 24px;
+      }
+      .ref-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 14px; padding-bottom: 10px; border-bottom: 3px solid #cfc09f;
+      }
+      .ref-header h2 {
+        margin: 0; font-size: 28px; color: #3a2200; letter-spacing: -0.5px;
+      }
+      .ref-close {
+        width: 40px; height: 40px;
+        background: var(--wood-fill); border: 2px solid var(--wood-dark);
+        color: var(--ink-light); font-size: 20px; font-weight: 800;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
+        border-radius: 4px;
+      }
+      .ref-close:hover { background: #b0824b; }
+
+      /* 2-3 Column Grid Layout */
+      .ref-rows {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+        gap: 12px;
+      }
+      .ref-row {
+        display: flex; flex-direction: column;
+        background: #f4ecda; border: 2px solid #d4c6a6;
+        padding: 10px 14px 12px; border-radius: 8px;
+        min-height: 135px;
+        box-sizing: border-box;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+        gap: 8px;
+      }
+      .ref-eq {
+        font-size: 19px; font-weight: 800; color: #2e1c05;
+        display: flex; align-items: center; justify-content: space-between;
+        border-bottom: 1.5px solid #e2d6ba; padding-bottom: 6px;
+      }
+      .ref-prod {
+        color: #d04600; font-size: 20px; font-weight: 900;
+        background: #ffeac2; border: 1.5px solid #dcb07a;
+        padding: 1px 8px; border-radius: 4px;
+      }
+      .ref-vis {
+        flex: 1; height: 88px; width: 100%;
+        display: flex; justify-content: center; align-items: center;
+        overflow: hidden;
+      }
+      .ref-array {
+        display: grid;
+        grid-template-rows: repeat(var(--array-rows), 1fr);
+        grid-template-columns: repeat(var(--array-cols), 1fr);
+        gap: 2px;
+        height: 100%;
+        max-height: 88px;
+        aspect-ratio: var(--array-cols) / var(--array-rows);
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+      .ref-block {
+        width: 100%; height: 100%;
+        border-radius: 1.5px;
+        box-shadow: inset 1px 1px 0 rgba(255,255,255,0.45), inset -1px -1px 0 rgba(0,0,0,0.35);
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-BNqfuCOa.js"></script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="vignette"></div>
+
+    <!-- Gameplay HUD -->
+    <div class="hud top hidden" id="hud-top">
+    </div>
+
+    <div class="hud bottom hidden" id="hud-bottom" aria-label="Game controls">
+      <div class="tally" id="tally" aria-live="polite"></div>
+      <!-- Truth Check: the CLAIM's big DOM home, directly above the True/False
+           buttons; fades out on the reveal so the corrected 3D sign is the hero. -->
+      <div class="claim hidden" id="claimeq" role="status" aria-live="polite" aria-atomic="true"></div>
+      <div class="status" id="status" role="status" aria-live="polite" aria-atomic="true">Tap or drag to pour blocks into the grid.</div>
+      <div class="askeq hidden" id="askeq" role="status" aria-live="polite" aria-atomic="true"></div>
+      <div class="choices hidden" id="choices" role="group" aria-label="Answer choices"></div>
+      <div class="actions">
+        <button class="big hidden" id="btn-confirm">Next</button>
+      </div>
+    </div>
+
+    <!-- Bolt's speech bubble (Bolt himself is a 3D mesh; this follows his head) -->
+    <div id="bubble" class="hidden" role="status" aria-live="polite">Let's build!</div>
+
+    <button id="btn-voice" title="Turn voice off" aria-label="Turn voice off" aria-pressed="true">🔊</button>
+    <button id="btn-back" class="hidden" title="Back to menu" aria-label="Back to menu">←</button>
+
+    <!-- Hub: the game picker (shown after the wake gate) -->
+    <div id="hub" class="hidden" role="main" aria-labelledby="hub-title">
+      <h1 id="hub-title">The Maths Mine</h1>
+      <p class="hub-kicker">Choose an adventure. Solve facts. Build your village.</p>
+      <div id="hub-cards"></div>
+      <div id="house-bar">
+        <div id="bolts-chip">🔩 <span id="bolts-count">0</span></div>
+        <button id="btn-build-house" class="hub-build-btn">
+          🔨 Build House (Stage <span id="house-stage-text">0</span>/4) · <span id="house-cost-text">5</span> 🔩
+        </button>
+      </div>
+    </div>
+
+    <div id="bigtotal" aria-hidden="true"></div>
+
+    <!-- first-touch demo: a ghost finger tapping the first squares -->
+    <div id="hint" class="hidden">
+      <div id="finger"></div>
+      <div class="hinttext">tap the squares!</div>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Wake-up-Bolt gate: hidden by default to boot straight to level select -->
+    <div id="gate" class="hidden">
+      <svg class="bolt" viewBox="0 0 100 100" aria-hidden="true">
+        <!-- fresh (un-oxidised) COPPER Bolt — matches the in-game mascot at 0
+             progress; he only weathers to teal as the child masters facts -->
+        <rect x="26" y="30" width="48" height="42" fill="#e07b3c"/>
+        <rect x="34" y="16" width="32" height="18" fill="#f0975a"/>
+        <rect x="46" y="8" width="8" height="8" fill="#ffd24a"/>
+        <rect x="33" y="43" width="14" height="14" fill="#0c1020"/>
+        <rect x="53" y="43" width="14" height="14" fill="#0c1020"/>
+        <rect x="37" y="45" width="5" height="5" fill="#fff"/>
+        <rect x="57" y="45" width="5" height="5" fill="#fff"/>
+        <rect x="40" y="62" width="20" height="5" fill="#0c1020"/>
+      </svg>
+      <h1>The Maths Mine</h1>
+      <p>Games to master your times tables — with Bolt. Tap below to wake him up and pick a game!</p>
+      <button class="big" id="btn-wake">Wake up Bolt!</button>
+      <p class="fine" id="gate-fine">Everything is played by tapping and dragging. On a tablet this also asks for motion access, used only to let the scene lean with the device.</p>
+    </div>
+
+  </body>
+</html>
