@@ -4,13 +4,22 @@
 // by downloading from Sketchfab CC-BY). If a file is missing the mob is
 // synthesised from voxel geometry so the game always runs.
 //
-// Sources (all CC-BY 4.0):
-//   Villager  — https://sketchfab.com/3d-models/villager-minecraft-sonic-racing-crossworlds-f24d56a793e54d60b4ce9e680e8cbe58
-//   Zombie    — https://sketchfab.com/3d-models/zombie-minecraft-sonic-racing-crossworlds-44bec31939524459ad11e48eb7d1396f
-//   Ghast     — https://sketchfab.com/3d-models/ghast-minecraft-sonic-racing-crossworlds-5b27f5cfa6034b84b335f696de7e5b64
-//   Enderman  — https://sketchfab.com/3d-models/enderman-minecraft-sonic-racing-crossworlds-142aa13b035248879b39288dd16c0c2d
-//   Iron Golem— https://sketchfab.com/3d-models/minecraft-iron-golem-a34d28d5761040559d669e77090cbfaf
-//   (Collection) https://sketchfab.com/RyanMcKenna/collections/minecraft-1aefafc14433471aa3c21a4003c39bc1
+// Sources: the .glb files are CC-BY 4.0 downloads from Sketchfab, kept as
+// downloaded. Each file carries its own author/licence/source in its glTF
+// asset.extras block; THIRD_PARTY_NOTICES.md mirrors that and is the list to
+// keep in step.
+//
+//   Creeper    - keithandmarchant
+//   Enderman   - Guilherme Navarro
+//   Ghast      - Guilherme Navarro
+//   Iron Golem - Vincent Yanez
+//   Steve      - Cheese
+//   Villager   - Guilherme Navarro
+//   Zombie     - Guilherme Navarro
+//
+// The sibling .png atlases are a mixed bag: enderman/ghast/villager/zombie are
+// the textures out of their own models, but creeper/iron_golem/steve match
+// nothing here and have no recorded source. See THIRD_PARTY_NOTICES.md.
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
