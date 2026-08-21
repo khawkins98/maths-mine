@@ -22,11 +22,48 @@ export const WORLD_TEXTURE_SPEC = Object.freeze({
 const WORLD_TILE_BASE = `${import.meta.env.BASE_URL}assets/textures/world/`;
 const worldLoader = new THREE.TextureLoader();
 
+// A tile that fails to load must not take the app down with it. Paint a
+// stand-in at the spec's tile size, keyed off the name so the same missing
+// tile is always the same colour and the world stays readable rather than
+// going black or invisible.
+function paintMissingTile(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  const hue = hash % 360;
+  const size = WORLD_TEXTURE_SPEC.tileSize;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = `hsl(${hue} 32% 46%)`;
+  ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = `hsl(${hue} 32% 38%)`;
+  for (let i = 0; i < size * 2; i++) {
+    ctx.fillRect((hash >> (i % 12)) % size, (hash >> ((i + 5) % 12)) % size, 1, 1);
+    hash = (hash * 1103515245 + 12345) >>> 0;
+  }
+  return cv;
+}
+
 export function loadWorldTile(name, { repeat = false } = {}) {
-  let resolveReady;
-  let rejectReady;
-  const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
-  const tex = worldLoader.load(`${WORLD_TILE_BASE}${name}.png`, resolveReady, undefined, rejectReady);
+  let settle;
+  // Resolves either way: a missing tile is reported through the resolved value,
+  // never as a rejection. `textures.ready` is awaited at module scope during
+  // boot, so a rejection here would be an unhandled throw and a blank screen.
+  const ready = new Promise((resolve) => { settle = resolve; });
+  // `tex` is declared before load() rather than assigned from its return value:
+  // the error callback closes over it, and a loader that ever reported failure
+  // synchronously would hit the temporal dead zone and throw a ReferenceError
+  // out of the one path whose whole job is to not throw.
+  let tex;
+  tex = worldLoader.load(
+    `${WORLD_TILE_BASE}${name}.png`,
+    () => settle({ name, ok: true }),
+    undefined,
+    () => {
+      if (tex) { tex.image = paintMissingTile(name); tex.needsUpdate = true; }
+      settle({ name, ok: false });
+    },
+  );
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.magFilter = THREE.NearestFilter;
   tex.minFilter = THREE.NearestFilter;
@@ -189,9 +226,20 @@ export function createTextures() {
     obsidianTex, diamondTex, goldTex, redstoneTex, brickTex, hayTex, lavaTex, portalTex,
     platGrassTex, platForestGrassTex, platDirtTex, platSandTex, platSandstoneTex, platSnowTex, platIceTex, platNetherrackTex, platEndstoneTex, platObsidianTex,
   };
+  // Never rejects: every tile promise resolves with {name, ok}, and a tile that
+  // failed has already had a stand-in painted into it. The app boots with a
+  // patchy world rather than not booting at all.
   textures.ready = Promise.all(
     [...new Set(Object.values(textures).filter((tex) => tex?.userData?.ready))]
       .map((tex) => tex.userData.ready),
-  );
+  ).then((results) => {
+    // Dedupe by name: a few tiles are loaded into more than one texture, and a
+    // report that says "dirt, dirt" reads like two separate failures.
+    const missing = [...new Set(results.filter((r) => !r.ok).map((r) => r.name))];
+    if (missing.length) console.warn(`World tiles unavailable; using fallbacks for: ${missing.join(', ')}`);
+    textures.missingTiles = missing;
+    return missing;
+  });
+  textures.missingTiles = [];
   return textures;
 }

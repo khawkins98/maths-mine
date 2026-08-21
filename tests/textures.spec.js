@@ -92,4 +92,53 @@ test.describe('coherent world texture contract', () => {
     }
     expect(errors).toEqual([]);
   });
+  // A tile that 404s on a subpath deploy, or drops off flaky tablet Wi-Fi, used
+  // to reject inside the Promise.all that boot awaits at module scope: an
+  // unhandled throw before anything rendered, and a white screen with no way
+  // back. The character loader already fails soft; the world has to as well.
+  test('a missing world tile resolves to a stand-in instead of rejecting', async ({ page }) => {
+    const warnings = [];
+    page.on('console', (message) => {
+      if (message.type() === 'warning' && message.text().includes('World tiles unavailable')) {
+        warnings.push(message.text());
+      }
+    });
+    await page.route('**/assets/textures/world/dirt.png', (request) => request.abort('failed'));
+    await page.route(/^http:\/\/localhost:\d+\/$/, (request) => request.fulfill({
+      contentType: 'text/html',
+      body: '<!doctype html><title>world tile loader test</title>',
+    }));
+    await page.goto('/');
+
+    const result = await page.evaluate(async () => {
+      const { createTextures } = await import('/src/core/textures.js');
+      const textures = createTextures();
+      const missing = await textures.ready;
+      return {
+        missing,
+        recorded: textures.missingTiles,
+        standIn: textures.dirtTex.image instanceof HTMLCanvasElement,
+        standInSize: [textures.dirtTex.image.width, textures.dirtTex.image.height],
+        neighbourStillReal: textures.stoneTex.image instanceof HTMLImageElement,
+      };
+    });
+
+    expect(result.missing).toEqual(['dirt']);
+    expect(result.recorded).toEqual(['dirt']);
+    expect(result.standIn).toBe(true);
+    expect(result.standInSize).toEqual([16, 16]);
+    expect(result.neighbourStillReal).toBe(true);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('dirt');
+  });
+
+  test('total world texture failure never stops the app booting', async ({ page }) => {
+    await page.route('**/assets/textures/world/**', (request) => request.abort('failed'));
+    const errors = await boot(page);
+
+    await pick(page, 'block-builder', '__bb');
+    await page.locator('#btn-back').click();
+    await expect(page.locator('#hub')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
 });
