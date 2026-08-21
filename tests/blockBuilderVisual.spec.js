@@ -42,6 +42,22 @@ test.describe('Block Builder target and material clarity', () => {
     expect(dirt.renderedBodyMap).not.toBe(wood.renderedBodyMap);
   });
 
+  test('unmatched large facts keep the readable wood and end-grain default', async ({ page }) => {
+    await boot(page);
+    await pick(page, 'block-builder', '__bb');
+    await page.evaluate(() => window.__bbForceRound(10, 3, 'mul'));
+    await page.evaluate(() => window.__place(0, 0));
+    const material = (await state(page, '__bb')).materialIdentity;
+    expect(material).toMatchObject({
+      blueprintMaterialKey: 'logTex',
+      blueprintCapKey: 'logTopTex',
+      renderedBodyMap: material.expectedBodyMap,
+      renderedCapMap: material.expectedCapMap,
+    });
+    expect(material.renderedBodyMap).not.toBe(material.dirtMap);
+    expect(material.renderedBodyMap).not.toBe(material.renderedCapMap);
+  });
+
   test('reduced motion uses a static restrained guided-cell highlight', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await boot(page);

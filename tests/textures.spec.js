@@ -51,8 +51,9 @@ test.describe('coherent world texture contract', () => {
         count: cactus.children.length,
         xs: cactus.children.map((child) => child.position.x),
         zs: cactus.children.map((child) => child.position.z),
-        minY: Math.min(...cactus.children.map((child) => child.position.y - 0.36)),
-        maxY: Math.max(...cactus.children.map((child) => child.position.y + 0.36)),
+        scales: cactus.children.map((child) => child.scale.toArray()),
+        minY: Math.min(...cactus.children.map((child) => child.position.y - 0.36 * child.scale.y)),
+        maxY: Math.max(...cactus.children.map((child) => child.position.y + 0.36 * child.scale.y)),
         uniqueMaterialUUIDs: new Set([
           textures.dirtTex.uuid, textures.woodTex.uuid, textures.stoneTex.uuid, textures.obsidianTex.uuid,
         ]).size,
@@ -63,7 +64,7 @@ test.describe('coherent world texture contract', () => {
       };
     });
     expect(contract).toEqual({
-      count: 4, xs: [0, 0, 0, 0], zs: [0, 0, 0, 0], minY: 0, maxY: 2.88,
+      count: 1, xs: [0], zs: [0], scales: [[0.84, 4, 0.84]], minY: 0, maxY: 2.88,
       uniqueMaterialUUIDs: 4, grassSideTile: 'grass-side', logSideTile: 'oak-bark',
       logEndTile: 'oak-end', logFacesDistinct: true,
     });
