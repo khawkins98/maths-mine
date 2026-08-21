@@ -56,7 +56,10 @@ test.describe('shared UI transitions', () => {
   });
 
   test('a tapped choice gets immediate tactile selection state', async ({ page }) => {
-    await page.goto('/');
+    // boot(), not a bare goto: this test builds its own UI over the live DOM,
+    // and the app clears #choices as it finishes booting. Racing that made the
+    // row vanish between showChoices() and the assertion.
+    await boot(page);
     await page.evaluate(async () => {
       const { createUI } = await import('/src/core/ui.js');
       const ui = createUI();
