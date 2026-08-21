@@ -68,7 +68,12 @@ is unconfirmed. It is plausibly the imnamedgamer model these notices used to
 cite, which is CC-BY 4.0 -- but "plausibly" is not an attribution, and it is
 not currently safe to credit anyone for it.
 
-`creeper.png` and `steve.png` have no traceable source at all.
+`creeper.png` and `steve.png` have no traceable source at all. They are not
+crops or rescales of the CC-BY textures they sit beside: the creeper files are
+both 64x32 but differ in most of their pixels and use different UV packing, and
+`steve.png` matches no resampling of the model's 512x512 atlas, which carries a
+different-looking skin. Both repo files use Mojang's canonical player-skin
+layout.
 
 Until each is resolved, all three should be treated as unlicensed. The fix is
 to redraw them in the same original style as the world tiles, or to use the
