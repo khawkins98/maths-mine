@@ -50,13 +50,17 @@ export function loadWorldTile(name, { repeat = false } = {}) {
   // never as a rejection. `textures.ready` is awaited at module scope during
   // boot, so a rejection here would be an unhandled throw and a blank screen.
   const ready = new Promise((resolve) => { settle = resolve; });
-  const tex = worldLoader.load(
+  // `tex` is declared before load() rather than assigned from its return value:
+  // the error callback closes over it, and a loader that ever reported failure
+  // synchronously would hit the temporal dead zone and throw a ReferenceError
+  // out of the one path whose whole job is to not throw.
+  let tex;
+  tex = worldLoader.load(
     `${WORLD_TILE_BASE}${name}.png`,
     () => settle({ name, ok: true }),
     undefined,
     () => {
-      tex.image = paintMissingTile(name);
-      tex.needsUpdate = true;
+      if (tex) { tex.image = paintMissingTile(name); tex.needsUpdate = true; }
       settle({ name, ok: false });
     },
   );
