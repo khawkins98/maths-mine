@@ -189,32 +189,9 @@ export function getBlueprint(cols, rows) {
   const key = `${cols}x${rows}`;
   if (BLUEPRINTS[key]) return BLUEPRINTS[key];
 
-  // Dynamic fallback based on size
-  const total = cols * rows;
-  if (total >= 30) {
-    return {
-      id: 'obsidian_monolith',
-      name: 'Obsidian Fortress Wall',
-      icon: '🛡️',
-      materialKey: 'obsidianTex',
-      capKey: 'obsidianTex',
-      lore: 'Constructing reinforced fortress ramparts...',
-      activationVFX: 'portal',
-      bonusBolts: 6,
-    };
-  } else if (total >= 15) {
-    return {
-      id: 'stone_rampart',
-      name: 'Stone Palisade',
-      icon: '🧱',
-      materialKey: 'stoneTex',
-      capKey: 'cobbleTex',
-      lore: 'Assembling stone defensive walls...',
-      activationVFX: 'torches',
-      bonusBolts: 4,
-    };
-  }
-
+  // Unmatched facts use the warm, countable wood/end-grain identity. Obsidian
+  // remains special to the explicitly authored Nether Portal blueprints rather
+  // than turning every common large-table fact into a near-black wall.
   return {
     id: 'wood_shelter',
     name: 'Cottage Wall Section',

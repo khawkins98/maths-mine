@@ -72,12 +72,15 @@ export function makeTree({ trunkHeight = 4, seed = 0, materials, isBirch = false
 
 export function makeCactus({ height = 4, materials }) {
   const g = new THREE.Group();
-  for (let i = 0; i < height; i++) {
-    const b = new THREE.Mesh(_gLog, materials.cactus);
-    b.position.set(0, BLOCK * i + BLOCK / 2, 0);
-    b.castShadow = true;
-    g.add(b);
-  }
+  // One continuous, slightly inset prism reads as a straight Minecraft cactus
+  // at every camera angle. A stack of separate cubes had mathematically aligned
+  // centres but its exposed top/side faces produced a branch-like crown at the
+  // distant game camera.
+  const cactus = new THREE.Mesh(_gLog, materials.cactus);
+  cactus.position.set(0, BLOCK * height / 2, 0);
+  cactus.scale.set(0.84, height, 0.84);
+  cactus.castShadow = true;
+  g.add(cactus);
   return g;
 }
 
