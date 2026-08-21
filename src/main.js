@@ -32,6 +32,7 @@ import { createReferenceTray } from './game/referenceTray.js';
 
 // ---------- shared services ----------
 const textures = createTextures();
+await textures.ready;
 const [characterAssets, mobFactories] = await Promise.all([
   loadCharacterAssets(),
   loadMobs(),

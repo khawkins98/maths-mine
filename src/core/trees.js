@@ -78,13 +78,6 @@ export function makeCactus({ height = 4, materials }) {
     b.castShadow = true;
     g.add(b);
   }
-  // Side arms
-  const arm1 = new THREE.Mesh(_gLog, materials.cactus);
-  arm1.position.set(BLOCK, BLOCK * 2 + BLOCK / 2, 0);
-  g.add(arm1);
-  const arm2 = new THREE.Mesh(_gLog, materials.cactus);
-  arm2.position.set(-BLOCK, BLOCK * 1 + BLOCK / 2, 0);
-  g.add(arm2);
   return g;
 }
 
@@ -162,7 +155,9 @@ export function plantTrees(scene, positions, textures, treeType = 'oak') {
   const group = new THREE.Group();
   group.name = 'background-grove';
 
-  const logMat = new THREE.MeshStandardMaterial({ map: textures.logTex, roughness: 1, metalness: 0 });
+  const logSideMat = new THREE.MeshStandardMaterial({ map: textures.logTex, roughness: 1, metalness: 0 });
+  const logEndMat = new THREE.MeshStandardMaterial({ map: textures.logTopTex || textures.logTex, roughness: 1, metalness: 0 });
+  const logMat = [logSideMat, logSideMat, logEndMat, logEndMat, logSideMat, logSideMat];
   const birchLogMat = new THREE.MeshStandardMaterial({ map: textures.birchLogTex || textures.logTex, roughness: 1, metalness: 0 });
 
   const leafMats = [0xffffff, 0xd8f0cf, 0xb8dcae].map((color) => new THREE.MeshStandardMaterial({
@@ -194,7 +189,7 @@ export function plantTrees(scene, positions, textures, treeType = 'oak') {
     obsidian: obsidianMat,
     crystal: crystalMat,
   };
-  group.userData.materials = [logMat, birchLogMat, ...leafMats, ...birchLeafMats, cactusMat, snowCapMat, stemMat, capMat, obsidianMat, crystalMat];
+  group.userData.materials = [logSideMat, logEndMat, birchLogMat, ...leafMats, ...birchLeafMats, cactusMat, snowCapMat, stemMat, capMat, obsidianMat, crystalMat];
 
   const activePositions = treeType === 'home_oak' ? positions.slice(0, 2) : positions;
 

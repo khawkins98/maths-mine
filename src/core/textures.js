@@ -1,4 +1,4 @@
-// core/textures.js — procedural CanvasTextures (no image assets).
+// core/textures.js — shared authored world tiles plus procedural UI/fx textures.
 // Chunky Minecraft-style HARD-PIXEL textures via NearestFilter for the
 // dirt/grass blocks, dice pips, dice tray wood; a soft round puff (dust +
 // Bolt's blob shadow), a crisp pixel slot tile for the empty mold cells, a soft
@@ -8,6 +8,35 @@
 // These are SHARED and long-lived: games must NOT dispose them on teardown.
 
 import * as THREE from 'three';
+
+export const WORLD_TEXTURE_SPEC = Object.freeze({
+  tileSize: 16,
+  colorSpace: 'srgb',
+  magFilter: 'nearest',
+  minFilter: 'nearest',
+  generateMipmaps: false,
+  terrainWrap: 'repeat',
+  lighting: 'top-left highlight, bottom-right shade',
+});
+
+const WORLD_TILE_BASE = `${import.meta.env.BASE_URL}assets/textures/world/`;
+const worldLoader = new THREE.TextureLoader();
+
+export function loadWorldTile(name, { repeat = false } = {}) {
+  let resolveReady;
+  let rejectReady;
+  const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
+  const tex = worldLoader.load(`${WORLD_TILE_BASE}${name}.png`, resolveReady, undefined, rejectReady);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  if (repeat) tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.userData.worldTile = name;
+  tex.userData.tileSize = WORLD_TEXTURE_SPEC.tileSize;
+  tex.userData.ready = ready;
+  return tex;
+}
 
 export function makeCanvasTex(size, draw, { nearest = true, repeat = 0 } = {}) {
   const cv = document.createElement('canvas');
@@ -61,16 +90,17 @@ export function pixelTex(base, palette, { size = 64, cell = 8, bias = 0.6, edge 
 }
 
 export function createTextures() {
-  // --- game blocks: chunky, high-contrast, hard-pixel (match platform texel) ---
-  const dirtTex = pixelTex('#7a4622', ['#623718', '#8a5730', '#4f2c13', '#96633a'], { cell: 8, bias: 0.55, edge: 0.42 });
-  const grassTex = pixelTex('#42a12b', ['#358a20', '#4eb535', '#2a7217', '#5ac93f'], { cell: 8, bias: 0.55, edge: 0.3 });
+  // --- coherent 16px world family (original generated source, curated tiles) ---
+  const dirtTex = loadWorldTile('dirt');
+  const grassTex = loadWorldTile('grass-top');
+  const grassSideTex = loadWorldTile('grass-side');
   // stone blocks: plain stone texture with rim treatment so each one
   // reads as a separate cube in a grid.
-  const stoneTex = pixelTex('#9d9d9a', ['#8d8d8a', '#adadaa', '#7f7f7c', '#b6b6b3'], { cell: 8, bias: 0.6, edge: 0.34 });
+  const stoneTex = loadWorldTile('stone');
   // emerald, for Spot the Wrong'un: the array a child counts there is the most
   // advanced of the three, so it is made of the most precious block.
-  const emeraldTex = pixelTex('#2fbf6d', ['#27a95e', '#41d47f', '#1e9152', '#59e493'], { cell: 8, bias: 0.55, edge: 0.4 });
-  const emeraldTopTex = pixelTex('#41d47f', ['#35c471', '#5ae596', '#2bb267', '#77f0ad'], { cell: 8, bias: 0.55, edge: 0.32 });
+  const emeraldTex = loadWorldTile('emerald');
+  const emeraldTopTex = loadWorldTile('emerald');
   // subtle ground texture (soft-filtered so it doesn't shimmer at distance)
   const groundTex = fleckTex('#4ea830', ['#3e8d24', '#59bc38', '#32771d'], 60, { nearest: false, repeat: 42 });
   // soft round puff, used for dust sprites + Bolt's blob shadow
@@ -100,86 +130,68 @@ export function createTextures() {
 
   // --- wood plank texture (dice tray, and any wooden prop) — hard pixel ---
   // Horizontal planks with a darker seam every few rows + chunky grain flecks.
-  const woodTex = makeCanvasTex(64, (ctx) => {
-    const planks = ['#9c6b39', '#8a5d30', '#a5743f', '#946434'];
-    const plankH = 16;
-    for (let py = 0; py < 64; py += plankH) {
-      ctx.fillStyle = planks[((py / plankH) | 0) % planks.length];
-      ctx.fillRect(0, py, 64, plankH);
-      // grain flecks (chunky, aligned to a 4px grid)
-      for (let i = 0; i < 10; i++) {
-        ctx.fillStyle = Math.random() < 0.5 ? 'rgba(90,55,25,0.5)' : 'rgba(180,130,80,0.4)';
-        const gx = ((Math.random() * 16) | 0) * 4;
-        const gy = py + ((Math.random() * (plankH / 4)) | 0) * 4;
-        ctx.fillRect(gx, gy, 4 + 4 * ((Math.random() * 2) | 0), 4);
-      }
-      // dark seam between planks
-      ctx.fillStyle = 'rgba(60,38,18,0.85)';
-      ctx.fillRect(0, py + plankH - 2, 64, 2);
-    }
-  }, { nearest: true });
+  const woodTex = loadWorldTile('oak-planks');
 
   // Compact scenery uses its own higher-contrast atlases. These are original
   // textures, but follow the same 16px resource-pack discipline as the player
   // skin so bark and leaves read as authored assets rather than flat colours.
-  const logTex = pixelTex('#6f4324', ['#543019', '#87552e', '#9b6235', '#422514'], { size: 16, cell: 2, bias: 0.58 });
+  const logTex = loadWorldTile('oak-bark');
   // End grain for Block Builder's oak structural timbers. A square ring and
   // central heartwood make the exposed face read as a cut log, not brown dirt.
-  const logTopTex = makeCanvasTex(16, (ctx) => {
-    ctx.fillStyle = '#b7834c'; ctx.fillRect(0, 0, 16, 16);
-    ctx.fillStyle = '#70431f'; ctx.fillRect(1, 1, 14, 2); ctx.fillRect(1, 13, 14, 2);
-    ctx.fillRect(1, 1, 2, 14); ctx.fillRect(13, 1, 2, 14);
-    ctx.fillStyle = '#8d5a2b'; ctx.fillRect(4, 4, 8, 2); ctx.fillRect(4, 10, 8, 2);
-    ctx.fillRect(4, 4, 2, 8); ctx.fillRect(10, 4, 2, 8);
-    ctx.fillStyle = '#5d3519'; ctx.fillRect(7, 7, 2, 2);
-  }, { nearest: true });
-  const birchLogTex = pixelTex('#d8d6cd', ['#bab8af', '#e8e6dc', '#383632', '#282622'], { size: 16, cell: 2, bias: 0.7 });
-  const leafTex = pixelTex('#3f7c2d', ['#2d6121', '#4f9237', '#65a744', '#244f1b'], { size: 16, cell: 2, bias: 0.5 });
-  const cactusTex = pixelTex('#2e7a32', ['#236326', '#3b943f', '#1b4d1e'], { size: 16, cell: 2 });
-  const netherStemTex = pixelTex('#471523', ['#360e1a', '#5c1c2e', '#2b0910'], { size: 16, cell: 2 });
-  const netherCapTex = pixelTex('#9e1b1b', ['#801414', '#b82323', '#660e0e'], { size: 16, cell: 2 });
+  const logTopTex = loadWorldTile('oak-end');
+  const birchLogTex = loadWorldTile('birch-bark');
+  const leafTex = loadWorldTile('oak-leaves');
+  const cactusTex = loadWorldTile('cactus');
+  const netherStemTex = loadWorldTile('crimson-stem');
+  const netherCapTex = loadWorldTile('crimson-cap');
 
   // House & Iron Golem reward textures
-  const plankTex = pixelTex('#9e7344', ['#855e34', '#b58852', '#704c27'], { size: 16, cell: 2 });
-  const cobbleTex = pixelTex('#737373', ['#575757', '#8f8f8f', '#424242'], { size: 16, cell: 2 });
-  const glassTex = pixelTex('#cceeff', ['#99ddff', '#ffffff', '#88ccff'], { size: 16, cell: 2 });
-  const ironBlockTex = pixelTex('#d9d9d9', ['#bfbfbf', '#ededed', '#a6a6a6'], { size: 16, cell: 2 });
+  const plankTex = loadWorldTile('oak-planks');
+  const cobbleTex = loadWorldTile('cobblestone');
+  const glassTex = loadWorldTile('glass');
+  const ironBlockTex = loadWorldTile('iron');
   const ironGolemTex = pixelTex('#c5c8cb', ['#a2a5a8', '#e2e5e8', '#888b8e', '#9b3030', '#7a2222'], { size: 16, cell: 2, bias: 0.65 });
-  const pumpkinTex = pixelTex('#d97724', ['#b85e14', '#f08d33', '#1c170f', '#ffe866'], { size: 16, cell: 2 });
+  const pumpkinTex = loadWorldTile('pumpkin');
 
   // Authentic Minecraft Blueprint & Village expansion textures
-  const obsidianTex = pixelTex('#1e1233', ['#140a24', '#2d1b4d', '#10071c', '#3c2266', '#090410'], { size: 16, cell: 2, bias: 0.6, edge: 0.5 });
-  const diamondTex = pixelTex('#4dedf4', ['#35dbe2', '#6ff7fc', '#22c2c9', '#8effff'], { size: 16, cell: 2, bias: 0.55, edge: 0.4 });
-  const goldTex = pixelTex('#fce844', ['#ecd429', '#fff36d', '#d6be16', '#fff99d'], { size: 16, cell: 2, bias: 0.55, edge: 0.4 });
-  const redstoneTex = pixelTex('#d41919', ['#b50f0f', '#ef2b2b', '#960707', '#ff4242'], { size: 16, cell: 2, bias: 0.55, edge: 0.4 });
-  const brickTex = pixelTex('#9c4532', ['#823423', '#b35641', '#6b2719', '#c46954'], { size: 16, cell: 2, bias: 0.6 });
-  const hayTex = pixelTex('#c4a835', ['#ad9326', '#dbc049', '#967d19', '#edd463'], { size: 16, cell: 2, bias: 0.6 });
-  const lavaTex = pixelTex('#e65305', ['#cf3e00', '#fa7419', '#b52f00', '#ff9436'], { size: 16, cell: 2, bias: 0.5 });
-  const portalTex = pixelTex('#6d1ba6', ['#4f0f7d', '#8e2ecf', '#360657', '#b14df5'], { size: 16, cell: 2, bias: 0.5 });
+  const obsidianTex = loadWorldTile('obsidian');
+  const diamondTex = loadWorldTile('diamond');
+  const goldTex = loadWorldTile('gold');
+  const redstoneTex = loadWorldTile('redstone');
+  const brickTex = loadWorldTile('brick');
+  const hayTex = loadWorldTile('hay');
+  const lavaTex = loadWorldTile('lava');
+  const portalTex = loadWorldTile('portal');
 
   // ---- voxel build-plot textures (NOT the shared 1-block dirt/grass above) ----
   // Separate, RepeatWrapping-enabled instances so the platform can tile its faces
   // without mutating the game blocks' textures (which keep repeat 1,1). Chunky
   // pixels via NearestFilter, same texel style as the game blocks.
-  const platGrassTex = fleckTex('#47ad2f', ['#3a9423', '#57bd3d', '#2e7b1a', '#54be3b', '#3fa627'], 120);
-  const platForestGrassTex = fleckTex('#297a1d', ['#1e6114', '#348e27', '#164f0e', '#3ea22e', '#246b1a'], 130);
-  const platDirtTex = fleckTex('#8B5A2B', ['#7A4A22', '#9C6B38', '#6B4226', '#5C3A1F'], 120);
-  const platSandTex = fleckTex('#d8c582', ['#cdaf6c', '#e6d899', '#c4a462'], 120);
-  const platSandstoneTex = fleckTex('#c9b072', ['#b99f60', '#d8be80', '#ab9154'], 120);
-  const platSnowTex = fleckTex('#f0f6fa', ['#e1ecf5', '#ffffff', '#d4e4f2'], 100);
-  const platNetherrackTex = fleckTex('#6b1d1d', ['#541515', '#7d2626', '#3f0f0f'], 140);
-  const platEndstoneTex = fleckTex('#dcd89c', ['#ceca8c', '#ece8ac', '#b8b47a'], 120);
-  const platObsidianTex = fleckTex('#1a162b', ['#120f20', '#251f3b', '#0c0917'], 100);
+  const platGrassTex = loadWorldTile('grass-top', { repeat: true });
+  const platForestGrassTex = loadWorldTile('grass-top', { repeat: true });
+  const platDirtTex = loadWorldTile('dirt', { repeat: true });
+  const platSandTex = loadWorldTile('sand', { repeat: true });
+  const platSandstoneTex = loadWorldTile('sandstone', { repeat: true });
+  const platSnowTex = loadWorldTile('snow', { repeat: true });
+  const platIceTex = loadWorldTile('ice', { repeat: true });
+  const platNetherrackTex = loadWorldTile('netherrack', { repeat: true });
+  const platEndstoneTex = loadWorldTile('end-stone', { repeat: true });
+  const platObsidianTex = loadWorldTile('obsidian', { repeat: true });
 
   [platGrassTex, platForestGrassTex, platDirtTex, platSandTex, platSandstoneTex, platSnowTex, platNetherrackTex, platEndstoneTex, platObsidianTex].forEach((t) => {
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
   });
 
-  return {
-    dirtTex, grassTex, stoneTex, emeraldTex, emeraldTopTex, groundTex, puffTex, slotTex, skyTex, woodTex,
+  const textures = {
+    dirtTex, grassTex, grassSideTex, stoneTex, emeraldTex, emeraldTopTex, groundTex, puffTex, slotTex, skyTex, woodTex,
     logTex, logTopTex, birchLogTex, leafTex, cactusTex, netherStemTex, netherCapTex,
     plankTex, cobbleTex, glassTex, ironBlockTex, ironGolemTex, pumpkinTex,
     obsidianTex, diamondTex, goldTex, redstoneTex, brickTex, hayTex, lavaTex, portalTex,
-    platGrassTex, platForestGrassTex, platDirtTex, platSandTex, platSandstoneTex, platSnowTex, platNetherrackTex, platEndstoneTex, platObsidianTex,
+    platGrassTex, platForestGrassTex, platDirtTex, platSandTex, platSandstoneTex, platSnowTex, platIceTex, platNetherrackTex, platEndstoneTex, platObsidianTex,
   };
+  textures.ready = Promise.all(
+    [...new Set(Object.values(textures).filter((tex) => tex?.userData?.ready))]
+      .map((tex) => tex.userData.ready),
+  );
+  return textures;
 }

@@ -79,7 +79,10 @@ export function createProceduralTerrain({ scene, textures, seed = TERRAIN_SEED }
     const terrainGroup = new THREE.Group();
     terrainGroup.name = `terrain-${biome.id}`;
     const topMaterial = new THREE.MeshStandardMaterial({ map: textures[biome.topTexKey] || textures.platGrassTex, roughness: 0.9 });
-    const sideMaterial = new THREE.MeshStandardMaterial({ map: textures[biome.sideTexKey] || textures.platDirtTex, roughness: 1 });
+    const sideMaterial = new THREE.MeshStandardMaterial({
+      map: textures[biome.surfaceSideTexKey] || textures[biome.sideTexKey] || textures.platDirtTex,
+      roughness: 1,
+    });
     const surfaceGeometry = new THREE.PlaneGeometry(TERRAIN_CELL, TERRAIN_CELL);
     surfaceGeometry.rotateX(-Math.PI / 2);
     const columns = [];
@@ -156,6 +159,10 @@ export function createProceduralTerrain({ scene, textures, seed = TERRAIN_SEED }
       coverage: { minX: -TERRAIN_X_RADIUS - TERRAIN_CELL / 2, maxX: TERRAIN_X_RADIUS + TERRAIN_CELL / 2,
         minZ: TERRAIN_MIN_Z - TERRAIN_CELL / 2, maxZ: TERRAIN_MAX_Z + TERRAIN_CELL / 2 },
       bounds: { protected: PROTECTED_BOUNDS, envelope: ENVELOPE_BOUNDS },
+      materialTiles: current ? {
+        top: current.materials[0].map?.userData?.worldTile || null,
+        side: current.materials[1].map?.userData?.worldTile || null,
+      } : null,
       generation, columnCount: current ? current.columns.length : 0,
       meshCount: current ? current.group.children.length : 0,
       groundName: current ? current.surface.name : null }),
