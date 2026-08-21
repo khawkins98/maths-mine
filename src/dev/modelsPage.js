@@ -74,6 +74,7 @@ let currentModelType = 'golem';
 let mobFactories = null;
 let characterAssets = null;
 const textures = createTextures();
+await textures.ready;
 
 let animateEnabled = true;
 let autoRotate = false;
