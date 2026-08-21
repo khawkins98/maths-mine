@@ -120,9 +120,8 @@
 
       /* During the question hide Bolt's bubble so it can't overlap centre text. */
       body:has(#askeq:not(.hidden)) #bubble { display: none; }
-      /* ASK / FEEDBACK: the big equation + answer cards are the only primary
-         elements — collapse the per-group tally + status footer here. */
-      body:has(#askeq:not(.hidden)) #tally,
+      /* Keep helper prose out of the answer layout. The concise block total is
+         intentionally persistent as the child's visual cheat sheet. */
       body:has(#askeq:not(.hidden)) #status { display: none; }
 
 

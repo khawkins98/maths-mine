@@ -113,15 +113,13 @@ test.describe('Block Builder', () => {
     if ((await state(page, '__bb')).phase !== 'building') {
       await page.locator('#btn-confirm').click();        // Next → after the rotate
     }
-    await waitForState(page, '__bb', "s.phase === 'building' && s.op === 'div'");
+    await waitForState(page, '__bb', "s.phase === 'removing' && s.op === 'div'");
 
     const div = await state(page, '__bb');
     expect(div.op).toBe('div');
     expect(div.answer).toBe(div.C); // ÷ asks how many in each group = column count
 
-    await page.evaluate(({ C, R }) => {
-      for (let c = 0; c < C; c++) for (let r = 0; r < R; r++) window.__place(c, r);
-    }, div);
+    await page.evaluate(({ C }) => { for (let c = 0; c < C; c++) window.__place(c, 0); }, div);
     await waitForState(page, '__bb', "s.phase === 'asking'");
     await expect(page.locator('#askeq')).toHaveText(
       `${div.C * div.R} ÷ ${div.R} = ?`,

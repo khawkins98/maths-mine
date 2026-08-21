@@ -162,7 +162,7 @@ test.describe('continuous procedural terrain', () => {
     await playMultiplication(10, 6);
 
     const round = await page.evaluate(() => window.__bbForceRound(10, 6, 'div'));
-    expect(round).toMatchObject({ C: 10, R: 6, op: 'div', phase: 'building',
+    expect(round).toMatchObject({ C: 10, R: 6, op: 'div', phase: 'removing',
       a: 10, b: 6, dividend: 60, divisor: 6, quotient: 10 });
     await page.evaluate(({ C, R }) => { for (let c = 0; c < C; c++) for (let r = 0; r < R; r++) window.__place(c, r); }, round);
     await waitForState(page, '__bb', "s.phase === 'asking'");
