@@ -15,9 +15,19 @@ test.describe('cottage construction reveal', () => {
       await seedBuild(page);
       const errors = await boot(page);
       await page.locator('#btn-build-house').click();
-      await page.waitForFunction(() => window.__hub().revealPhase === 'showing');
 
-      const state = await page.evaluate(() => {
+      // Wait for the midpoint and sample it in the SAME task. Waiting first and
+      // reading in a second round trip raced the 1450ms clear: on a loaded
+      // machine the reveal was already over by the time the state came back,
+      // and `building` read false.
+      const state = await page.waitForFunction(() => {
+        if (window.__hub().revealPhase !== 'showing') return null;
+        // The chrome fade is a CSS transition, so it advances a frame at a
+        // time. A loaded machine can reach 'showing' with the compositor not
+        // yet caught up; that is a slow box, not a broken fade, so wait for
+        // the faded state rather than sampling whatever is on screen the
+        // instant the phase flips.
+        if (Number(getComputedStyle(document.querySelector('#hub-cards')).opacity) >= 0.15) return null;
         const hub = document.querySelector('#hub');
         const house = window.__engine().projectBoundsToScreen(window.__engine().house.group);
         return {
@@ -26,7 +36,7 @@ test.describe('cottage construction reveal', () => {
           dimmerOpacity: getComputedStyle(hub, '::before').opacity,
           house,
         };
-      });
+      }).then((handle) => handle.jsonValue());
       expect(state.building).toBe(true);
       expect(Number(state.chromeOpacity)).toBeLessThan(0.15);
       expect(Number(state.dimmerOpacity)).toBeLessThan(0.3);
@@ -80,17 +90,47 @@ test.describe('cottage construction reveal', () => {
     });
     expect(hiddenState).toEqual({ cards: true, houseBar: true, phase: 'fading', reduced: false });
 
-    await page.keyboard.press('Tab');
-    const focusedDuringReveal = await page.evaluate(() => ({
-      game: document.activeElement && document.activeElement.closest('[data-game]')?.dataset.game || null,
-      build: document.activeElement === document.querySelector('#btn-build-house'),
-    }));
-    expect(focusedDuringReveal).toEqual({ game: null, build: false });
+    // The focus half is checked in one synchronous evaluate. The reveal ends on
+    // a timer, and a timer cannot interleave with a synchronous function, so
+    // the window cannot close half way through. Spread across separate round
+    // trips this raced: on a loaded machine the reveal finished first, inert
+    // came back off, the card took focus, and the suite went red over correct
+    // behaviour.
+    //
+    // Programmatic focus stands in for the Tab press: `inert` takes an element
+    // out of the tab order by the same mechanism that refuses .focus(), so
+    // this is the stricter of the two. It deliberately does NOT click the card
+    // -- inert blocks user interaction and focus, but never stopped
+    // element.click() dispatching straight to the listener, so a scripted click
+    // would assert something the platform does not promise and no child could
+    // do.
+    const focusDuringReveal = await page.evaluate(() => {
+      const cards = document.querySelector('#hub-cards');
+      const buildBtn = document.querySelector('#btn-build-house');
+      const card = document.querySelector('.hub-card[data-game="block-builder"]');
+      const open = () => window.__hub().building && cards.hasAttribute('inert');
+      const openBefore = open();
 
-    await page.evaluate(() => document.activeElement?.blur());
-    const blockBuilder = page.locator('.hub-card[data-game="block-builder"]');
-    await blockBuilder.focus();
-    await expect(blockBuilder).not.toBeFocused();
+      document.activeElement?.blur();
+      buildBtn.focus();
+      const buildTookFocus = document.activeElement === buildBtn;
+
+      document.activeElement?.blur();
+      card.focus();
+      const cardTookFocus = document.activeElement === card;
+
+      return { openBefore, buildTookFocus, cardTookFocus, openAfter: open() };
+    });
+    expect(focusDuringReveal).toEqual({
+      openBefore: true,
+      buildTookFocus: false,
+      cardTookFocus: false,
+      openAfter: true,
+    });
+
+    // Real keyboard input, and not time-sensitive: nothing holds focus after
+    // the block above, so Enter activates nothing whether or not the reveal has
+    // finished by now.
     await page.keyboard.press('Enter');
     await expect(page.locator('#hub')).toBeVisible();
     expect(await page.evaluate(() => typeof window.__bb)).toBe('undefined');
@@ -99,6 +139,9 @@ test.describe('cottage construction reveal', () => {
     await page.waitForFunction(() => !window.__hub().building);
     await expect(page.locator('#hub-cards')).not.toHaveAttribute('inert');
     await expect(page.locator('#house-bar')).not.toHaveAttribute('inert');
+
+    // ...and the same card is focusable and playable again once it is over.
+    const blockBuilder = page.locator('.hub-card[data-game="block-builder"]');
     await blockBuilder.focus();
     await expect(blockBuilder).toBeFocused();
     await page.keyboard.press('Enter');
